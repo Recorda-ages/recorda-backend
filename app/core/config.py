@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = True
     version: str = "0.1.0"
+    database_url: str = (
+        "postgresql+psycopg://postgres:postgres@localhost:5432/postgres?ssl=require"
+    )
 
 
 settings = Settings()
