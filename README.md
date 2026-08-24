@@ -121,7 +121,7 @@ http://localhost:8000/docs
 Health check:
 
 ```text
-http://localhost:8000/health
+http://localhost:8000/api/v1/health
 ```
 
 ### 4. Verifique o estado dos containers
@@ -283,7 +283,7 @@ Se a porta do frontend mudar, atualize `CORS_ORIGINS` no `.env` antes de iniciar
 | Método | Caminho | Descrição |
 | ------ | ------- | --------- |
 | GET | `/` | Health check básico `{"status":"ok"}` |
-| GET | `/health` | Status da aplicação (nome + versão) |
+| GET | `/api/v1/health` | Status da aplicação (nome + versão) |
 
 ### Usuários
 

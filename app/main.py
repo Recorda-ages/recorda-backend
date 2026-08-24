@@ -35,10 +35,10 @@ app.add_middleware(
 
 # Registry for feature routers. Each new module under app/api/routes/
 # should be included here, e.g. from app.api.routes import user; app.include_router(user.router).
-app.include_router(health.router)
-app.include_router(user.router)
+app.include_router(health.router, prefix="/api/v1")
+app.include_router(user.router, prefix="/api/v1")
 
 
-@app.get("/")
+@app.get("/api/v1")
 def root() -> dict:
     return {"status": "ok"}
