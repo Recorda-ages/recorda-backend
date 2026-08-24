@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import health, user
 from app.core.config import settings
 from app.db import init_db
+from app.core.errors import register_exception_handlers
 
 
 @asynccontextmanager
@@ -20,7 +21,7 @@ app = FastAPI(
     debug=settings.debug,
     lifespan=lifespan,
 )
-
+register_exception_handlers(app)
 # Allowed frontend origins, parsed from comma-separated CORS_ORIGINS setting.
 allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 
