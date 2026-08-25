@@ -215,10 +215,10 @@ source venv/bin/activate
 ### 2. Instale as dependências
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
-Isso instala, entre outras, as bibliotecas `fastapi`, `uvicorn`, `sqlalchemy` e `psycopg`.
+Isso instala as dependências declaradas no `pyproject.toml`, entre outras as bibliotecas `fastapi`, `uvicorn`, `sqlalchemy` e `psycopg`.
 
 ### 3. Configure o PostgreSQL local
 
@@ -289,11 +289,11 @@ Se a porta do frontend mudar, atualize `CORS_ORIGINS` no `.env` antes de iniciar
 
 | Método | Caminho | Descrição |
 | ------ | ------- | --------- |
-| GET | `/users` | Lista todos os usuários |
-| POST | `/users` | Cria um usuário (`name`, `email`) |
-| GET | `/users/{id}` | Retorna um usuário (404 se não existir) |
-| PUT | `/users/{id}` | Atualiza um usuário |
-| DELETE | `/users/{id}` | Remove um usuário |
+| GET | `/api/v1/users` | Lista todos os usuários |
+| POST | `/api/v1/users` | Cria um usuário (`name`, `email`) |
+| GET | `/api/v1/users/{id}` | Retorna um usuário (404 se não existir) |
+| PUT | `/api/v1/users/{id}` | Atualiza um usuário |
+| DELETE | `/api/v1/users/{id}` | Remove um usuário |
 
 Exemplo de criação de um usuário (`POST /users`):
 
@@ -337,7 +337,7 @@ recorda-backend/
 ├── docker-compose.yml       # Backend + PostgreSQL
 ├── .dockerignore            # Arquivos excluídos da imagem
 ├── .env.example             # Exemplo de variáveis de ambiente
-├── requirements.txt
+├── pyproject.toml           # Dependências e metadados do projeto
 └── README.md
 ```
 
