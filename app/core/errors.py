@@ -8,6 +8,7 @@
     }
 }
 """
+
 import logging
 from typing import Any
 
@@ -57,7 +58,9 @@ def get_error_message(status_code: int) -> str:
     return STATUS_MESSAGES.get(status_code, "Erro inesperado")
 
 
-def _error_body(code: str, message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
+def _error_body(
+    code: str, message: str, details: dict[str, Any] | None = None
+) -> dict[str, Any]:
     return {"error": {"code": code, "message": message, "details": details or {}}}
 
 

@@ -5,8 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import health, user
 from app.core.config import settings
-from app.db import init_db
 from app.core.errors import register_exception_handlers
+from app.db import init_db
 
 
 @asynccontextmanager

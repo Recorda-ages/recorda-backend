@@ -1,4 +1,5 @@
 """Persistence and query access for the User entity."""
+
 from sqlalchemy.orm import Session
 
 from app.models import User
