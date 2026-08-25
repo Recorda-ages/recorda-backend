@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     debug: bool = True
     version: str = "0.1.0"
     database_url: str = (
-        "postgresql+psycopg://postgres:postgres@localhost:5432/postgres?ssl=require"
+        "postgresql+psycopg://postgres:postgres@localhost:5432/postgres?sslmode=require"
     )
     cors_origins: str = "http://localhost:8081,http://127.0.0.1:8081"
 

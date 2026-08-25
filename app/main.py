@@ -11,9 +11,12 @@ from app.db import init_db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
-    yield
+    print(f"ENVIRONMENT = {settings.environment}")
 
+    if settings.environment != "test":
+        init_db()
+
+    yield
 
 app = FastAPI(
     title=settings.app_name,

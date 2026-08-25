@@ -20,6 +20,7 @@ jobs:
   lint:
     name: Lint / Format (Ruff)
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -29,9 +30,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: |
-          pip install .
-          pip install .[dev]
+        run: pip install ".[dev]"
 
       - name: Ruff check
         run: ruff check .
@@ -42,6 +41,10 @@ jobs:
   test-unit:
     name: Unit Tests (pytest)
     runs-on: ubuntu-latest
+
+    env:
+      ENVIRONMENT: test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -51,17 +54,15 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: |
-          pip install .
-          pip install .[test]
+        run: pip install ".[test]"
 
       - name: Run unit tests with coverage
         run: |
           if [ ! -d tests ]; then
-            echo "Nenhum diretório de testes encontrado. O job é ignorado até que testes sejam adicionados."
+            echo "Nenhum diretório de testes encontrado."
             exit 0
           fi
-          pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage-unit.xml tests/
+          pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage-unit.xml --cov-fail-under=80 tests/
 
       - name: Upload unit coverage
         if: always()
