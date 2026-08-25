@@ -5,7 +5,10 @@ from app.repositories import user_repository
 
 
 def test_get_all_returns_all(db):
-    db._users = {1: User(id=1, name="A", email="a@e.com"), 2: User(id=2, name="B", email="b@e.com")}
+    db._users = {
+        1: User(id=1, name="A", email="a@e.com"),
+        2: User(id=2, name="B", email="b@e.com"),
+    }
     result = user_repository.get_all(db)
     assert len(result) == 2
 
