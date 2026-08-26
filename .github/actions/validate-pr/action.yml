@@ -1,0 +1,27 @@
+name: "Validate PR"
+description: "Garante conformidade com nomenclaturas de Trunk-Based e Conventional Commits."
+
+inputs:
+  github-token:
+    description: "Token para leitura de PRs"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check branch name
+      if: github.event_name == 'pull_request'
+      shell: bash
+      run: |
+        if [[ ! "${{ github.head_ref }}" =~ ^(feat|fix|build|chore|ci|docs|style|refactor|perf|test)\/[0-9]+-[a-z0-9-]+$ ]]; then
+          echo "[ERROR] Nomenclatura da branch inválida: ${{ github.head_ref }}"
+          echo "[INFO] Formato esperado: <tipo>/<id>-<descricao-em-kebab-case>"
+          echo "[INFO] Tipos permitidos: feat, fix, build, chore, ci, docs, style, refactor, perf, test."
+          exit 1
+        fi
+
+    - name: Check PR title
+      if: github.event_name == 'pull_request'
+      uses: amannn/action-semantic-pull-request@v5
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
