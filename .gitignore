@@ -14,3 +14,10 @@ venv/
 .DS_Store
 .env
 recorda_backend.egg-info/
+
+# AI
+.agents/
+.claude/
+.codex/
+.cursor/
+.windsurf/
