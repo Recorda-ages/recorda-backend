@@ -4,13 +4,19 @@
 # Python
 __pycache__/
 *.pyc
+.venv*/
 venv/
 .pytest_cache/
 .ruff_cache/
+recorda_backend.egg-info/
+
+# Coverage
+.coverage
+.coverage.*
+coverage-unit.xml
+htmlcov/
 
 # IDE / OS
 .vscode/
 .idea/
 .DS_Store
-.env
-recorda_backend.egg-info/
