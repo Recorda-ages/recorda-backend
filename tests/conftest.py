@@ -1,8 +1,16 @@
+import os
+
+os.environ["ENVIRONMENT"] = "test"
+
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from app.db.session import get_db
+from app.db.session import Base, get_db
 from app.main import app
+from app.models import Recorda
 from app.models.user import User
 
 
@@ -22,6 +30,8 @@ class FakeSession:
         if self._pending_add is not None:
             user = self._pending_add
             user.id = self._next_id
+            if getattr(user, "account_type", None) is None:
+                user.account_type = "common"
             self._next_id += 1
             self._users[user.id] = user
             self._pending_add = None
@@ -50,9 +60,22 @@ class FakeSession:
 class _Query:
     def __init__(self, users: dict[int, User]) -> None:
         self._users = users
+        self._filters: dict[str, object] = {}
 
     def all(self) -> list[User]:
-        return list(self._users.values())
+        return [user for user in self._users.values() if self._matches(user)]
+
+    def filter_by(self, **kwargs):
+        self._filters.update(kwargs)
+        return self
+
+    def first(self) -> User | None:
+        return next(iter(self.all()), None)
+
+    def _matches(self, user: User) -> bool:
+        return all(
+            getattr(user, key, None) == value for key, value in self._filters.items()
+        )
 
 
 @pytest.fixture
@@ -66,9 +89,48 @@ def user() -> User:
 
 
 @pytest.fixture
+def recorda() -> Recorda:
+    return Recorda(
+        id=1, midia="Song", music="Song of Silence", description="By Disturbed"
+    )
+
+
+@pytest.fixture
 def client(db: FakeSession):
     def _override_get_db():
         yield db
+
+    app.dependency_overrides[get_db] = _override_get_db
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture
+def sqlite_db():
+    """Real SQLAlchemy session on in-memory SQLite.
+
+    ``FakeSession`` above only knows how to store ``User``; suites that touch
+    other tables (or rely on constraints and cascades) use this instead.
+    """
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, autocommit=False, autoflush=False)()
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
+
+
+@pytest.fixture
+def sqlite_client(sqlite_db):
+    def _override_get_db():
+        yield sqlite_db
 
     app.dependency_overrides[get_db] = _override_get_db
     with TestClient(app) as test_client:

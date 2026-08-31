@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -18,9 +18,3 @@ def create_recorda(
     payload: RecordaCreate, db: Session = Depends(get_db)
 ) -> RecordaRead:
     return recorda_service.create(db, payload)
-
-
-@router.delete("/{recorda_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_recorda(recorda_id: int, db: Session = Depends(get_db)) -> None:
-    if not recorda_service.delete(db, recorda_id):
-        raise HTTPException(status_code=404, detail="Recorda not found")

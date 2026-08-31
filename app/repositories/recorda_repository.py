@@ -13,6 +13,14 @@ def get_by_id(db: Session, recorda_id: int) -> Recorda | None:
     return db.get(Recorda, recorda_id)
 
 
+def get_by_midia(db: Session, midia: str) -> Recorda | None:
+    return db.query(Recorda).filter_by(midia=midia).first()
+
+
+def get_by_music(db: Session, music: str) -> Recorda | None:
+    return db.query(Recorda).filter_by(music=music).first()
+
+
 def create(db: Session, recorda: Recorda) -> Recorda:
     db.add(recorda)
     db.commit()
