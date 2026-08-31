@@ -48,7 +48,9 @@ def delete(db: Session, user_id: int) -> bool:
     return True
 
 
-def change_account_type(db: Session, user_id: int, payload: UserChangeAccountType) -> User | None:
+def change_account_type(
+    db: Session, user_id: int, payload: UserChangeAccountType
+) -> User | None:
     user = user_repository.get_by_id(db, user_id)
     if user is None:
         return None

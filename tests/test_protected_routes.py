@@ -35,9 +35,7 @@ def test_protected_route_without_token_returns_401(client, db):
 
 
 def test_protected_route_with_invalid_token_returns_401(client, db):
-    resp = client.get(
-        AUTH_ME, headers={"Authorization": "Bearer not-a-valid-token"}
-    )
+    resp = client.get(AUTH_ME, headers={"Authorization": "Bearer not-a-valid-token"})
 
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "UNAUTHORIZED"

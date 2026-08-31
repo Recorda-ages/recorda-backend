@@ -18,10 +18,13 @@ async def lifespan(app: FastAPI):
 
     yield
 
+
 tags_metadata = [
     {"name": "auth", "description": "Autenticação e sessão do usuário."},
-    {"name": "users",
-        "description": "Gerenciamento de usuários (acesso administrativo)."},
+    {
+        "name": "users",
+        "description": "Gerenciamento de usuários (acesso administrativo).",
+    },
     {"name": "health", "description": "Verificação de saúde da aplicação."},
 ]
 
@@ -31,12 +34,10 @@ app = FastAPI(
     debug=settings.debug,
     lifespan=lifespan,
     openapi_tags=tags_metadata,
-
 )
 register_exception_handlers(app)
 # Allowed frontend origins, parsed from comma-separated CORS_ORIGINS setting.
-allowed_origins = [o.strip()
-                   for o in settings.cors_origins.split(",") if o.strip()]
+allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,

@@ -123,9 +123,13 @@ def test_delete_user_returns_404_when_missing(client, db, monkeypatch):
 
 
 def test_change_account_type_to_admin(client, db, monkeypatch):
-    db._users = {1: User(id=1, name="Alice", email="alice@e.com", account_type="common")}
+    db._users = {
+        1: User(id=1, name="Alice", email="alice@e.com", account_type="common")
+    }
     headers = admin_headers(db, monkeypatch, user_id=2)
-    resp = client.patch(f"{PREFIX}/1/account-type", json={"account_type": "admin"}, headers=headers)
+    resp = client.patch(
+        f"{PREFIX}/1/account-type", json={"account_type": "admin"}, headers=headers
+    )
     assert resp.status_code == 200
     assert db._users[1].account_type == "admin"
 
@@ -133,26 +137,36 @@ def test_change_account_type_to_admin(client, db, monkeypatch):
 def test_change_account_type_to_common(client, db, monkeypatch):
     db._users = {1: User(id=1, name="Alice", email="alice@e.com", account_type="admin")}
     headers = admin_headers(db, monkeypatch, user_id=2)
-    resp = client.patch(f"{PREFIX}/1/account-type", json={"account_type": "common"}, headers=headers)
+    resp = client.patch(
+        f"{PREFIX}/1/account-type", json={"account_type": "common"}, headers=headers
+    )
     assert resp.status_code == 200
     assert db._users[1].account_type == "common"
 
 
 def test_change_account_type_returns_404_when_missing(client, db, monkeypatch):
     headers = admin_headers(db, monkeypatch)
-    resp = client.patch(f"{PREFIX}/999/account-type", json={"account_type": "admin"}, headers=headers)
+    resp = client.patch(
+        f"{PREFIX}/999/account-type", json={"account_type": "admin"}, headers=headers
+    )
     assert resp.status_code == 404
 
 
 def test_change_account_type_rejects_invalid_value(client, db, monkeypatch):
-    db._users = {1: User(id=1, name="Alice", email="alice@e.com", account_type="common")}
+    db._users = {
+        1: User(id=1, name="Alice", email="alice@e.com", account_type="common")
+    }
     headers = admin_headers(db, monkeypatch, user_id=2)
-    resp = client.patch(f"{PREFIX}/1/account-type", json={"account_type": "superuser"}, headers=headers)
+    resp = client.patch(
+        f"{PREFIX}/1/account-type", json={"account_type": "superuser"}, headers=headers
+    )
     assert resp.status_code == 422
 
 
 def test_change_account_type_requires_admin(client, db):
-    db._users = {1: User(id=1, name="Alice", email="alice@e.com", account_type="common")}
+    db._users = {
+        1: User(id=1, name="Alice", email="alice@e.com", account_type="common")
+    }
     resp = client.patch(f"{PREFIX}/1/account-type", json={"account_type": "admin"})
     assert resp.status_code == 401
 

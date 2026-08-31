@@ -22,9 +22,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
-    ],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Session = Depends(get_db),
 ) -> User:
     """Resolve the authenticated user from the Bearer token, or 401."""
