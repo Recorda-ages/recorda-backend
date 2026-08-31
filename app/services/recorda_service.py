@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 import datetime
 
-from app.models import Recorda, user
+from app.models import Recorda
 from app.repositories import recorda_repository, user_repository
 from app.schemas.recorda import RecordaCreate, RecordaUpdate
 
@@ -14,11 +14,11 @@ def get_by_id(db: Session, recorda_id: int) -> Recorda | None:
 
 
 def create(db: Session, payload: RecordaCreate) -> Recorda:
-    recorda = Recorda(midia=payload.midia, musica=payload.musica, descricao=payload.descricao, data=payload.data)
-    if payload.midia is None or payload.musica is None or payload.descricao is None or payload.data is None:
+    recorda = Recorda(midia=payload.midia, music=payload.music, description=payload.description, data=payload.data)
+    if payload.midia is None or payload.music is None or payload.description is None or payload.data is None:
         raise ValueError("All fields must be provided for creating a Recorda.")    
-    if payload.descricao > 2200:
-        raise ValueError("The 'descricao' field must not exceed 2200 characters.")
+    if payload.description > 2200:
+        raise ValueError("The 'description' field must not exceed 2200 characters.")
     data = datetime.today()
     return recorda_repository.create(db, recorda)
 
@@ -29,10 +29,10 @@ def update(db: Session, recorda_id: int, payload: RecordaUpdate) -> Recorda | No
         return None
     if payload.midia is not None:
         recorda.midia = payload.midia
-    if payload.musica is not None:
-        recorda.musica = payload.musica
-    if payload.descricao is not None:
-        recorda.descricao = payload.descricao
+    if payload.music is not None:
+        recorda.music = payload.music
+    if payload.description is not None:
+        recorda.description = payload.description
     if payload.data is not None:
         recorda.data = payload.data
     return recorda_repository.save(db, recorda)
