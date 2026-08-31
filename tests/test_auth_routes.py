@@ -2,7 +2,7 @@ from app.core.config import settings
 from app.core.security import decode_access_token, hash_password
 from app.models import User
 
-PREFIX = "/auth"
+PREFIX = "/api/v1/auth"
 
 
 def test_login_valid_common_user_returns_token_and_user_data(client, db, monkeypatch):

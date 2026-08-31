@@ -2,9 +2,12 @@
 
 from sqlalchemy.orm import Session
 
+from app.core import security
 from app.models import User
 from app.repositories import user_repository
-from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.user import UserChangeAccountType, UserCreate, UserUpdate
+
+_COMMON_ACCOUNT_TYPE = "common"
 
 
 def get_all(db: Session) -> list[User]:
@@ -16,7 +19,13 @@ def get_by_id(db: Session, user_id: int) -> User | None:
 
 
 def create(db: Session, payload: UserCreate) -> User:
-    user = User(name=payload.name, email=payload.email)
+    user = User(
+        name=payload.name,
+        email=payload.email,
+        username=payload.username,
+        password_hash=security.hash_password(payload.password),
+        account_type=_COMMON_ACCOUNT_TYPE,
+    )
     return user_repository.create(db, user)
 
 
@@ -37,3 +46,11 @@ def delete(db: Session, user_id: int) -> bool:
         return False
     user_repository.delete(db, user)
     return True
+
+
+def change_account_type(db: Session, user_id: int, payload: UserChangeAccountType) -> User | None:
+    user = user_repository.get_by_id(db, user_id)
+    if user is None:
+        return None
+    user.account_type = payload.account_type
+    return user_repository.save(db, user)

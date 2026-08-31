@@ -1,5 +1,7 @@
 """Unit tests for the User service orchestration layer."""
 
+from app.core import security
+from app.core.config import settings
 from app.models import User
 from app.schemas.user import UserCreate, UserUpdate
 from app.services import user_service
@@ -23,11 +25,25 @@ def test_get_by_id_returns_none_when_missing(db):
     assert user_service.get_by_id(db, 999) is None
 
 
-def test_create_persists_user(db):
-    created = user_service.create(db, UserCreate(name="Carol", email="c@example.com"))
+def test_create_persists_user_and_hashes_password(db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    created = user_service.create(
+        db,
+        UserCreate(
+            name="Carol",
+            email="c@example.com",
+            username="carol",
+            password="secret",
+        ),
+    )
     assert created.id == 1
     assert created.name == "Carol"
     assert created.email == "c@example.com"
+    assert created.username == "carol"
+    assert created.account_type == "common"
+    assert created.password_hash != "secret"
+    assert security.verify_password("secret", created.password_hash) is True
+    assert security.verify_password("wrong", created.password_hash) is False
     assert 1 in db._users
 
 

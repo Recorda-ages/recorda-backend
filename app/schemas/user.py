@@ -1,3 +1,7 @@
+from typing import Literal
+
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -7,12 +11,17 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    pass
+    username: str
+    password: str
 
 
 class UserUpdate(BaseModel):
     name: str | None = None
     email: str | None = None
+
+
+class UserChangeAccountType(BaseModel):
+    account_type: Literal["common", "admin"]
 
 
 class UserRead(UserBase):
