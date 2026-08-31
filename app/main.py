@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, user
+from app.api.routes import auth, health, user
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.db import init_db
@@ -39,6 +39,7 @@ app.add_middleware(
 
 # Registry for feature routers. Each new module under app/api/routes/
 # should be included here, e.g. from app.api.routes import user; app.include_router(user.router).
+app.include_router(auth.router)
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(user.router, prefix="/api/v1")
 

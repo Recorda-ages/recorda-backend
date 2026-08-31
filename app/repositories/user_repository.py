@@ -13,6 +13,10 @@ def get_by_id(db: Session, user_id: int) -> User | None:
     return db.get(User, user_id)
 
 
+def get_by_username(db: Session, username: str) -> User | None:
+    return db.query(User).filter_by(username=username).first()
+
+
 def create(db: Session, user: User) -> User:
     db.add(user)
     db.commit()
