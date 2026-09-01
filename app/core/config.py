@@ -17,6 +17,9 @@ class Settings(BaseSettings):
         "postgresql+psycopg://postgres:postgres@localhost:5432/postgres?sslmode=require"
     )
     cors_origins: str = "http://localhost:8081,http://127.0.0.1:8081"
+    access_token_secret_key: str | None = None
+    access_token_expire_minutes: int = 60 * 24 * 30
+    password_hash_iterations: int = 210_000
 
 
 settings = Settings()

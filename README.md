@@ -304,6 +304,35 @@ Exemplo de criação de um usuário (`POST /users`):
 }
 ```
 
+## Testes
+
+O projeto utiliza **pytest** com cobertura mínima de 80% configurada no `pyproject.toml`.
+
+### Instalação das dependências de teste
+
+Ative o ambiente virtual e instale o grupo `test`:
+
+```bash
+pip install -e ".[test]"
+```
+
+### Executar todos os testes
+
+```bash
+pytest
+```
+
+Esse comando já inclui o relatório de cobertura no terminal e gera o arquivo `coverage-unit.xml`, conforme configurado em `pyproject.toml`.
+
+### Executar com relatório de cobertura detalhado
+
+```bash
+pytest --cov=app --cov-report=term-missing
+```
+
+Exibe quais linhas de cada módulo não foram cobertas pelos testes.
+
+
 ## Estrutura do projeto
 
 ```text

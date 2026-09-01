@@ -22,6 +22,8 @@ class FakeSession:
         if self._pending_add is not None:
             user = self._pending_add
             user.id = self._next_id
+            if getattr(user, "account_type", None) is None:
+                user.account_type = "common"
             self._next_id += 1
             self._users[user.id] = user
             self._pending_add = None
@@ -50,9 +52,22 @@ class FakeSession:
 class _Query:
     def __init__(self, users: dict[int, User]) -> None:
         self._users = users
+        self._filters: dict[str, object] = {}
 
     def all(self) -> list[User]:
-        return list(self._users.values())
+        return [user for user in self._users.values() if self._matches(user)]
+
+    def filter_by(self, **kwargs):
+        self._filters.update(kwargs)
+        return self
+
+    def first(self) -> User | None:
+        return next(iter(self.all()), None)
+
+    def _matches(self, user: User) -> bool:
+        return all(
+            getattr(user, key, None) == value for key, value in self._filters.items()
+        )
 
 
 @pytest.fixture
