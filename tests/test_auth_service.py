@@ -68,9 +68,7 @@ def test_get_user_from_access_token_returns_user_when_token_matches(db, monkeypa
     assert user is db._users[1]
 
 
-def test_get_user_from_access_token_returns_none_when_username_changed(
-    db, monkeypatch
-):
+def test_get_user_from_access_token_returns_none_when_username_changed(db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
     db._users = {1: auth_user(id=1, username="alice", account_type="common")}
     token = security.create_access_token(
