@@ -17,15 +17,15 @@ def get_by_id(db: Session, recorda_id: int) -> Recorda | None:
 
 def create(db: Session, payload: RecordaCreate) -> Recorda:
     recorda = Recorda(
-        midia=payload.midia, 
+        midia=payload.midia,
         music=payload.music, 
-        description=payload.description, 
+        description=payload.description,
         data=payload.data,
     )
     if (
-        payload.midia is None 
-        or payload.music is None 
-        or len(payload.midia) < 1 
+        payload.midia is None
+        or payload.music is None
+        or len(payload.midia) < 1
         or len(payload.music) < 1
     ):
         raise ValueError("Music and Midia must be provided for creating a Recorda.")
