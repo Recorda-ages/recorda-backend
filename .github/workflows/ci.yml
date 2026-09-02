@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -79,7 +79,7 @@ jobs:
   gitlab-sync:
     name: GitLab Sync
     needs: [lint, test-unit]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/gitlab-sync.yml
     with:
       gitlab_repo_name: backend
