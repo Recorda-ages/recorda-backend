@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, user, recorda
+from app.api.routes import health, recorda, user
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.db import init_db

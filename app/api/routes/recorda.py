@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.recorda import RecordaCreate, RecordaRead, RecordaUpdate
-from app.services import recorda_service, recorda_service
+from app.schemas.recorda import RecordaCreate, RecordaRead
+from app.services import recorda_service
 
 router = APIRouter(prefix="/recordas", tags=["recordas"])
 
