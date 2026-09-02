@@ -18,7 +18,7 @@ def get_by_id(db: Session, recorda_id: int) -> Recorda | None:
 def create(db: Session, payload: RecordaCreate) -> Recorda:
     recorda = Recorda(
         midia=payload.midia,
-        music=payload.music, 
+        music=payload.music,
         description=payload.description,
         data=payload.data,
     )
