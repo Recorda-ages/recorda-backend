@@ -28,6 +28,17 @@ def test_get_by_id_missing_returns_none(db):
     assert user_repository.get_by_id(db, 999) is None
 
 
+def test_get_by_email_returns_user_when_exists(db):
+    db._users = {5: User(id=5, name="A", email="a@e.com")}
+    result = user_repository.get_by_email(db, "a@e.com")
+    assert result is not None
+    assert result.email == "a@e.com"
+
+
+def test_get_by_email_returns_none_when_missing(db):
+    assert user_repository.get_by_email(db, "missing@e.com") is None
+
+
 def test_create_adds_commits_and_refreshes(db):
     incoming = User(name="A", email="a@e.com")
     created = user_repository.create(db, incoming)

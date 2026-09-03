@@ -1,9 +1,18 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    new_password: str = Field(..., min_length=8)
+
+
+class ResetPasswordResponse(BaseModel):
+    message: str = "Senha redefinida com sucesso"
 
 
 class UserBasicResponse(BaseModel):
