@@ -17,6 +17,10 @@ def get_by_username(db: Session, username: str) -> User | None:
     return db.query(User).filter_by(username=username).first()
 
 
+def get_by_email(db: Session, email: str) -> User | None:
+    return db.query(User).filter_by(email=email).first()
+
+
 def create(db: Session, user: User) -> User:
     db.add(user)
     db.commit()
