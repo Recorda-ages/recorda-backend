@@ -11,9 +11,13 @@ def get_genres(client: httpx.Client) -> list[GenreRead]:
         response = client.get("/genre")
         response.raise_for_status()
     except httpx.TimeoutException as err:
-        raise HTTPException(status_code=502, detail="Serviço de música indisponível") from err
+        raise HTTPException(
+            status_code=502, detail="Serviço de música indisponível"
+        ) from err
     except httpx.HTTPError as err:
-        raise HTTPException(status_code=502, detail="Serviço de música indisponível") from err
+        raise HTTPException(
+            status_code=502, detail="Serviço de música indisponível"
+        ) from err
 
     # All information comes sealed in the data label.
     # Right after get "data", we're able to access id, name and picture_url informations.
@@ -38,9 +42,13 @@ def search_artists(client: httpx.Client, q: str) -> list[ArtistRead]:
         resp = client.get("/search/artist", params={"q": q})
         resp.raise_for_status()
     except httpx.TimeoutException as err:
-        raise HTTPException(status_code=502, detail="Serviço de música indisponível") from err
+        raise HTTPException(
+            status_code=502, detail="Serviço de música indisponível"
+        ) from err
     except httpx.HTTPError as err:
-        raise HTTPException(status_code=502, detail="Serviço de música indisponível") from err
+        raise HTTPException(
+            status_code=502, detail="Serviço de música indisponível"
+        ) from err
 
     data = resp.json().get("data", [])
     return [
@@ -58,9 +66,13 @@ def search_tracks(client: httpx.Client, q: str) -> list[TrackRead]:
         resp = client.get("/search", params={"q": q})
         resp.raise_for_status()
     except httpx.TimeoutException as err:
-        raise HTTPException(status_code=502, detail="Serviço de música indisponível") from err
+        raise HTTPException(
+            status_code=502, detail="Serviço de música indisponível"
+        ) from err
     except httpx.HTTPError as err:
-        raise HTTPException(status_code=502, detail="Serviço de música indisponível") from err
+        raise HTTPException(
+            status_code=502, detail="Serviço de música indisponível"
+        ) from err
 
     data = resp.json().get("data", [])
     return [

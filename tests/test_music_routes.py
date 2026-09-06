@@ -32,7 +32,10 @@ TRACKS_RESPONSE = {
             "id": 11,
             "title": "No Preview Track",
             "artist": {"name": "Artist X"},
-            "album": {"title": "Album X", "cover_medium": "https://e.deezer.com/ax.jpg"},
+            "album": {
+                "title": "Album X",
+                "cover_medium": "https://e.deezer.com/ax.jpg",
+            },
             "preview": "",
             "genre_id": None,
         },
@@ -63,13 +66,18 @@ class FakeResponse:
 class FakeErrorClient:
     def get(self, path: str, **kwargs):
         import httpx
+
         raise httpx.TimeoutException("timeout")
 
 
 @pytest.fixture
 def music_client():
     fake = FakeDeezerClient(
-        {"/genre": GENRES_RESPONSE, "/search/artist": ARTISTS_RESPONSE, "/search": TRACKS_RESPONSE}
+        {
+            "/genre": GENRES_RESPONSE,
+            "/search/artist": ARTISTS_RESPONSE,
+            "/search": TRACKS_RESPONSE,
+        }
     )
 
     def _override():
