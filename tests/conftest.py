@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 from app.db.session import get_db
 from app.main import app
 from app.models.user import User
+from datetime import timedelta
+from app.core import security
 
 
 class FakeSession:
@@ -89,3 +91,49 @@ def client(db: FakeSession):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.pop(get_db, None)
+
+@pytest.fixture
+def common_user(db: FakeSession) -> User:
+    new_user = User(
+        name="Usuário Comum",
+        email="comum@example.com",
+        username="usuario_comum",
+        account_type="common",
+    )
+    db.add(new_user)
+    db.commit()
+    return new_user
+
+@pytest.fixture
+def admin_user(db: FakeSession) -> User:
+    new_user = User(
+        name="Usuário Admin",
+        email="admin@example.com",
+        username="usuario_admin",
+        account_type="admin",
+    )
+    db.add(new_user)
+    db.commit()
+    return new_user
+
+def _token_for(target_user: User, expires_delta: timedelta | None = None) -> str:
+    return security.create_access_token(
+        subject=str(target_user.id),
+        additional_claims={
+            "username": target_user.username,
+            "account_type": target_user.account_type,
+        },
+        expires_delta=expires_delta,
+    )
+
+@pytest.fixture
+def common_user_token(common_user: User) -> str:
+    return _token_for(common_user)
+
+@pytest.fixture
+def admin_user_token(admin_user: User) -> str:
+    return _token_for(admin_user)
+
+@pytest.fixture
+def expired_token(common_user: User) -> str:
+    return _token_for(common_user, expires_delta=timedelta(minutes=-5))
