@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, Query
 import httpx
+from fastapi import APIRouter, Depends, Query
 
 from app.core.http import get_deezer_client
 from app.schemas.music import ArtistRead, GenreRead, TrackRead
