@@ -1,10 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_admin_user
+from app.api.deps import get_current_admin_user, get_current_user
 from app.db.session import get_db
+from app.models import User
+from app.schemas.music_preference import (
+    MusicPreferencesCreate,
+    MusicPreferencesRead,
+)
 from app.schemas.user import UserChangeAccountType, UserCreate, UserRead, UserUpdate
-from app.services import user_service
+from app.services import music_preference_service, user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -61,3 +66,13 @@ def change_account_type(
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
+
+@router.post("/me/music-preferences", response_model=MusicPreferencesRead)
+def save_music_preferences(
+    payload: MusicPreferencesCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MusicPreferencesRead:
+    """Persist the onboarding selection of the authenticated user."""
+    return music_preference_service.replace_for_user(db, current_user, payload)

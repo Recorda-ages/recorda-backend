@@ -1,8 +1,78 @@
+from app.core import security
 from app.core.config import settings
 from app.core.security import decode_access_token, hash_password
 from app.models import User
 
 PREFIX = "/api/v1/auth"
+
+
+def test_reset_password_valid_email_updates_hash_and_returns_success(client, db):
+    db._users = {1: auth_user(id=1, username="alice", password="old-password")}
+
+    resp = client.post(
+        f"{PREFIX}/reset-password",
+        json={"email": "alice@example.com", "new_password": "new-password-123"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"message": "Senha redefinida com sucesso"}
+
+    stored = db._users[1]
+    assert security.verify_password("old-password", stored.password_hash) is False
+    assert security.verify_password("new-password-123", stored.password_hash) is True
+    assert "password" not in resp.json()
+    assert "password_hash" not in resp.json()
+
+
+def test_reset_password_short_password_is_rejected_by_backend(client, db):
+    db._users = {1: auth_user(id=1, username="alice", password="old-password")}
+
+    resp = client.post(
+        f"{PREFIX}/reset-password",
+        json={"email": "alice@example.com", "new_password": "1234567"},
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_reset_password_unknown_email_uses_generic_error(client):
+    resp = client.post(
+        f"{PREFIX}/reset-password",
+        json={"email": "missing@example.com", "new_password": "new-password-123"},
+    )
+
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["error"]["code"] == "BAD_REQUEST"
+    assert body["error"]["message"] == "Não foi possível redefinir a senha"
+    assert "não encontrado" not in body["error"]["message"].lower()
+    assert "usuário" not in body["error"]["message"].lower()
+    assert "email" not in body["error"]["message"].lower()
+
+
+def test_reset_password_then_login_uses_new_password(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    db._users = {1: auth_user(id=1, username="alice", password="old-password")}
+
+    reset = client.post(
+        f"{PREFIX}/reset-password",
+        json={"email": "alice@example.com", "new_password": "new-password-123"},
+    )
+    assert reset.status_code == 200
+
+    old_login = client.post(
+        f"{PREFIX}/login", json={"username": "alice", "password": "old-password"}
+    )
+    new_login = client.post(
+        f"{PREFIX}/login",
+        json={"username": "alice", "password": "new-password-123"},
+    )
+
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
+    assert new_login.json()["user"]["username"] == "alice"
+    assert "password_hash" not in new_login.json()
 
 
 def test_login_valid_common_user_returns_token_and_user_data(client, db, monkeypatch):

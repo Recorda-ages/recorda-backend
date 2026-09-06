@@ -5,13 +5,24 @@ from sqlalchemy.orm import Session
 from app.core import security
 from app.models import User
 from app.repositories import user_repository
-from app.schemas.auth import LoginRequest, LoginResponse, UserBasicResponse
+from app.schemas.auth import (
+    LoginRequest,
+    LoginResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+    UserBasicResponse,
+)
 
 INVALID_CREDENTIALS_MESSAGE = "Credenciais inválidas"
+RESET_PASSWORD_ERROR_MESSAGE = "Não foi possível redefinir a senha"
 
 
 class InvalidCredentialsError(Exception):
     """Raised when login credentials cannot authenticate a user."""
+
+
+class ResetPasswordError(Exception):
+    """Raised when the reset-password flow cannot complete."""
 
 
 def login(db: Session, payload: LoginRequest) -> LoginResponse:
@@ -30,6 +41,16 @@ def login(db: Session, payload: LoginRequest) -> LoginResponse:
         access_token=token,
         user=UserBasicResponse.model_validate(user),
     )
+
+
+def reset_password(db: Session, payload: ResetPasswordRequest) -> ResetPasswordResponse:
+    user = user_repository.get_by_email(db, payload.email)
+    if user is None:
+        raise ResetPasswordError(RESET_PASSWORD_ERROR_MESSAGE)
+
+    user.password_hash = security.hash_password(payload.new_password)
+    user_repository.save(db, user)
+    return ResetPasswordResponse()
 
 
 def authenticate_user(db: Session, username: str, password: str) -> User | None:
