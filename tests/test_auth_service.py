@@ -55,6 +55,34 @@ def test_authenticate_user_returns_none_without_password_hash(db):
     assert auth_service.authenticate_user(db, "alice", "correct") is None
 
 
+def test_reset_password_updates_user_password_and_returns_success(db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    db._users = {1: auth_user(id=1, username="alice", password="old-password")}
+
+    result = auth_service.reset_password(
+        db,
+        auth_service.ResetPasswordRequest(
+            email="alice@example.com", new_password="new-password-123"
+        ),
+    )
+
+    stored = db._users[1]
+    assert result.message == "Senha redefinida com sucesso"
+    assert security.verify_password("old-password", stored.password_hash) is False
+    assert security.verify_password("new-password-123", stored.password_hash) is True
+
+
+def test_reset_password_raises_for_unknown_user(db):
+    with pytest.raises(auth_service.ResetPasswordError):
+        auth_service.reset_password(
+            db,
+            auth_service.ResetPasswordRequest(
+                email="missing@example.com",
+                new_password="new-password-123",
+            ),
+        )
+
+
 def test_get_user_from_access_token_returns_user_when_token_matches(db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
     db._users = {1: auth_user(id=1, username="alice", account_type="common")}
