@@ -46,6 +46,13 @@ def me(
     return current_user
 
 
+@router.get("/verify", response_model=UserBasicResponse)
+def verify_token(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> UserBasicResponse:
+    return current_user
+
+
 def _invalid_credentials_error() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
