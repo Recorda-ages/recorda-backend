@@ -1,17 +1,10 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class RecordaBase(BaseModel):
-    midia: str
-    music: str
-    description: str
-    data: str
-
-
-class RecordaCreate(RecordaBase):
-    midia: str | None = None
-    music: str | None = None
-    description: str | None = None
+class RecordaCreate(BaseModel):
+    midia: str = Field(..., min_length=1)
+    music: str = Field(..., min_length=1)
+    description: str | None = Field(None, max_length=2200)
     data: str | None = None
 
 
@@ -22,7 +15,11 @@ class RecordaUpdate(BaseModel):
     data: str | None = None
 
 
-class RecordaRead(RecordaBase):
+class RecordaRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    midia: str | None
+    music: str | None
+    description: str | None
+    data: str | None

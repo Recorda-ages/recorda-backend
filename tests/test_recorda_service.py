@@ -8,7 +8,7 @@ from app.services import recorda_service
 def test_get_all_returns_all_recordas(db):
     db._recordas = {1: recorda(id=1, midia="Song", music="Song of Silence")}
     recordas = recorda_service.get_all(db)
-    assert len(recordas) == 2
+    assert len(recordas) == 1
 
 
 def test_get_by_id_returns_recorda_when_exists(db):

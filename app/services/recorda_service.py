@@ -18,24 +18,13 @@ def get_by_id(db: Session, recorda_id: int) -> Recorda | None:
 
 
 def create(db: Session, payload: RecordaCreate) -> Recorda:
+    now = datetime.today()
     recorda = Recorda(
         midia=payload.midia,
         music=payload.music,
         description=payload.description,
-        data=payload.data,
+        data=now.strftime("%d/%m/%Y"),
     )
-    if (
-        payload.midia is None
-        or payload.music is None
-        or len(payload.midia) < 1
-        or len(payload.music) < 1
-    ):
-        raise ValueError("Music and Midia must be provided for creating a Recorda.")
-    if len(payload.description) > 2200:
-        raise ValueError("The 'description' field must not exceed 2200 characters.")
-    now = datetime.today()
-    data_str = now.strftime("%d/%m/%Y")
-    recorda.data = data_str
     return recorda_repository.create(db, recorda)
 
 
