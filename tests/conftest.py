@@ -6,6 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.session import Base, get_db
 from app.main import app
+from app.models.recorda import Recorda
 from app.models.user import User
 
 
@@ -14,62 +15,76 @@ class FakeSession:
 
     def __init__(self) -> None:
         self._users: dict[int, User] = {}
-        self._next_id = 1
-        self._pending_add: User | None = None
-        self._pending_delete: User | None = None
+        self._recordas: dict[int, Recorda] = {}
+        self._next_user_id = 1
+        self._next_recorda_id = 1
+        self._pending_add = None
+        self._pending_delete = None
 
-    def add(self, user: User) -> None:
-        self._pending_add = user
+    def add(self, obj) -> None:
+        self._pending_add = obj
 
     def commit(self) -> None:
         if self._pending_add is not None:
-            user = self._pending_add
-            user.id = self._next_id
-            if getattr(user, "account_type", None) is None:
-                user.account_type = "common"
-            self._next_id += 1
-            self._users[user.id] = user
+            obj = self._pending_add
+            if isinstance(obj, Recorda):
+                obj.id = self._next_recorda_id
+                self._next_recorda_id += 1
+                self._recordas[obj.id] = obj
+            elif isinstance(obj, User):
+                obj.id = self._next_user_id
+                if getattr(obj, "account_type", None) is None:
+                    obj.account_type = "common"
+                self._next_user_id += 1
+                self._users[obj.id] = obj
             self._pending_add = None
         if self._pending_delete is not None:
-            self._users.pop(self._pending_delete.id, None)
+            obj = self._pending_delete
+            if isinstance(obj, Recorda):
+                self._recordas.pop(obj.id, None)
+            elif isinstance(obj, User):
+                self._users.pop(obj.id, None)
             self._pending_delete = None
 
-    def refresh(self, user: User) -> None:
-        # Identity is shared with the store; nothing to copy back.
+    def refresh(self, obj) -> None:
         return None
 
-    def get(self, model, user_id: int) -> User | None:
-        if model is not User:
-            return None
-        return self._users.get(user_id)
+    def get(self, model, obj_id: int):
+        if model is User:
+            return self._users.get(obj_id)
+        if model is Recorda:
+            return self._recordas.get(obj_id)
+        return None
 
     def query(self, model):
-        if model is not User:
-            raise AssertionError("FakeSession only supports User")
-        return _Query(self._users)
+        if model is User:
+            return _Query(self._users)
+        if model is Recorda:
+            return _Query(self._recordas)
+        raise AssertionError(f"FakeSession does not support {model}")
 
-    def delete(self, user: User) -> None:
-        self._pending_delete = user
+    def delete(self, obj) -> None:
+        self._pending_delete = obj
 
 
 class _Query:
-    def __init__(self, users: dict[int, User]) -> None:
-        self._users = users
+    def __init__(self, store: dict) -> None:
+        self._store = store
         self._filters: dict[str, object] = {}
 
-    def all(self) -> list[User]:
-        return [user for user in self._users.values() if self._matches(user)]
+    def all(self) -> list:
+        return [obj for obj in self._store.values() if self._matches(obj)]
 
     def filter_by(self, **kwargs):
         self._filters.update(kwargs)
         return self
 
-    def first(self) -> User | None:
+    def first(self):
         return next(iter(self.all()), None)
 
-    def _matches(self, user: User) -> bool:
+    def _matches(self, obj) -> bool:
         return all(
-            getattr(user, key, None) == value for key, value in self._filters.items()
+            getattr(obj, key, None) == value for key, value in self._filters.items()
         )
 
 

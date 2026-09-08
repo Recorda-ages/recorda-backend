@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, health, user
+from app.api.routes import auth, health, recorda, user
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.db import init_db
@@ -52,6 +52,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(user.router, prefix="/api/v1")
+app.include_router(recorda.router, prefix="/api/v1")
 
 
 @app.get("/api/v1")
