@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     access_token_secret_key: str | None = None
     access_token_expire_minutes: int = 60 * 24 * 30
     password_hash_iterations: int = 210_000
+    deezer_base_url: str = "https://api.deezer.com"
+    deezer_timeout_seconds: float = 5.0
 
 
 settings = Settings()
