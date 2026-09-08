@@ -1,14 +1,15 @@
+from datetime import timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core import security
 from app.db.session import Base, get_db
 from app.main import app
 from app.models.user import User
-from datetime import timedelta
-from app.core import security
 
 
 class FakeSession:
@@ -95,6 +96,7 @@ def client(db: FakeSession):
         yield test_client
     app.dependency_overrides.pop(get_db, None)
 
+
 @pytest.fixture
 def common_user(db: FakeSession) -> User:
     new_user = User(
@@ -106,6 +108,7 @@ def common_user(db: FakeSession) -> User:
     db.add(new_user)
     db.commit()
     return new_user
+
 
 @pytest.fixture
 def admin_user(db: FakeSession) -> User:
@@ -119,6 +122,7 @@ def admin_user(db: FakeSession) -> User:
     db.commit()
     return new_user
 
+
 def _token_for(target_user: User, expires_delta: timedelta | None = None) -> str:
     return security.create_access_token(
         subject=str(target_user.id),
@@ -129,17 +133,21 @@ def _token_for(target_user: User, expires_delta: timedelta | None = None) -> str
         expires_delta=expires_delta,
     )
 
+
 @pytest.fixture
 def common_user_token(common_user: User) -> str:
     return _token_for(common_user)
+
 
 @pytest.fixture
 def admin_user_token(admin_user: User) -> str:
     return _token_for(admin_user)
 
+
 @pytest.fixture
 def expired_token(common_user: User) -> str:
     return _token_for(common_user, expires_delta=timedelta(minutes=-5))
+
 
 @pytest.fixture
 def sqlite_db():

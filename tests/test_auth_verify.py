@@ -2,6 +2,7 @@ import time
 
 from fastapi.testclient import TestClient
 
+
 def test_verify_returns_common_user(client: TestClient, common_user_token: str) -> None:
     response = client.get(
         "/api/v1/auth/verify", headers={"Authorization": f"Bearer {common_user_token}"}
@@ -56,5 +57,7 @@ def test_verify_responds_within_timeout(
     client: TestClient, common_user_token: str
 ) -> None:
     start = time.monotonic()
-    client.get("/api/v1/auth/verify", headers={"Authorization": f"Bearer {common_user_token}"})
+    client.get(
+        "/api/v1/auth/verify", headers={"Authorization": f"Bearer {common_user_token}"}
+    )
     assert time.monotonic() - start < 3
