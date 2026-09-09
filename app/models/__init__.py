@@ -4,4 +4,4 @@ from app.models.music_preference import MusicPreference
 from app.models.recorda import Recorda
 from app.models.user import User
 
-__all__ = ["MusicPreference", "User", "Recorda"]
+__all__ = ["MusicPreference", "Recorda", "User"]
