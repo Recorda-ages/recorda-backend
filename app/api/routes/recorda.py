@@ -46,7 +46,11 @@ def update_recorda(
     return recorda
 
 
-@router.delete("/{recorda_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[_current_user])
+@router.delete(
+    "/{recorda_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[_current_user],
+)
 def delete_recorda(recorda_id: int, db: Session = Depends(get_db)) -> None:
     if not recorda_service.delete(db, recorda_id):
         raise HTTPException(status_code=404, detail="Recorda not found")
