@@ -1,8 +1,12 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models import User
 from app.repositories import media_storage_repository
 from app.schemas.media import MediaUploadResponse
 from app.services import media_service
@@ -14,7 +18,9 @@ router = APIRouter(prefix="/recordas", tags=["recordas"])
     "/media", response_model=MediaUploadResponse, status_code=status.HTTP_201_CREATED
 )
 async def upload_media(
-    file: UploadFile, db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(get_current_user)],
+    file: UploadFile,
+    db: Session = Depends(get_db),
 ) -> MediaUploadResponse:
     content = await file.read()
 
@@ -38,7 +44,11 @@ async def upload_media(
 
 
 @router.get("/media/{filename}")
-def get_media(filename: str, db: Session = Depends(get_db)) -> Response:
+def get_media(
+    filename: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> Response:
     media = media_storage_repository.get_by_filename(db, filename)
 
     if media is None:
