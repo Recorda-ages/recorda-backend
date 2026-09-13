@@ -1,6 +1,6 @@
 """Unit tests for the Recorda service orchestration layer."""
 
-from app.models import Recorda
+from app.models import Recorda, User
 from app.schemas.recorda import RecordaCreate, RecordaUpdate
 from app.services import recorda_service
 
@@ -23,13 +23,28 @@ def test_get_by_id_returns_none_when_missing(db):
     assert recorda_service.get_by_id(db, 999) is None
 
 
-def test_create_persists_recorda(db):
+def test_create_persists_recorda_with_author_and_song(db):
+    author = User(id=7, name="Alice", email="a@example.com", username="alice")
     created = recorda_service.create(
-        db, RecordaCreate(midia="Hills", music="The Tropper")
+        db,
+        RecordaCreate(
+            midia="Hills",
+            media_type="VIDEO",
+            music="The Trooper",
+            deezer_track_id="42",
+            song_artist_name="Iron Maiden",
+        ),
+        author,
     )
     assert created.id == 1
+    assert created.user_id == 7
     assert created.midia == "Hills"
-    assert created.music == "The Tropper"
+    assert created.media_type == "VIDEO"
+    assert created.music == "The Trooper"
+    assert created.deezer_track_id == "42"
+    assert created.song_artist_name == "Iron Maiden"
+    assert created.song_cover_url is None
+    assert created.data is not None
     assert 1 in db._recordas
 
 

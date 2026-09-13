@@ -9,6 +9,16 @@ from app.schemas.user import UserChangeAccountType, UserCreate, UserUpdate
 
 _COMMON_ACCOUNT_TYPE = "common"
 
+USERNAME_TAKEN_MESSAGE = "Este usuário já está cadastrado."
+EMAIL_TAKEN_MESSAGE = "Este email já está cadastrado."
+USER_ALREADY_EXISTS_MESSAGE = "Usuário ou email já cadastrado"
+
+
+class UserAlreadyExistsError(Exception):
+    def __init__(self, fields: list[dict[str, str]]) -> None:
+        super().__init__(USER_ALREADY_EXISTS_MESSAGE)
+        self.fields = fields
+
 
 def get_all(db: Session) -> list[User]:
     return user_repository.get_all(db)
@@ -19,6 +29,7 @@ def get_by_id(db: Session, user_id: int) -> User | None:
 
 
 def create(db: Session, payload: UserCreate) -> User:
+    ensure_unique_credentials(db, payload.username, payload.email)
     user = User(
         name=payload.name,
         email=payload.email,
@@ -27,6 +38,16 @@ def create(db: Session, payload: UserCreate) -> User:
         account_type=_COMMON_ACCOUNT_TYPE,
     )
     return user_repository.create(db, user)
+
+
+def ensure_unique_credentials(db: Session, username: str, email: str) -> None:
+    fields = []
+    if user_repository.get_by_username(db, username) is not None:
+        fields.append({"field": "username", "message": USERNAME_TAKEN_MESSAGE})
+    if user_repository.get_by_email(db, email) is not None:
+        fields.append({"field": "email", "message": EMAIL_TAKEN_MESSAGE})
+    if fields:
+        raise UserAlreadyExistsError(fields)
 
 
 def update(db: Session, user_id: int, payload: UserUpdate) -> User | None:

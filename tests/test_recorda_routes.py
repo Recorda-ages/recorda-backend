@@ -36,14 +36,18 @@ def test_list_recordas_requires_auth(client):
     assert resp.status_code == 401
 
 
-def test_create_recordas_returns_201(client, auth):
-    resp = client.post(
-        PREFIX, json={"midia": "Song", "music": "Song of Silence"}, headers=auth
-    )
+def test_create_recordas_returns_201(client, auth, common_user):
+    resp = client.post(PREFIX, json=create_payload(), headers=auth)
     assert resp.status_code == 201
     body = resp.json()
     assert body["id"] == 1
-    assert body["midia"] == "Song"
+    assert body["midia"] == "/api/v1/recordas/media/abc.jpg"
+    assert body["media_type"] == "PHOTO"
+    assert body["music"] == "Song of Silence"
+    assert body["deezer_track_id"] == "3135556"
+    assert body["song_artist_name"] == "Disturbed"
+    assert body["song_cover_url"] == "https://e.deezer.com/cover.jpg"
+    assert body["user_id"] == common_user.id
 
 
 def test_create_recordas_validates_missing_field(client, auth):
@@ -52,8 +56,23 @@ def test_create_recordas_validates_missing_field(client, auth):
     assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.parametrize("field", ["deezer_track_id", "song_artist_name", "media_type"])
+def test_create_recordas_requires_song_snapshot(client, auth, field):
+    payload = create_payload()
+    payload.pop(field)
+    resp = client.post(PREFIX, json=payload, headers=auth)
+    assert resp.status_code == 422
+    fields = resp.json()["error"]["details"]["fields"]
+    assert [f["field"] for f in fields] == [field]
+
+
+def test_create_recordas_rejects_unknown_media_type(client, auth):
+    resp = client.post(PREFIX, json=create_payload(media_type="GIF"), headers=auth)
+    assert resp.status_code == 422
+
+
 def test_create_recordas_requires_auth(client):
-    resp = client.post(PREFIX, json={"midia": "Song", "music": "Song of Silence"})
+    resp = client.post(PREFIX, json=create_payload())
     assert resp.status_code == 401
 
 
@@ -117,3 +136,17 @@ def test_delete_recorda_returns_404_when_missing(client, auth):
 def test_delete_recorda_requires_auth(client):
     resp = client.delete(f"{PREFIX}/1")
     assert resp.status_code == 401
+
+
+def create_payload(**overrides) -> dict:
+    payload = {
+        "midia": "/api/v1/recordas/media/abc.jpg",
+        "media_type": "PHOTO",
+        "music": "Song of Silence",
+        "deezer_track_id": "3135556",
+        "song_artist_name": "Disturbed",
+        "song_cover_url": "https://e.deezer.com/cover.jpg",
+        "description": "Show incrível",
+    }
+    payload.update(overrides)
+    return payload

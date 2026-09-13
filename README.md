@@ -89,6 +89,8 @@ postgresql+psycopg://USUARIO:SENHA@db:5432/BANCO
 
 O arquivo `.env` contém configurações locais e credenciais e não deve ser versionado.
 
+> **Sessões:** defina `ACCESS_TOKEN_SECRET_KEY` com um valor fixo. Sem ele, a API gera um segredo aleatório a cada inicialização e todos os tokens emitidos antes deixam de ser válidos (o app volta para o Login a cada restart). Em produção a variável é obrigatória.
+
 ### 3. Construa e inicie os containers
 
 Na raiz do projeto, execute:
@@ -258,7 +260,9 @@ O backend utiliza:
 - SQLAlchemy como ORM;
 - `psycopg` como driver PostgreSQL.
 
-A tabela `users` é criada automaticamente pela aplicação ao iniciar, portanto o projeto atualmente não depende de um processo separado de migrations para criar essa tabela.
+As tabelas são criadas automaticamente pela aplicação ao iniciar, portanto o projeto atualmente não depende de um processo separado de migrations.
+
+Como `create_all` não altera tabelas já existentes, as colunas adicionadas depois da criação inicial (`users.onboarding_completed` e as colunas de autor e música de `recordas`) são aplicadas na inicialização via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (`app/db/session.py`). Esse mecanismo é provisório até a adoção de migrations.
 
 ## CORS
 

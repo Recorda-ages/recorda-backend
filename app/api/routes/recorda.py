@@ -25,7 +25,7 @@ def create_recorda(
     current_user: Annotated[User, _current_user],
     db: Session = Depends(get_db),
 ) -> RecordaRead:
-    return recorda_service.create(db, payload)
+    return recorda_service.create(db, payload, current_user)
 
 
 @router.get("/{recorda_id}", response_model=RecordaRead, dependencies=[_current_user])

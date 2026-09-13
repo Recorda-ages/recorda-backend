@@ -1,3 +1,5 @@
+import pytest
+
 from app.core import security
 from app.core.config import settings
 from app.core.security import decode_access_token, hash_password
@@ -89,8 +91,10 @@ def test_login_valid_common_user_returns_token_and_user_data(client, db, monkeyp
     assert body["token_type"] == "bearer"
     assert body["user"] == {
         "id": 1,
+        "name": "Alice",
         "username": "alice",
         "account_type": "common",
+        "onboarding_completed": False,
     }
 
 
@@ -158,8 +162,10 @@ def test_login_token_works_immediately_on_auth_me(client, db, monkeypatch):
     assert me_resp.status_code == 200
     assert me_resp.json() == {
         "id": 1,
+        "name": "Alice",
         "username": "alice",
         "account_type": "common",
+        "onboarding_completed": False,
     }
 
 
@@ -219,6 +225,134 @@ def test_login_token_expiration_follows_settings(client, db, monkeypatch):
     payload = decode_access_token(resp.json()["access_token"])
     assert payload is not None
     assert payload["exp"] - payload["iat"] == 60 * 24 * 45 * 60
+
+
+def test_login_reports_completed_onboarding(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    onboarded = auth_user(id=1, username="alice")
+    onboarded.onboarding_completed = True
+    db._users = {1: onboarded}
+
+    resp = client.post(
+        f"{PREFIX}/login", json={"username": " alice ", "password": "correct"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["user"]["onboarding_completed"] is True
+
+
+def test_register_creates_user_and_returns_session(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+
+    resp = client.post(f"{PREFIX}/register", json=register_payload())
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["token_type"] == "bearer"
+    assert body["user"] == {
+        "id": 1,
+        "name": "Alice",
+        "username": "alice",
+        "account_type": "common",
+        "onboarding_completed": False,
+    }
+    stored = db._users[1]
+    assert stored.email == "alice@example.com"
+    assert security.verify_password("password123", stored.password_hash) is True
+
+    me_resp = client.get(
+        f"{PREFIX}/me", headers={"Authorization": f"Bearer {body['access_token']}"}
+    )
+    assert me_resp.status_code == 200
+    assert me_resp.json()["username"] == "alice"
+
+
+def test_register_then_login_with_same_credentials(client, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    client.post(f"{PREFIX}/register", json=register_payload())
+
+    resp = client.post(
+        f"{PREFIX}/login", json={"username": "alice", "password": "password123"}
+    )
+
+    assert resp.status_code == 200
+
+
+def test_register_duplicate_username_and_email_returns_409_with_fields(
+    client, db, monkeypatch
+):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    db._users = {1: auth_user(id=1, username="alice")}
+
+    resp = client.post(f"{PREFIX}/register", json=register_payload())
+
+    assert resp.status_code == 409
+    error = resp.json()["error"]
+    assert error["code"] == "CONFLICT"
+    assert {f["field"] for f in error["details"]["fields"]} == {"username", "email"}
+
+
+def test_register_duplicate_email_only_flags_email(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    db._users = {1: auth_user(id=1, username="alice")}
+
+    resp = client.post(
+        f"{PREFIX}/register",
+        json=register_payload(username="other", email="ALICE@example.com "),
+    )
+
+    assert resp.status_code == 409
+    fields = resp.json()["error"]["details"]["fields"]
+    assert fields == [{"field": "email", "message": "Este email já está cadastrado."}]
+
+
+@pytest.mark.parametrize(
+    ("override", "field"),
+    [
+        ({"password": "short"}, "password"),
+        ({"username": "has space"}, "username"),
+        ({"email": "not-an-email"}, "email"),
+        ({"name": "   "}, "name"),
+    ],
+)
+def test_register_invalid_payload_returns_422_per_field(client, override, field):
+    resp = client.post(f"{PREFIX}/register", json=register_payload(**override))
+
+    assert resp.status_code == 422
+    fields = resp.json()["error"]["details"]["fields"]
+    assert [f["field"] for f in fields] == [field]
+
+
+def test_register_short_password_message_is_translated(client):
+    resp = client.post(f"{PREFIX}/register", json=register_payload(password="short"))
+
+    fields = resp.json()["error"]["details"]["fields"]
+    assert fields == [
+        {"field": "password", "message": "Deve ter pelo menos 8 caracteres."}
+    ]
+
+
+def test_reset_password_matches_email_case_insensitively(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    db._users = {1: auth_user(id=1, username="alice")}
+
+    resp = client.post(
+        f"{PREFIX}/reset-password",
+        json={"email": "  Alice@Example.com", "new_password": "new-password-123"},
+    )
+
+    assert resp.status_code == 200
+
+
+def register_payload(**overrides) -> dict:
+    payload = {
+        "name": "Alice",
+        "username": "alice",
+        "email": "alice@example.com",
+        "password": "password123",
+    }
+    payload.update(overrides)
+    return payload
 
 
 def auth_user(

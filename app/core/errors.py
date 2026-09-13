@@ -73,7 +73,7 @@ async def validation_exception_handler(
         fields.append(
             {
                 "field": loc[-1] if loc else None,
-                "message": _TRANSLATED_MSG.get(err.get("msg"), err.get("msg")),
+                "message": _translate_error(err),
             }
         )
     details = {"fields": fields} if fields else {}
@@ -86,14 +86,19 @@ async def validation_exception_handler(
 async def http_exception_handler(
     request: Request, exc: StarletteHTTPException
 ) -> JSONResponse:
+    details: dict[str, Any] | None = None
     if isinstance(exc.detail, str):
         message = exc.detail
+    elif isinstance(exc.detail, dict):
+        message = exc.detail.get("message") or get_error_message(exc.status_code)
+        fields = exc.detail.get("fields")
+        details = {"fields": fields} if fields else None
     else:
         message = get_error_message(exc.status_code)
     headers = getattr(exc, "headers", None)
     return JSONResponse(
         status_code=exc.status_code,
-        content=_error_body(get_error_code(exc.status_code), message),
+        content=_error_body(get_error_code(exc.status_code), message, details),
         headers=headers,
     )
 
@@ -116,3 +121,22 @@ _TRANSLATED_MSG = {
     "Field required": "Campo obrigatório não informado",
     "field required": "Campo obrigatório não informado",
 }
+
+_VALUE_ERROR_PREFIX = "Value error, "
+
+
+def _translate_error(err: dict[str, Any]) -> str | None:
+    if err.get("type") == "string_too_short":
+        min_length = (err.get("ctx") or {}).get("min_length")
+        if min_length == 1:
+            return _TRANSLATED_MSG["Field required"]
+        return f"Deve ter pelo menos {min_length} caracteres."
+    return _translate_message(err.get("msg"))
+
+
+def _translate_message(msg: str | None) -> str | None:
+    if msg is None:
+        return None
+    if msg.startswith(_VALUE_ERROR_PREFIX):
+        return msg[len(_VALUE_ERROR_PREFIX) :]
+    return _TRANSLATED_MSG.get(msg, msg)

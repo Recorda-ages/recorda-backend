@@ -55,6 +55,24 @@ def test_create_user_returns_201_and_hashes_password(client, db, monkeypatch):
     assert security.verify_password("wrong", stored.password_hash) is False
 
 
+def test_create_user_with_taken_username_returns_409(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    payload = {
+        "name": "A",
+        "email": "a@e.com",
+        "username": "alice",
+        "password": "secret",
+    }
+    assert client.post(PREFIX, json=payload).status_code == 201
+
+    resp = client.post(PREFIX, json={**payload, "email": "other@e.com"})
+
+    assert resp.status_code == 409
+    fields = resp.json()["error"]["details"]["fields"]
+    assert [f["field"] for f in fields] == ["username"]
+    assert len(db._users) == 1
+
+
 def test_create_user_validates_missing_field(client):
     resp = client.post(PREFIX, json={"name": "A"})
     assert resp.status_code == 422

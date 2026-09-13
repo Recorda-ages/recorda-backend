@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin_user, get_current_user
+from app.api.routes.auth import user_already_exists_error
 from app.db.session import get_db
 from app.models import User
 from app.schemas.music_preference import (
@@ -23,7 +24,10 @@ def list_users(db: Session = Depends(get_db)) -> list[UserRead]:
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserRead:
-    return user_service.create(db, payload)
+    try:
+        return user_service.create(db, payload)
+    except user_service.UserAlreadyExistsError as exc:
+        raise user_already_exists_error(exc) from exc
 
 
 @router.get("/{user_id}", response_model=UserRead, dependencies=[_current_admin])

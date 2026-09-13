@@ -8,10 +8,13 @@ from app.repositories import user_repository
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
+    RegisterRequest,
     ResetPasswordRequest,
     ResetPasswordResponse,
     UserBasicResponse,
 )
+from app.schemas.user import UserCreate
+from app.services import user_service
 
 INVALID_CREDENTIALS_MESSAGE = "Credenciais inválidas"
 RESET_PASSWORD_ERROR_MESSAGE = "Não foi possível redefinir a senha"
@@ -30,6 +33,23 @@ def login(db: Session, payload: LoginRequest) -> LoginResponse:
     if user is None:
         raise InvalidCredentialsError
 
+    return _issue_login_response(user)
+
+
+def register(db: Session, payload: RegisterRequest) -> LoginResponse:
+    user = user_service.create(
+        db,
+        UserCreate(
+            name=payload.name,
+            email=payload.email,
+            username=payload.username,
+            password=payload.password,
+        ),
+    )
+    return _issue_login_response(user)
+
+
+def _issue_login_response(user: User) -> LoginResponse:
     token = security.create_access_token(
         subject=str(user.id),
         additional_claims={

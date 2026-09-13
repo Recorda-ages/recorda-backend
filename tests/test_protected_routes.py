@@ -24,7 +24,13 @@ def test_protected_route_with_valid_token(client, db, monkeypatch):
     resp = client.get(AUTH_ME, headers={"Authorization": f"Bearer {token}"})
 
     assert resp.status_code == 200
-    assert resp.json() == {"id": 1, "username": "alice", "account_type": "common"}
+    assert resp.json() == {
+        "id": 1,
+        "name": "Alice",
+        "username": "alice",
+        "account_type": "common",
+        "onboarding_completed": False,
+    }
 
 
 def test_protected_route_without_token_returns_401(client, db):
