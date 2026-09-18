@@ -1,15 +1,17 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin_user, get_current_user
 from app.api.routes.auth import user_already_exists_error
 from app.db.session import get_db
-from app.models import User
+from app.models import AppUser
 from app.schemas.music_preference import (
     MusicPreferencesCreate,
     MusicPreferencesRead,
 )
-from app.schemas.user import UserChangeAccountType, UserCreate, UserRead, UserUpdate
+from app.schemas.user import UserChangeRole, UserCreate, UserRead, UserUpdate
 from app.services import music_preference_service, user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -31,7 +33,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserRead:
 
 
 @router.get("/{user_id}", response_model=UserRead, dependencies=[_current_admin])
-def get_user(user_id: int, db: Session = Depends(get_db)) -> UserRead:
+def get_user(user_id: UUID, db: Session = Depends(get_db)) -> UserRead:
     user = user_service.get_by_id(db, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -40,7 +42,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)) -> UserRead:
 
 @router.put("/{user_id}", response_model=UserRead, dependencies=[_current_admin])
 def update_user(
-    user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
+    user_id: UUID, payload: UserUpdate, db: Session = Depends(get_db)
 ) -> UserRead:
     user = user_service.update(db, user_id, payload)
     if user is None:
@@ -51,22 +53,22 @@ def update_user(
 @router.delete(
     "/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[_current_admin]
 )
-def delete_user(user_id: int, db: Session = Depends(get_db)) -> None:
+def delete_user(user_id: UUID, db: Session = Depends(get_db)) -> None:
     if not user_service.delete(db, user_id):
         raise HTTPException(status_code=404, detail="User not found")
 
 
 @router.patch(
-    "/{user_id}/account-type",
+    "/{user_id}/role",
     response_model=UserRead,
     dependencies=[_current_admin],
 )
-def change_account_type(
-    user_id: int,
-    payload: UserChangeAccountType,
+def change_role(
+    user_id: UUID,
+    payload: UserChangeRole,
     db: Session = Depends(get_db),
 ) -> UserRead:
-    user = user_service.change_account_type(db, user_id, payload)
+    user = user_service.change_role(db, user_id, payload)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return user
@@ -75,7 +77,7 @@ def change_account_type(
 @router.post("/me/music-preferences", response_model=MusicPreferencesRead)
 def save_music_preferences(
     payload: MusicPreferencesCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MusicPreferencesRead:
     """Persist the onboarding selection of the authenticated user."""

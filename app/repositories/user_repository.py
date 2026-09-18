@@ -1,39 +1,55 @@
-"""Persistence and query access for the User entity."""
+"""Persistence and query access for the AppUser entity."""
 
+from uuid import UUID
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import User
+from app.core.time import now_utc
+from app.models import AppUser
+from app.repositories._query import only_live
 
 
-def get_all(db: Session) -> list[User]:
-    return db.query(User).all()
+def get_all(db: Session) -> list[AppUser]:
+    return list(db.scalars(only_live(select(AppUser), AppUser)))
 
 
-def get_by_id(db: Session, user_id: int) -> User | None:
-    return db.get(User, user_id)
+def get_by_id(db: Session, user_id: UUID) -> AppUser | None:
+    stmt = select(AppUser).where(AppUser.user_id == user_id)
+    return db.scalars(only_live(stmt, AppUser)).first()
 
 
-def get_by_username(db: Session, username: str) -> User | None:
-    return db.query(User).filter_by(username=username).first()
+def get_by_username(
+    db: Session, username: str, *, include_deleted: bool = False
+) -> AppUser | None:
+    stmt = select(AppUser).where(AppUser.username == username)
+    if not include_deleted:
+        stmt = only_live(stmt, AppUser)
+    return db.scalars(stmt).first()
 
 
-def get_by_email(db: Session, email: str) -> User | None:
-    return db.query(User).filter_by(email=email).first()
+def get_by_email(
+    db: Session, email: str, *, include_deleted: bool = False
+) -> AppUser | None:
+    stmt = select(AppUser).where(AppUser.email == email)
+    if not include_deleted:
+        stmt = only_live(stmt, AppUser)
+    return db.scalars(stmt).first()
 
 
-def create(db: Session, user: User) -> User:
+def create(db: Session, user: AppUser) -> AppUser:
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
 
 
-def save(db: Session, user: User) -> User:
+def save(db: Session, user: AppUser) -> AppUser:
     db.commit()
     db.refresh(user)
     return user
 
 
-def delete(db: Session, user: User) -> None:
-    db.delete(user)
+def soft_delete(db: Session, user: AppUser) -> None:
+    user.deleted_at = now_utc()
     db.commit()

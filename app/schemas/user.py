@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,11 +19,13 @@ class UserUpdate(BaseModel):
     email: str | None = None
 
 
-class UserChangeAccountType(BaseModel):
-    account_type: Literal["common", "admin"]
+class UserChangeRole(BaseModel):
+    role: Literal["USER", "ADMIN"]
 
 
 class UserRead(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    user_id: UUID
+    username: str
+    role: str

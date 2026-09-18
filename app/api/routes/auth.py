@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models import User
+from app.models import AppUser
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -52,14 +52,14 @@ def reset_password(
 
 @router.get("/me", response_model=UserBasicResponse)
 def me(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[AppUser, Depends(get_current_user)],
 ) -> UserBasicResponse:
     return current_user
 
 
 @router.get("/verify", response_model=UserBasicResponse)
 def verify_token(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[AppUser, Depends(get_current_user)],
 ) -> UserBasicResponse:
     return current_user
 

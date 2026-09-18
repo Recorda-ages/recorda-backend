@@ -6,16 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import auth, health, media, music, recorda, user
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
-from app.db import init_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(f"ENVIRONMENT = {settings.environment}")
-
-    if settings.environment != "test":
-        init_db()
-
     yield
 
 

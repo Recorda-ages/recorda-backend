@@ -12,10 +12,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models import User
+from app.models import AppUser
+from app.models.app_user import ROLE_ADMIN
 from app.services import auth_service
 
-ADMIN_ACCOUNT_TYPE = "admin"
 FORBIDDEN_MESSAGE = "Ação permitida apenas para administradores"
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -24,7 +24,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Session = Depends(get_db),
-) -> User:
+) -> AppUser:
     """Resolve the authenticated user from the Bearer token, or 401."""
     if credentials is None:
         raise _unauthorized()
@@ -35,10 +35,10 @@ def get_current_user(
 
 
 def get_current_admin_user(
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> User:
+    current_user: Annotated[AppUser, Depends(get_current_user)],
+) -> AppUser:
     """Resolve the authenticated user and require an administrative account."""
-    if current_user.account_type != ADMIN_ACCOUNT_TYPE:
+    if current_user.role != ROLE_ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=FORBIDDEN_MESSAGE,

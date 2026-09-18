@@ -2,14 +2,16 @@ import pytest
 
 from app.core import security
 from app.core.config import settings
-from app.core.security import decode_access_token, hash_password
-from app.models import User
+from app.core.security import decode_access_token
+from app.models import AppUser
+from app.models.app_user import ROLE_ADMIN, ROLE_USER
+from tests.factories import add_user
 
 PREFIX = "/api/v1/auth"
 
 
 def test_reset_password_valid_email_updates_hash_and_returns_success(client, db):
-    db._users = {1: auth_user(id=1, username="alice", password="old-password")}
+    user = auth_user(db, username="alice", password="old-password")
 
     resp = client.post(
         f"{PREFIX}/reset-password",
@@ -19,7 +21,7 @@ def test_reset_password_valid_email_updates_hash_and_returns_success(client, db)
     assert resp.status_code == 200
     assert resp.json() == {"message": "Senha redefinida com sucesso"}
 
-    stored = db._users[1]
+    stored = db.get(AppUser, user.user_id)
     assert security.verify_password("old-password", stored.password_hash) is False
     assert security.verify_password("new-password-123", stored.password_hash) is True
     assert "password" not in resp.json()
@@ -27,7 +29,7 @@ def test_reset_password_valid_email_updates_hash_and_returns_success(client, db)
 
 
 def test_reset_password_short_password_is_rejected_by_backend(client, db):
-    db._users = {1: auth_user(id=1, username="alice", password="old-password")}
+    auth_user(db, username="alice", password="old-password")
 
     resp = client.post(
         f"{PREFIX}/reset-password",
@@ -55,7 +57,7 @@ def test_reset_password_unknown_email_uses_generic_error(client):
 
 def test_reset_password_then_login_uses_new_password(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: auth_user(id=1, username="alice", password="old-password")}
+    auth_user(db, username="alice", password="old-password")
 
     reset = client.post(
         f"{PREFIX}/reset-password",
@@ -79,7 +81,7 @@ def test_reset_password_then_login_uses_new_password(client, db, monkeypatch):
 
 def test_login_valid_common_user_returns_token_and_user_data(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: auth_user(id=1, username="alice", account_type="common")}
+    user = auth_user(db, username="alice", role=ROLE_USER)
 
     resp = client.post(
         f"{PREFIX}/login", json={"username": "alice", "password": "correct"}
@@ -90,17 +92,17 @@ def test_login_valid_common_user_returns_token_and_user_data(client, db, monkeyp
     assert body["access_token"]
     assert body["token_type"] == "bearer"
     assert body["user"] == {
-        "id": 1,
+        "user_id": str(user.user_id),
         "name": "Alice",
         "username": "alice",
-        "account_type": "common",
+        "role": "USER",
         "onboarding_completed": False,
     }
 
 
 def test_login_valid_admin_uses_same_token_contract(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {2: auth_user(id=2, username="admin", account_type="admin")}
+    auth_user(db, username="admin", role=ROLE_ADMIN)
 
     resp = client.post(
         f"{PREFIX}/login", json={"username": "admin", "password": "correct"}
@@ -110,7 +112,7 @@ def test_login_valid_admin_uses_same_token_contract(client, db, monkeypatch):
     body = resp.json()
     assert body["token_type"] == "bearer"
     assert body["access_token"].count(".") == 2
-    assert body["user"]["account_type"] == "admin"
+    assert body["user"]["role"] == "ADMIN"
 
 
 def test_login_unknown_username_returns_invalid_credentials(client, monkeypatch):
@@ -126,7 +128,7 @@ def test_login_unknown_username_returns_invalid_credentials(client, monkeypatch)
 
 def test_login_wrong_password_returns_invalid_credentials(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: auth_user(id=1, username="alice")}
+    auth_user(db, username="alice")
 
     resp = client.post(f"{PREFIX}/login", json={"username": "alice", "password": "bad"})
 
@@ -136,7 +138,7 @@ def test_login_wrong_password_returns_invalid_credentials(client, db, monkeypatc
 
 def test_invalid_login_errors_are_indistinguishable(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: auth_user(id=1, username="alice")}
+    auth_user(db, username="alice")
 
     missing = client.post(
         f"{PREFIX}/login", json={"username": "missing", "password": "correct"}
@@ -151,7 +153,7 @@ def test_invalid_login_errors_are_indistinguishable(client, db, monkeypatch):
 
 def test_login_token_works_immediately_on_auth_me(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: auth_user(id=1, username="alice", account_type="common")}
+    user = auth_user(db, username="alice", role=ROLE_USER)
 
     login_resp = client.post(
         f"{PREFIX}/login", json={"username": "alice", "password": "correct"}
@@ -161,17 +163,17 @@ def test_login_token_works_immediately_on_auth_me(client, db, monkeypatch):
 
     assert me_resp.status_code == 200
     assert me_resp.json() == {
-        "id": 1,
+        "user_id": str(user.user_id),
         "name": "Alice",
         "username": "alice",
-        "account_type": "common",
+        "role": "USER",
         "onboarding_completed": False,
     }
 
 
 def test_login_response_does_not_expose_password_or_hash(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: auth_user(id=1, username="alice")}
+    auth_user(db, username="alice")
 
     resp = client.post(
         f"{PREFIX}/login", json={"username": "alice", "password": "correct"}
@@ -188,10 +190,8 @@ def test_login_response_does_not_expose_password_or_hash(client, db, monkeypatch
 
 def test_common_and_admin_tokens_use_same_expiration(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {
-        1: auth_user(id=1, username="alice", account_type="common"),
-        2: auth_user(id=2, username="admin", account_type="admin"),
-    }
+    auth_user(db, username="alice")
+    auth_user(db, username="admin", role=ROLE_ADMIN)
 
     common = client.post(
         f"{PREFIX}/login", json={"username": "alice", "password": "correct"}
@@ -216,7 +216,7 @@ def test_common_and_admin_tokens_use_same_expiration(client, db, monkeypatch):
 def test_login_token_expiration_follows_settings(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
     monkeypatch.setattr(settings, "access_token_expire_minutes", 60 * 24 * 45)
-    db._users = {1: auth_user(id=1, username="alice")}
+    auth_user(db, username="alice")
 
     resp = client.post(
         f"{PREFIX}/login", json={"username": "alice", "password": "correct"}
@@ -229,9 +229,7 @@ def test_login_token_expiration_follows_settings(client, db, monkeypatch):
 
 def test_login_reports_completed_onboarding(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    onboarded = auth_user(id=1, username="alice")
-    onboarded.onboarding_completed = True
-    db._users = {1: onboarded}
+    auth_user(db, username="alice", fav_song_deezer_track_id="3135556")
 
     resp = client.post(
         f"{PREFIX}/login", json={"username": " alice ", "password": "correct"}
@@ -249,14 +247,14 @@ def test_register_creates_user_and_returns_session(client, db, monkeypatch):
     assert resp.status_code == 201
     body = resp.json()
     assert body["token_type"] == "bearer"
+    stored = db.query(AppUser).filter_by(username="alice").one()
     assert body["user"] == {
-        "id": 1,
+        "user_id": str(stored.user_id),
         "name": "Alice",
         "username": "alice",
-        "account_type": "common",
+        "role": "USER",
         "onboarding_completed": False,
     }
-    stored = db._users[1]
     assert stored.email == "alice@example.com"
     assert security.verify_password("password123", stored.password_hash) is True
 
@@ -282,7 +280,7 @@ def test_register_duplicate_username_and_email_returns_409_with_fields(
     client, db, monkeypatch
 ):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: auth_user(id=1, username="alice")}
+    auth_user(db, username="alice")
 
     resp = client.post(f"{PREFIX}/register", json=register_payload())
 
@@ -294,7 +292,7 @@ def test_register_duplicate_username_and_email_returns_409_with_fields(
 
 def test_register_duplicate_email_only_flags_email(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: auth_user(id=1, username="alice")}
+    auth_user(db, username="alice")
 
     resp = client.post(
         f"{PREFIX}/register",
@@ -334,7 +332,7 @@ def test_register_short_password_message_is_translated(client):
 
 def test_reset_password_matches_email_case_insensitively(client, db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: auth_user(id=1, username="alice")}
+    auth_user(db, username="alice")
 
     resp = client.post(
         f"{PREFIX}/reset-password",
@@ -356,19 +354,9 @@ def register_payload(**overrides) -> dict:
 
 
 def auth_user(
-    id: int,
-    username: str,
-    password: str = "correct",
-    account_type: str = "common",
-) -> User:
-    return User(
-        id=id,
-        name=username.title(),
-        email=f"{username}@example.com",
-        username=username,
-        password_hash=hash_password(password),
-        account_type=account_type,
-    )
+    db, username: str, password: str = "correct", role: str = ROLE_USER, **fields
+) -> AppUser:
+    return add_user(db, username, password=password, role=role, **fields)
 
 
 def invalid_credentials_body():
