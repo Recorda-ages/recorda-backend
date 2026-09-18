@@ -1,8 +1,12 @@
 """Endpoint tests for authentication/authorization enforcement on protected routes."""
 
+from datetime import timedelta
+
 from app.core import security
 from app.core.config import settings
-from app.models import User
+from app.models import AppUser
+from app.models.app_user import ROLE_ADMIN
+from tests.factories import add_user, auth_headers, token_for
 
 AUTH_ME = "/api/v1/auth/me"
 USERS = "/api/v1/users"
@@ -16,19 +20,17 @@ FORBIDDEN_BODY = {
 }
 
 
-def test_protected_route_with_valid_token(client, db, monkeypatch):
-    monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: user(1, username="alice", account_type="common")}
-    token = token_for(db, 1, "alice", "common")
+def test_protected_route_with_valid_token(client, db):
+    alice = add_user(db, "alice")
 
-    resp = client.get(AUTH_ME, headers={"Authorization": f"Bearer {token}"})
+    resp = client.get(AUTH_ME, headers=auth_headers(alice))
 
     assert resp.status_code == 200
     assert resp.json() == {
-        "id": 1,
+        "user_id": str(alice.user_id),
         "name": "Alice",
         "username": "alice",
-        "account_type": "common",
+        "role": "USER",
         "onboarding_completed": False,
     }
 
@@ -47,11 +49,9 @@ def test_protected_route_with_invalid_token_returns_401(client, db):
     assert resp.json()["error"]["code"] == "UNAUTHORIZED"
 
 
-def test_protected_route_with_expired_token_returns_401(client, db, monkeypatch):
-    monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    monkeypatch.setattr(settings, "access_token_expire_minutes", -1)
-    db._users = {1: user(1, username="alice", account_type="common")}
-    token = token_for_generic(1, "alice", "common")
+def test_protected_route_with_expired_token_returns_401(client, db):
+    alice = add_user(db, "alice")
+    token = token_for(alice, expires_delta=timedelta(minutes=-1))
 
     resp = client.get(AUTH_ME, headers={"Authorization": f"Bearer {token}"})
 
@@ -59,23 +59,28 @@ def test_protected_route_with_expired_token_returns_401(client, db, monkeypatch)
     assert resp.json()["error"]["code"] == "UNAUTHORIZED"
 
 
-def test_common_user_cannot_access_admin_route(client, db, monkeypatch):
-    monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: user(1, username="alice", account_type="common")}
-    token = token_for(db, 1, "alice", "common")
+def test_soft_deleted_user_token_returns_401(client, db):
+    alice = add_user(db, "alice")
+    headers = auth_headers(alice)
+    alice.deleted_at = alice.created_at
+    db.commit()
 
-    resp = client.get(USERS, headers={"Authorization": f"Bearer {token}"})
+    assert client.get(AUTH_ME, headers=headers).status_code == 401
+
+
+def test_common_user_cannot_access_admin_route(client, db):
+    alice = add_user(db, "alice")
+
+    resp = client.get(USERS, headers=auth_headers(alice))
 
     assert resp.status_code == 403
     assert resp.json() == FORBIDDEN_BODY
 
 
-def test_admin_user_can_access_admin_route(client, db, monkeypatch):
-    monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users = {1: user(1, username="admin", account_type="admin")}
-    token = token_for(db, 1, "admin", "admin")
+def test_admin_user_can_access_admin_route(client, db):
+    admin = add_user(db, "admin", role=ROLE_ADMIN)
 
-    resp = client.get(USERS, headers={"Authorization": f"Bearer {token}"})
+    resp = client.get(USERS, headers=auth_headers(admin))
 
     assert resp.status_code == 200
 
@@ -99,32 +104,6 @@ def test_public_signup_is_not_an_admin_route(client, db, monkeypatch):
     )
 
     assert resp.status_code == 201
-    stored = db._users[1]
+    stored = db.query(AppUser).filter_by(username="alice").one()
     assert stored.password_hash != "secret"
     assert security.verify_password("secret", stored.password_hash) is True
-
-
-def user(id: int, username: str, account_type: str) -> User:
-    return User(
-        id=id,
-        name=username.title(),
-        email=f"{username}@example.com",
-        username=username,
-        password_hash=security.hash_password("correct"),
-        account_type=account_type,
-    )
-
-
-def token_for(db, user_id: int, username: str, account_type: str) -> str:
-    assert user_id in db._users
-    return security.create_access_token(
-        subject=str(user_id),
-        additional_claims={"username": username, "account_type": account_type},
-    )
-
-
-def token_for_generic(user_id: int, username: str, account_type: str) -> str:
-    return security.create_access_token(
-        subject=str(user_id),
-        additional_claims={"username": username, "account_type": account_type},
-    )

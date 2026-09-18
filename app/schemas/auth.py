@@ -1,4 +1,5 @@
 import re
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -71,16 +72,11 @@ class ResetPasswordResponse(BaseModel):
 class UserBasicResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    user_id: UUID
     name: str
     username: str
-    account_type: str
-    onboarding_completed: bool = False
-
-    @field_validator("onboarding_completed", mode="before")
-    @classmethod
-    def default_onboarding_completed(cls, value: bool | None) -> bool:
-        return bool(value)
+    role: str
+    onboarding_completed: bool
 
 
 class LoginResponse(BaseModel):

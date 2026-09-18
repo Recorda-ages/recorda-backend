@@ -2,107 +2,44 @@ from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core import security
+from app.db.seed_data import GENRE_SEED
 from app.db.session import Base, get_db
 from app.main import app
-from app.models.recorda import Recorda
-from app.models.user import User
-
-
-class FakeSession:
-    """In-memory stand-in for a SQLAlchemy Session used by the repositories."""
-
-    def __init__(self) -> None:
-        self._users: dict[int, User] = {}
-        self._recordas: dict[int, Recorda] = {}
-        self._next_user_id = 1
-        self._next_recorda_id = 1
-        self._pending_add = None
-        self._pending_delete = None
-
-    def add(self, obj) -> None:
-        self._pending_add = obj
-
-    def commit(self) -> None:
-        if self._pending_add is not None:
-            obj = self._pending_add
-            if isinstance(obj, Recorda):
-                obj.id = self._next_recorda_id
-                self._next_recorda_id += 1
-                self._recordas[obj.id] = obj
-            elif isinstance(obj, User):
-                obj.id = self._next_user_id
-                if getattr(obj, "account_type", None) is None:
-                    obj.account_type = "common"
-                self._next_user_id += 1
-                self._users[obj.id] = obj
-            self._pending_add = None
-        if self._pending_delete is not None:
-            obj = self._pending_delete
-            if isinstance(obj, Recorda):
-                self._recordas.pop(obj.id, None)
-            elif isinstance(obj, User):
-                self._users.pop(obj.id, None)
-            self._pending_delete = None
-
-    def refresh(self, obj) -> None:
-        return None
-
-    def get(self, model, obj_id: int):
-        if model is User:
-            return self._users.get(obj_id)
-        if model is Recorda:
-            return self._recordas.get(obj_id)
-        return None
-
-    def query(self, model):
-        if model is User:
-            return _Query(self._users)
-        if model is Recorda:
-            return _Query(self._recordas)
-        raise AssertionError(f"FakeSession does not support {model}")
-
-    def delete(self, obj) -> None:
-        self._pending_delete = obj
-
-
-class _Query:
-    def __init__(self, store: dict) -> None:
-        self._store = store
-        self._filters: dict[str, object] = {}
-
-    def all(self) -> list:
-        return [obj for obj in self._store.values() if self._matches(obj)]
-
-    def filter_by(self, **kwargs):
-        self._filters.update(kwargs)
-        return self
-
-    def first(self):
-        return next(iter(self.all()), None)
-
-    def _matches(self, obj) -> bool:
-        return all(
-            getattr(obj, key, None) == value for key, value in self._filters.items()
-        )
+from app.models import AppUser, Genre
+from app.models.app_user import ROLE_ADMIN, ROLE_USER
+from tests.factories import add_user, token_for
 
 
 @pytest.fixture
-def db() -> FakeSession:
-    return FakeSession()
+def db():
+    """Real SQLAlchemy session on in-memory SQLite, seeded like migration 0002."""
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(engine, "connect")
+    def _enable_foreign_keys(connection, _record):
+        connection.execute("PRAGMA foreign_keys=ON")
+
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, autocommit=False, autoflush=False)()
+    session.add_all(Genre(genre_id=gid, name=name) for gid, name in GENRE_SEED)
+    session.commit()
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
 
 
 @pytest.fixture
-def user() -> User:
-    return User(id=1, name="Alice", email="alice@example.com")
-
-
-@pytest.fixture
-def client(db: FakeSession):
+def client(db: Session):
     def _override_get_db():
         yield db
 
@@ -113,84 +50,25 @@ def client(db: FakeSession):
 
 
 @pytest.fixture
-def common_user(db: FakeSession) -> User:
-    new_user = User(
-        name="Usuário Comum",
-        email="comum@example.com",
-        username="usuario_comum",
-        account_type="common",
-    )
-    db.add(new_user)
-    db.commit()
-    return new_user
+def common_user(db: Session) -> AppUser:
+    return add_user(db, "usuario_comum", name="Usuário Comum", role=ROLE_USER)
 
 
 @pytest.fixture
-def admin_user(db: FakeSession) -> User:
-    new_user = User(
-        name="Usuário Admin",
-        email="admin@example.com",
-        username="usuario_admin",
-        account_type="admin",
-    )
-    db.add(new_user)
-    db.commit()
-    return new_user
-
-
-def _token_for(target_user: User, expires_delta: timedelta | None = None) -> str:
-    return security.create_access_token(
-        subject=str(target_user.id),
-        additional_claims={
-            "username": target_user.username,
-            "account_type": target_user.account_type,
-        },
-        expires_delta=expires_delta,
-    )
+def admin_user(db: Session) -> AppUser:
+    return add_user(db, "usuario_admin", name="Usuário Admin", role=ROLE_ADMIN)
 
 
 @pytest.fixture
-def common_user_token(common_user: User) -> str:
-    return _token_for(common_user)
+def common_user_token(common_user: AppUser) -> str:
+    return token_for(common_user)
 
 
 @pytest.fixture
-def admin_user_token(admin_user: User) -> str:
-    return _token_for(admin_user)
+def admin_user_token(admin_user: AppUser) -> str:
+    return token_for(admin_user)
 
 
 @pytest.fixture
-def expired_token(common_user: User) -> str:
-    return _token_for(common_user, expires_delta=timedelta(minutes=-5))
-
-
-@pytest.fixture
-def sqlite_db():
-    """Real SQLAlchemy session on in-memory SQLite.
-
-    ``FakeSession`` above only knows how to store ``User``; suites that touch
-    other tables (or rely on constraints and cascades) use this instead.
-    """
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    session = sessionmaker(bind=engine, autocommit=False, autoflush=False)()
-    try:
-        yield session
-    finally:
-        session.close()
-        engine.dispose()
-
-
-@pytest.fixture
-def sqlite_client(sqlite_db):
-    def _override_get_db():
-        yield sqlite_db
-
-    app.dependency_overrides[get_db] = _override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.pop(get_db, None)
+def expired_token(common_user: AppUser) -> str:
+    return token_for(common_user, expires_delta=timedelta(minutes=-5))

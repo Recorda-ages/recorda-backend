@@ -9,7 +9,7 @@ def test_verify_returns_common_user(client: TestClient, common_user_token: str) 
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["account_type"] == "common"
+    assert body["role"] == "USER"
     assert "password" not in body
     assert "password_hash" not in body
 
@@ -19,7 +19,7 @@ def test_verify_returns_admin_user(client: TestClient, admin_user_token: str) ->
         "/api/v1/auth/verify", headers={"Authorization": f"Bearer {admin_user_token}"}
     )
     assert response.status_code == 200
-    assert response.json()["account_type"] == "admin"
+    assert response.json()["role"] == "ADMIN"
 
 
 def test_verify_rejects_missing_token(client: TestClient) -> None:
