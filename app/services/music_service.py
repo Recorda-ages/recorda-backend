@@ -13,6 +13,8 @@ MUSIC_UNAVAILABLE_MESSAGE = "Serviço de música indisponível"
 
 ARTIST_SEARCH_FETCH_LIMIT = 50
 ARTIST_SEARCH_RESULT_LIMIT = 25
+ARTIST_POPULAR_LIMIT = 25
+TRACK_POPULAR_LIMIT = 25
 
 _NAME_EXACT = 0
 _NAME_PREFIX = 1
@@ -47,6 +49,42 @@ def search_artists(client: httpx.Client, q: str) -> list[ArtistRead]:
             picture_url=a.get("picture_medium") or a.get("picture"),
         )
         for a in ranked
+    ]
+
+
+def get_popular_artists(client: httpx.Client) -> list[ArtistRead]:
+    data = _get_data(client, "/chart/0/artists", params={"limit": ARTIST_POPULAR_LIMIT})
+    unique = _unique_by(data, lambda a: a.get("id"))[:ARTIST_POPULAR_LIMIT]
+    return [
+        ArtistRead(
+            id=a["id"],
+            name=a["name"],
+            picture_url=a.get("picture_medium") or a.get("picture"),
+        )
+        for a in unique
+    ]
+
+
+def get_popular_tracks(client: httpx.Client) -> list[TrackRead]:
+    data = _get_data(client, "/chart/0/tracks", params={"limit": TRACK_POPULAR_LIMIT})
+    unique = _unique_by(
+        data,
+        lambda t: (
+            normalize(t.get("title", "")),
+            normalize((t.get("artist") or {}).get("name", "")),
+        ),
+    )[:TRACK_POPULAR_LIMIT]
+    return [
+        TrackRead(
+            id=t["id"],
+            title=t["title"],
+            artist=t["artist"]["name"],
+            album=t["album"]["title"],
+            cover_url=t["album"].get("cover_medium") or t["album"].get("cover"),
+            preview_url=t.get("preview") or None,
+            genre_id=t.get("genre_id"),
+        )
+        for t in unique
     ]
 
 
