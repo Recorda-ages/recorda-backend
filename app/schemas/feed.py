@@ -1,8 +1,5 @@
-#schemas Pydantic de request/response (ex: FeedItemResponse com avatar, username, mídia, música, descrição, curtidas, etc.
-
-# app/schemas/feed.py
-
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -13,7 +10,7 @@ class FeedAuthor(BaseModel):
     # Não é o AppUser inteiro — só o que a tela precisa mostrar.
     user_id: UUID
     username: str
-    avatar_url: str | None = None
+    profile_picture_url: str | None = None
 
 
 class FeedItem(BaseModel):
@@ -29,7 +26,7 @@ class FeedItem(BaseModel):
     author: FeedAuthor
 
     media_url: str
-    media_type: str  # 'PHOTO' | 'VIDEO'
+    media_type: Literal["PHOTO", "VIDEO"]
     description: str | None = None
 
     song_title: str

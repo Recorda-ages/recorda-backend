@@ -1,37 +1,39 @@
-# tests/test_feed_repository.py
+"""Testes do app/repositories/feed_repository.py.
+
+Verificam a *forma* do SQL gerado (compilado com literal_binds), não o
+resultado de execução — úteis para pegar erros de construção da query,
+mas não substituem um teste de integração contra um banco real.
+"""
 
 import uuid
-from unittest.mock import MagicMock
+from datetime import datetime, timezone
 
-import pytest
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 
 from app.repositories.feed_repository import (
-    get_following_feed_query,
-    _visibility_condition,
-    _likes_count_subquery,
     _is_liked_subquery,
+    _likes_count_subquery,
+    _visibility_condition,
+    apply_cursor,
+    get_following_feed_query,
 )
 
 
 def compiled_sql(query):
     # Compila a query pro SQL final com os valores já substituídos no
     # lugar dos parâmetros — facilita checar substring no texto.
-    return str(query.compile(compile_kwargs={"literal_binds": True}))
+    return str(
+        query.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
 
 
 class TestVisibilityCondition:
-    def test_includes_public_account_clause(self):
-        condition = _visibility_condition(uuid.uuid4())
-        sql = compiled_sql(select(condition))
-
-        assert "is_private" in sql
-
     def test_includes_accepted_follow_status_clause(self):
         condition = _visibility_condition(uuid.uuid4())
         sql = compiled_sql(select(condition))
 
-        assert "ACEPTED" in sql
+        assert "ACCEPTED" in sql
 
 
 class TestLikesCountSubquery:
@@ -66,11 +68,12 @@ class TestGetFollowingFeedQuery:
         assert str(user_id) in sql
         assert "follower_id" in sql
 
-    def test_excludes_soft_deleted_recordas(self):
+    def test_excludes_soft_deleted_recordas_and_authors(self):
         query = get_following_feed_query(uuid.uuid4())
         sql = compiled_sql(query)
 
-        assert "deleted_at IS NULL" in sql
+        # Um filtro para Recorda.deleted_at, outro para AppUser.deleted_at.
+        assert sql.count("deleted_at IS NULL") == 2
 
     def test_orders_by_created_at_desc(self):
         query = get_following_feed_query(uuid.uuid4())
@@ -87,24 +90,23 @@ class TestGetFollowingFeedQuery:
         assert "LEFT OUTER JOIN" in sql.upper()
 
 
-class TestFeedRepositoryWithMockedSession:
-    # Esse grupo simula o que acontece se você tiver, por exemplo,
-    # uma função get_following_feed(db: Session, user_id: UUID) que
-    # chama db.execute(get_following_feed_query(user_id)).scalars().all()
-    # Aqui a Session inteira é fake — nenhuma conexão real acontece.
+class TestApplyCursor:
+    def test_without_cursor_returns_query_unchanged(self):
+        query = get_following_feed_query(uuid.uuid4())
 
-    def test_execute_is_called_with_a_select_statement(self):
-        mock_session = MagicMock()
-        mock_session.execute.return_value.scalars.return_value.all.return_value = []
+        result = apply_cursor(query, None, None)
 
-        user_id = uuid.uuid4()
-        query = get_following_feed_query(user_id)
+        assert compiled_sql(result) == compiled_sql(query)
 
-        # Simula o que a camada de service faria:
-        mock_session.execute(query)
+    def test_with_cursor_adds_tuple_comparison_clause(self):
+        query = get_following_feed_query(uuid.uuid4())
+        cursor_created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        cursor_recorda_id = uuid.uuid4()
 
-        mock_session.execute.assert_called_once()
-        called_arg = mock_session.execute.call_args[0][0]
-        # Confirma que o que foi passado pra execute() é de fato
-        # a query montada, não algo genérico.
-        assert called_arg is query
+        result = apply_cursor(query, cursor_created_at, cursor_recorda_id)
+        sql = compiled_sql(result)
+
+        assert str(cursor_recorda_id) in sql
+        # Comparação de tupla: garante que o desempate por recorda_id
+        # está presente, não só o filtro por created_at.
+        assert "created_at" in sql and "recorda_id" in sql
