@@ -13,7 +13,6 @@ from datetime import datetime
 from sqlalchemy import DateTime, ForeignKey, Index, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-
 from app.core.time import now_utc
 from app.db.session import Base
 

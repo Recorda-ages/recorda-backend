@@ -2,7 +2,7 @@
 
 import base64
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -30,7 +30,7 @@ def _make_row(**overrides):
         song_artist_name="Artist",
         song_cover_url="https://example.com/cover.jpg",
         song_preview_url=None,
-        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     row = SimpleNamespace(
         Recorda=recorda,
@@ -46,7 +46,7 @@ def _make_row(**overrides):
 
 class TestEncodeDecodeCursor:
     def test_round_trip(self):
-        created_at = datetime(2026, 3, 15, 12, 30, tzinfo=timezone.utc)
+        created_at = datetime(2026, 3, 15, 12, 30, tzinfo=UTC)
         recorda_id = uuid.uuid4()
 
         cursor = _encode_cursor(created_at, recorda_id)
@@ -123,7 +123,7 @@ class TestGetFollowingFeed:
                     song_artist_name="a",
                     song_cover_url="c",
                     song_preview_url=None,
-                    created_at=datetime(2026, 1, day, tzinfo=timezone.utc),
+                    created_at=datetime(2026, 1, day, tzinfo=UTC),
                 )
             )
             for day in (3, 2, 1)  # created_at decrescente, como o ORDER BY real

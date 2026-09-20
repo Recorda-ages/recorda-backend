@@ -6,7 +6,7 @@ mas não substituem um teste de integração contra um banco real.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
@@ -100,7 +100,7 @@ class TestApplyCursor:
 
     def test_with_cursor_adds_tuple_comparison_clause(self):
         query = get_following_feed_query(uuid.uuid4())
-        cursor_created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        cursor_created_at = datetime(2026, 1, 1, tzinfo=UTC)
         cursor_recorda_id = uuid.uuid4()
 
         result = apply_cursor(query, cursor_created_at, cursor_recorda_id)

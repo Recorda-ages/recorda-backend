@@ -1,9 +1,10 @@
-from uuid import UUID
 from datetime import datetime
-from sqlalchemy import Select
-from sqlalchemy import select, or_, func, tuple_
-from app.models.follow import Follow
+from uuid import UUID
+
+from sqlalchemy import Select, func, or_, select, tuple_
+
 from app.models.app_user import AppUser
+from app.models.follow import Follow
 from app.models.recorda import Recorda
 from app.models.recorda_like import RecordaLike
 
