@@ -24,7 +24,9 @@ def compiled_sql(query):
     # Compila a query pro SQL final com os valores já substituídos no
     # lugar dos parâmetros — facilita checar substring no texto.
     return str(
-        query.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+        query.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
     )
 
 

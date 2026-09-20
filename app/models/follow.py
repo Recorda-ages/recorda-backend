@@ -32,12 +32,8 @@ STATUS_ACCEPTED = "ACCEPTED"
 class Follow(Base):
     __tablename__ = "follow"
     __table_args__ = (
-        CheckConstraint(
-            "status IN ('PENDING', 'ACCEPTED')", name="ck_follow_status"
-        ),
-        CheckConstraint(
-            "follower_id <> following_id", name="ck_follow_no_self_follow"
-        ),
+        CheckConstraint("status IN ('PENDING', 'ACCEPTED')", name="ck_follow_status"),
+        CheckConstraint("follower_id <> following_id", name="ck_follow_no_self_follow"),
         UniqueConstraint(
             "follower_id", "following_id", name="uq_follow_follower_id_following_id"
         ),

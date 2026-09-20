@@ -59,8 +59,8 @@ def get_following_feed(
     cursor: str | None,
     limit: int,
 ) -> FeedPage:
-    #Monta a página do feed 'seguindo' pro usuário autenticado.
-    #Levanta InvalidCursorError se o cursor não puder ser decodificado.
+    # Monta a página do feed 'seguindo' pro usuário autenticado.
+    # Levanta InvalidCursorError se o cursor não puder ser decodificado.
 
     query = get_following_feed_query(current_user_id)
 

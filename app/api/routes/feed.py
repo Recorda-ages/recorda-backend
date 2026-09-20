@@ -26,7 +26,7 @@ def get_following_feed(
             limit=limit,
         )
     except feed_service.InvalidCursorError as exc:
-   #Erro baseado ao cursor inválido, que pode ser um cursor mal formado ou um cursor que não existe mais (ex: a Recorda foi deletada).
+        # Erro baseado ao cursor inválido, que pode ser um cursor mal formado ou um cursor que não existe mais (ex: a Recorda foi deletada).
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
