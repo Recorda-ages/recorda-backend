@@ -1,11 +1,4 @@
-# Criei esse model, que estava faltando para representar a tabela RecordaLike do banco de dados 4.8 na wiki.
-# Ainda falta o alembic, então por favor não rodar o migrate ainda, senão vai dar erro.
-# O model é só pra poder escrever a query do feed e escrever os testes unitários da query.
-# Depois que o alembic estiver pronto, aí sim podemos rodar o migrate e criar a tabela no banco.
-# Como isso foge do meu conhecimento de validação de dados, por favor me avisem se tiver algum detalhe que eu tenha esquecido de colocar no model.
-# Assim como o alembic e criação do banco é responsabilidade do time de infra, a validação de dados é responsabilidade do time de backend.
-# Eu só fiz o model pra poder escrever a query do feed e os testes unitários da query, mas não posso validar se o model está correto ou não.
-# Ultima obs: segui o padrao dos demais models e as regras de negócio da wiki, mas não sei se está correto.
+"""RecordaLike entity mapping user likes on Recordas."""
 
 import uuid
 from datetime import datetime

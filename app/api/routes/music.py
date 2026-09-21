@@ -25,12 +25,16 @@ def search_artists(
 
 
 @router.get("/artists/popular", response_model=list[ArtistRead])
-def get_popular_artists(client: httpx.Client = Depends(get_deezer_client)) -> list[ArtistRead]:
+def get_popular_artists(
+    client: httpx.Client = Depends(get_deezer_client),
+) -> list[ArtistRead]:
     return music_service.get_popular_artists(client)
 
 
 @router.get("/tracks/popular", response_model=list[TrackRead])
-def get_popular_tracks(client: httpx.Client = Depends(get_deezer_client)) -> list[TrackRead]:
+def get_popular_tracks(
+    client: httpx.Client = Depends(get_deezer_client),
+) -> list[TrackRead]:
     return music_service.get_popular_tracks(client)
 
 

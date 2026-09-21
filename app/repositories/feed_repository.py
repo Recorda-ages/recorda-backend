@@ -1,84 +1,65 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Select, func, or_, select, tuple_
+from sqlalchemy import Select, func, select, tuple_
 
-from app.models.app_user import AppUser
-from app.models.follow import Follow
+from app.models.app_user import STATUS_ACTIVE, AppUser
+from app.models.follow import STATUS_ACCEPTED, Follow
 from app.models.recorda import Recorda
 from app.models.recorda_like import RecordaLike
 
-# OBS: resolvi isolar as queries para poder testar individualmente, bem como deixar mais limpo o código, e permitir reaproveitamento em outros lugares (ex: página de perfil de um usuário seguido, busca, etc).
-
 
 def _likes_count_subquery():
-    # Isolei essa subquery numa função própria porque ela representa uma ideia fechada: "quantas curtidas cada recorda_id tem".
-    # Fica reaproveitável se algum dia precisar de likes_count em outro lugar, e também deixa a query principal mais limpa.
     return (
         select(
             RecordaLike.recorda_id,
             func.count(RecordaLike.user_id).label("likes_count"),
         )
         .group_by(RecordaLike.recorda_id)
-        .subquery()  # transforma em subquery para poder ser usada depois.
+        .subquery()
     )
 
 
 def _is_liked_subquery(current_user_id: UUID):
-    # Mesma ideia: "o usuário logado curtiu essa recorda?" isolado numa função própria, para deixar a query principal mais limpa.
     return (
         select(RecordaLike.recorda_id)
         .where(
             RecordaLike.recorda_id == Recorda.recorda_id,
-            RecordaLike.user_id
-            == current_user_id,  # o usuário logado é quem está pedindo o feed, então a query vai verificar se ele curtiu cada recorda_id do feed.
+            RecordaLike.user_id == current_user_id,
         )
         .exists()
     )
 
 
-def _visibility_condition(current_user_id: UUID):
-    # Botei num nome próprio porque essa condição pode a ser reaproveitada em outros lugares (ex: página de perfil de um
-    # usuário seguido, busca, etc), não só no feed.
-    return or_(
-        Follow.status
-        == "ACCEPTED",  # contas privadas: só traz se o status do follow for "ACCEPTED", contas públicas: o status do follow "ACCEPTED" by default, então a condição acima já cobre.
-    )
+def _visibility_condition(current_user_id: UUID | None = None):
+    return Follow.status == STATUS_ACCEPTED
 
 
 def get_following_feed_query(
     current_user_id: UUID,
-):  # Recebe o id do usuário logado, que é quem está pedindo o feed "Seguindo"
+):
     likes_count_subq = _likes_count_subquery()
 
     return (
         select(
-            Recorda,  # ponto de partida é o objetivo final - os recordas
-            AppUser.username,  # username e avatar_url do autor da Recorda, que estão na tabela AppUser
+            Recorda,
+            AppUser.username,
             AppUser.profile_picture_url,
             func.coalesce(likes_count_subq.c.likes_count, 0).label("likes_count"),
             _is_liked_subquery(current_user_id).label("is_liked"),
         )
-        .join(
-            AppUser, Recorda.user_id == AppUser.user_id
-        )  # Junta Recorda com AppUser usando a FK recorda.user_id
-        .join(
-            Follow, Follow.following_id == AppUser.user_id
-        )  # Junta com Follow: following_id (quem é seguido) tem que bater com o user_id do autor da Recorda que acabamos de trazer no join anterior.
-        .outerjoin(  # opto pelo LEFT JOIN porque eu usasse INNER JOIN com a subquery de contagem, os Recordas com zero curtidas (que não têm linha na subquery) desapareceriam do resultado, e elas precisam aparecer, com likes_count = 0.
+        .join(AppUser, Recorda.user_id == AppUser.user_id)
+        .join(Follow, Follow.following_id == AppUser.user_id)
+        .outerjoin(
             likes_count_subq,
             likes_count_subq.c.recorda_id == Recorda.recorda_id,
         )
         .where(
-            Follow.follower_id
-            == current_user_id,  # só as linhas em que quem está seguindo é o usuário logado.
-            _visibility_condition(
-                current_user_id
-            ),  # chamo as condições de aceite de viasualização.
-            Recorda.deleted_at.is_(None),  # não aparece recordas deletados no feed
-            AppUser.deleted_at.is_(
-                None
-            ),  # não aparece recordas de usuários deletados no feed
+            Follow.follower_id == current_user_id,
+            _visibility_condition(current_user_id),
+            Recorda.deleted_at.is_(None),
+            AppUser.deleted_at.is_(None),
+            AppUser.status == STATUS_ACTIVE,
         )
         # tie-breaker: garante ordem 100% determinística mesmo se duas
         # Recordas tiverem o created_at idêntico — sem isso, o cursor

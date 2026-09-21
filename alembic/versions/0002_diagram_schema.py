@@ -155,6 +155,7 @@ def upgrade() -> None:
     )
 
     if op.get_bind().dialect.name == "postgresql":
+        op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
         for index_name, table, column in TRIGRAM_INDEXES:
             op.execute(
                 f"CREATE INDEX {index_name} ON {table} "

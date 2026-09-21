@@ -77,6 +77,12 @@ class TestGetFollowingFeedQuery:
         # Um filtro para Recorda.deleted_at, outro para AppUser.deleted_at.
         assert sql.count("deleted_at IS NULL") == 2
 
+    def test_filters_by_active_author_status(self):
+        query = get_following_feed_query(uuid.uuid4())
+        sql = compiled_sql(query)
+
+        assert "status = 'ACTIVE'" in sql or "ACTIVE" in sql
+
     def test_orders_by_created_at_desc(self):
         query = get_following_feed_query(uuid.uuid4())
         sql = compiled_sql(query)
