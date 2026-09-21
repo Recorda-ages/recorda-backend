@@ -3,8 +3,10 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from app.core import security
-from app.models import AppUser, Recorda
+from app.core.time import now_utc
+from app.models import AppUser, Follow, Recorda
 from app.models.app_user import ROLE_USER
+from app.models.follow import STATUS_ACCEPTED
 
 
 def add_user(
@@ -45,6 +47,25 @@ def add_recorda(db: Session, author: AppUser, **fields) -> Recorda:
     db.commit()
     db.refresh(recorda)
     return recorda
+
+
+def add_follow(
+    db: Session,
+    follower: AppUser,
+    following: AppUser,
+    *,
+    status: str = STATUS_ACCEPTED,
+) -> Follow:
+    follow = Follow(
+        follower_id=follower.user_id,
+        following_id=following.user_id,
+        status=status,
+        accepted_at=now_utc() if status == STATUS_ACCEPTED else None,
+    )
+    db.add(follow)
+    db.commit()
+    db.refresh(follow)
+    return follow
 
 
 def token_for(user: AppUser, expires_delta: timedelta | None = None) -> str:
