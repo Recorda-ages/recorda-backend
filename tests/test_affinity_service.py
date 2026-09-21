@@ -69,9 +69,7 @@ class TestCalculateAffinity:
 
     @patch("app.services.affinity_service.get_artists")
     @patch("app.services.affinity_service.get_genres")
-    def test_reference_is_the_smaller_profile(
-        self, mock_genres, mock_artists
-    ):
+    def test_reference_is_the_smaller_profile(self, mock_genres, mock_artists):
         shared_genre = uuid4()
         mock_genres.side_effect = [
             [_genre(shared_genre)],
@@ -86,9 +84,7 @@ class TestCalculateAffinity:
 
     @patch("app.services.affinity_service.get_artists")
     @patch("app.services.affinity_service.get_genres")
-    def test_empty_profile_results_in_zero_affinity(
-        self, mock_genres, mock_artists
-    ):
+    def test_empty_profile_results_in_zero_affinity(self, mock_genres, mock_artists):
         mock_genres.side_effect = [[], [_genre(uuid4())]]
         mock_artists.side_effect = [[], [_artist("artist-1")]]
 
