@@ -3,8 +3,9 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from app.core import security
-from app.models import AppUser, Recorda
+from app.models import AppUser, Follow, Notification, Recorda
 from app.models.app_user import ROLE_USER
+from app.models.follow import STATUS_PENDING
 
 
 def add_user(
@@ -45,6 +46,34 @@ def add_recorda(db: Session, author: AppUser, **fields) -> Recorda:
     db.commit()
     db.refresh(recorda)
     return recorda
+
+
+def add_follow(db: Session, follower: AppUser, following: AppUser, **fields) -> Follow:
+    values = {"status": STATUS_PENDING}
+    values.update(fields)
+    follow = Follow(
+        follower_id=follower.user_id, following_id=following.user_id, **values
+    )
+    db.add(follow)
+    db.commit()
+    db.refresh(follow)
+    return follow
+
+
+def add_notification(
+    db: Session, recipient: AppUser, type_: str, **fields
+) -> Notification:
+    sender = fields.pop("sender", None)
+    notification = Notification(
+        recipient_id=recipient.user_id,
+        sender_id=sender.user_id if sender else None,
+        type=type_,
+        **fields,
+    )
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    return notification
 
 
 def token_for(user: AppUser, expires_delta: timedelta | None = None) -> str:
