@@ -21,6 +21,26 @@ ARTISTS_RESPONSE = {
     ]
 }
 
+POPULAR_ARTISTS_RESPONSE = {
+    "data": [
+        {"id": 1, "name": "Eminem", "picture_medium": "https://e.deezer.com/em.jpg"},
+        {"id": 2, "name": "Anitta", "picture_medium": "https://e.deezer.com/an.jpg"},
+    ]
+}
+
+POPULAR_TRACKS_RESPONSE = {
+    "data": [
+        {
+            "id": 10,
+            "title": "Lose Yourself",
+            "artist": {"name": "Eminem"},
+            "album": {"title": "8 Mile", "cover_medium": "https://e.deezer.com/8m.jpg"},
+            "preview": "https://cdns-preview.dzcdn.net/lose.mp3",
+            "genre_id": 116,
+        },
+    ]
+}
+
 TRACKS_RESPONSE = {
     "data": [
         {
@@ -82,6 +102,8 @@ def music_client():
             "/genre": GENRES_RESPONSE,
             "/search/artist": ARTISTS_RESPONSE,
             "/search": TRACKS_RESPONSE,
+            "/chart/0/artists": POPULAR_ARTISTS_RESPONSE,
+            "/chart/0/tracks": POPULAR_TRACKS_RESPONSE,
         }
     )
 
@@ -214,6 +236,20 @@ def test_normalize_strips_accents_case_and_extra_spaces():
     assert music_service.normalize("  Legião   URBANA ") == "legiao urbana"
 
 
+def test_artists_popular_returns_list(music_client: TestClient):
+    resp = music_client.get("/api/v1/music/artists/popular")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert data[0]["name"] == "Eminem"
+    assert data[1]["name"] == "Anitta"
+
+
+def test_artists_popular_deezer_unavailable(error_client: TestClient):
+    resp = error_client.get("/api/v1/music/artists/popular")
+    assert resp.status_code == 502
+
+
 def test_artists_search_missing_q(music_client: TestClient):
     resp = music_client.get("/api/v1/music/artists/search")
     assert resp.status_code == 422
@@ -259,6 +295,20 @@ def test_tracks_search_keeps_deezer_order_without_strong_matches():
     data = [track(1, "Song A", "Artist"), track(2, "Song B", "Artist")]
 
     assert [t["id"] for t in music_service.rank_tracks(data, "album name")] == [1, 2]
+
+
+def test_tracks_popular_returns_list(music_client: TestClient):
+    resp = music_client.get("/api/v1/music/tracks/popular")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["title"] == "Lose Yourself"
+    assert data[0]["preview_url"] == "https://cdns-preview.dzcdn.net/lose.mp3"
+
+
+def test_tracks_popular_deezer_unavailable(error_client: TestClient):
+    resp = error_client.get("/api/v1/music/tracks/popular")
+    assert resp.status_code == 502
 
 
 def test_tracks_search_missing_q(music_client: TestClient):

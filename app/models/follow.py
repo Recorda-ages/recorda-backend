@@ -1,9 +1,18 @@
-"""ORM model for the follow relationship between users."""
+"""Follow entity mapping directed follower/following relationships."""
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint, Uuid, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    Uuid,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import now_utc
@@ -16,11 +25,12 @@ STATUS_ACCEPTED = "ACCEPTED"
 class Follow(Base):
     __tablename__ = "follow"
     __table_args__ = (
-        UniqueConstraint(
-            "follower_id", "following_id", name="uq_follow_follower_following"
-        ),
-        CheckConstraint("follower_id <> following_id", name="ck_follow_no_self_follow"),
         CheckConstraint("status IN ('PENDING', 'ACCEPTED')", name="ck_follow_status"),
+        CheckConstraint("follower_id <> following_id", name="ck_follow_no_self_follow"),
+        UniqueConstraint(
+            "follower_id", "following_id", name="uq_follow_follower_id_following_id"
+        ),
+        Index("ix_follow_follower_id", "follower_id"),
     )
 
     follow_id: Mapped[uuid.UUID] = mapped_column(
