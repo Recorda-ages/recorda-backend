@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+FollowStatus = Literal["seguindo", "solicitado", "nenhuma"]
 
 class UserBase(BaseModel):
     name: str
@@ -29,3 +30,11 @@ class UserRead(UserBase):
     user_id: UUID
     username: str
     role: str
+
+class UserSearchResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: UUID
+    username: str
+    avatar_url: str | None
+    follow_status: FollowStatus

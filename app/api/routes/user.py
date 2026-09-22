@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin_user, get_current_user
@@ -13,11 +13,19 @@ from app.schemas.music_preference import (
 )
 from app.schemas.user import UserChangeRole, UserCreate, UserRead, UserUpdate
 from app.services import music_preference_service, user_service
+from app.schemas.user import UserChangeRole, UserCreate, UserRead, UserSearchResult
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 _current_admin = Depends(get_current_admin_user)
 
+@router.get("/search", response_model=list[UserSearchResult])
+def search_users(
+    q: str = Query(default=""),
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[UserSearchResult]:
+    return user_service.search_by_username(db, q, current_user.user_id)
 
 @router.get("", response_model=list[UserRead], dependencies=[_current_admin])
 def list_users(db: Session = Depends(get_db)) -> list[UserRead]:
