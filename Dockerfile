@@ -10,7 +10,9 @@ RUN pip install --no-cache-dir .
 
 COPY app/ ./app/
 COPY scripts/ ./scripts/
+COPY alembic/ ./alembic/
+COPY alembic.ini docker-entrypoint.sh ./
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["./docker-entrypoint.sh"]

@@ -1,35 +1,64 @@
-"""Business logic and orchestration for the User entity."""
+"""Business logic and orchestration for the AppUser entity."""
+
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.core import security
-from app.models import User
+from app.models import AppUser
+from app.models.app_user import ROLE_USER
+from app.models.follow import STATUS_ACCEPTED, STATUS_PENDING
 from app.repositories import user_repository
-from app.schemas.user import UserChangeAccountType, UserCreate, UserUpdate
+from app.schemas.user import UserChangeRole, UserCreate, UserSearchResult, UserUpdate
 
-_COMMON_ACCOUNT_TYPE = "common"
+USERNAME_TAKEN_MESSAGE = "Este usuário já está cadastrado."
+EMAIL_TAKEN_MESSAGE = "Este email já está cadastrado."
+USER_ALREADY_EXISTS_MESSAGE = "Usuário ou email já cadastrado"
+
+_FOLLOW_STATUS_MAP = {
+    STATUS_ACCEPTED: "seguindo",
+    STATUS_PENDING: "solicitado",
+    None: "nenhuma",
+}
 
 
-def get_all(db: Session) -> list[User]:
+class UserAlreadyExistsError(Exception):
+    def __init__(self, fields: list[dict[str, str]]) -> None:
+        super().__init__(USER_ALREADY_EXISTS_MESSAGE)
+        self.fields = fields
+
+
+def get_all(db: Session) -> list[AppUser]:
     return user_repository.get_all(db)
 
 
-def get_by_id(db: Session, user_id: int) -> User | None:
+def get_by_id(db: Session, user_id: UUID) -> AppUser | None:
     return user_repository.get_by_id(db, user_id)
 
 
-def create(db: Session, payload: UserCreate) -> User:
-    user = User(
+def create(db: Session, payload: UserCreate) -> AppUser:
+    ensure_unique_credentials(db, payload.username, payload.email)
+    user = AppUser(
         name=payload.name,
         email=payload.email,
         username=payload.username,
         password_hash=security.hash_password(payload.password),
-        account_type=_COMMON_ACCOUNT_TYPE,
+        role=ROLE_USER,
     )
     return user_repository.create(db, user)
 
 
-def update(db: Session, user_id: int, payload: UserUpdate) -> User | None:
+def ensure_unique_credentials(db: Session, username: str, email: str) -> None:
+    fields = []
+    if user_repository.get_by_username(db, username, include_deleted=True):
+        fields.append({"field": "username", "message": USERNAME_TAKEN_MESSAGE})
+    if user_repository.get_by_email(db, email, include_deleted=True):
+        fields.append({"field": "email", "message": EMAIL_TAKEN_MESSAGE})
+    if fields:
+        raise UserAlreadyExistsError(fields)
+
+
+def update(db: Session, user_id: UUID, payload: UserUpdate) -> AppUser | None:
     user = user_repository.get_by_id(db, user_id)
     if user is None:
         return None
@@ -40,19 +69,36 @@ def update(db: Session, user_id: int, payload: UserUpdate) -> User | None:
     return user_repository.save(db, user)
 
 
-def delete(db: Session, user_id: int) -> bool:
+def delete(db: Session, user_id: UUID) -> bool:
     user = user_repository.get_by_id(db, user_id)
     if user is None:
         return False
-    user_repository.delete(db, user)
+    user_repository.soft_delete(db, user)
     return True
 
 
-def change_account_type(
-    db: Session, user_id: int, payload: UserChangeAccountType
-) -> User | None:
+def change_role(db: Session, user_id: UUID, payload: UserChangeRole) -> AppUser | None:
     user = user_repository.get_by_id(db, user_id)
     if user is None:
         return None
-    user.account_type = payload.account_type
+    user.role = payload.role
     return user_repository.save(db, user)
+
+
+def search_by_username(
+    db: Session, query: str, current_user_id: UUID
+) -> list[UserSearchResult]:
+    stripped_query = query.strip()
+    if not stripped_query:
+        return []
+
+    results = user_repository.search_by_username(db, stripped_query, current_user_id)
+    return [
+        UserSearchResult(
+            user_id=user.user_id,
+            username=user.username,
+            avatar_url=user.profile_picture_url,
+            follow_status=_FOLLOW_STATUS_MAP[raw_status],
+        )
+        for user, raw_status in results
+    ]

@@ -1,10 +1,13 @@
 """Endpoint tests for the Recorda API under /api/v1/recordas."""
 
+import uuid
+
 import pytest
 
-from app.models import Recorda
+from tests.factories import add_recorda, add_user, auth_headers
 
 PREFIX = "/api/v1/recordas"
+MISSING_ID = uuid.uuid4()
 
 
 @pytest.fixture
@@ -18,17 +21,19 @@ def test_list_recordas_empty(client, auth):
     assert resp.json() == []
 
 
-def test_list_recordas_returns_recordas(client, db, auth):
-    db._recordas = {
-        1: Recorda(
-            id=1, midia="Song", music="Song of Silence", description="By Disturbed"
-        )
-    }
+def test_list_recordas_returns_live_recordas_newest_first(
+    client, db, auth, common_user
+):
+    older = add_recorda(db, common_user, song_title="Older")
+    newer = add_recorda(db, common_user, song_title="Newer")
+    newer.created_at = older.created_at.replace(year=older.created_at.year + 1)
+    add_recorda(db, common_user, song_title="Gone", deleted_at=older.created_at)
+    db.commit()
+
     resp = client.get(PREFIX, headers=auth)
+
     assert resp.status_code == 200
-    body = resp.json()
-    assert len(body) == 1
-    assert body[0]["midia"] == "Song"
+    assert [r["song_title"] for r in resp.json()] == ["Newer", "Older"]
 
 
 def test_list_recordas_requires_auth(client):
@@ -36,84 +41,165 @@ def test_list_recordas_requires_auth(client):
     assert resp.status_code == 401
 
 
-def test_create_recordas_returns_201(client, auth):
+def test_create_recorda_returns_201(client, auth, common_user):
+    resp = client.post(PREFIX, json=create_payload(), headers=auth)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert uuid.UUID(body["recorda_id"])
+    assert body["user_id"] == str(common_user.user_id)
+    assert body["media_url"] == "/api/v1/recordas/media/abc.jpg"
+    assert body["media_type"] == "PHOTO"
+    assert body["song_title"] == "Song of Silence"
+    assert body["deezer_track_id"] == "3135556"
+    assert body["song_artist_name"] == "Disturbed"
+    assert body["song_cover_url"] == "https://e.deezer.com/cover.jpg"
+    assert body["song_preview_url"] == "https://cdns-preview.deezer.com/p.mp3"
+    assert body["description"] == "Show incrível"
+    assert body["created_at"]
+    assert "deleted_at" not in body
+
+
+def test_create_recorda_accepts_missing_cover_and_preview(client, auth):
+    payload = create_payload()
+    payload.pop("song_cover_url")
+    payload.pop("song_preview_url")
+
+    resp = client.post(PREFIX, json=payload, headers=auth)
+
+    assert resp.status_code == 201
+    assert resp.json()["song_cover_url"] == ""
+    assert resp.json()["song_preview_url"] is None
+
+
+def test_create_recorda_rejects_legacy_payload(client, auth):
     resp = client.post(
         PREFIX, json={"midia": "Song", "music": "Song of Silence"}, headers=auth
     )
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body["id"] == 1
-    assert body["midia"] == "Song"
-
-
-def test_create_recordas_validates_missing_field(client, auth):
-    resp = client.post(PREFIX, json={"midia": "Song"}, headers=auth)
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_create_recordas_requires_auth(client):
-    resp = client.post(PREFIX, json={"midia": "Song", "music": "Song of Silence"})
+@pytest.mark.parametrize(
+    "field",
+    ["media_url", "deezer_track_id", "song_title", "song_artist_name", "media_type"],
+)
+def test_create_recorda_requires_song_snapshot(client, auth, field):
+    payload = create_payload()
+    payload.pop(field)
+    resp = client.post(PREFIX, json=payload, headers=auth)
+    assert resp.status_code == 422
+    fields = resp.json()["error"]["details"]["fields"]
+    assert [f["field"] for f in fields] == [field]
+
+
+def test_create_recorda_rejects_unknown_media_type(client, auth):
+    resp = client.post(PREFIX, json=create_payload(media_type="GIF"), headers=auth)
+    assert resp.status_code == 422
+
+
+def test_create_recorda_requires_auth(client):
+    resp = client.post(PREFIX, json=create_payload())
     assert resp.status_code == 401
 
 
-def test_get_recordas_returns_recordas(client, db, auth):
-    db._recordas = {1: Recorda(id=1, midia="Song", music="Song of Silence")}
-    resp = client.get(f"{PREFIX}/1", headers=auth)
+def test_get_recorda_returns_recorda(client, db, auth, common_user):
+    recorda = add_recorda(db, common_user)
+    resp = client.get(f"{PREFIX}/{recorda.recorda_id}", headers=auth)
     assert resp.status_code == 200
-    assert resp.json()["midia"] == "Song"
+    assert resp.json()["recorda_id"] == str(recorda.recorda_id)
 
 
-def test_get_recordas_returns_404_when_missing(client, auth):
-    resp = client.get(f"{PREFIX}/999", headers=auth)
+def test_get_recorda_returns_404_when_missing(client, auth):
+    resp = client.get(f"{PREFIX}/{MISSING_ID}", headers=auth)
     assert resp.status_code == 404
     assert resp.json()["error"]["code"] == "NOT_FOUND"
 
 
-def test_get_recordas_requires_auth(client):
-    resp = client.get(f"{PREFIX}/1")
+def test_get_recorda_rejects_non_uuid_id(client, auth):
+    assert client.get(f"{PREFIX}/1", headers=auth).status_code == 422
+
+
+def test_get_recorda_requires_auth(client):
+    resp = client.get(f"{PREFIX}/{MISSING_ID}")
     assert resp.status_code == 401
 
 
-def test_update_recorda_returns_200(client, db, auth):
-    db._recordas = {
-        1: Recorda(
-            id=1, midia="Song", music="Song of Silence", description="By Disturbed"
-        )
-    }
-    resp = client.put(f"{PREFIX}/1", json={"midia": "Hills"}, headers=auth)
+def test_update_recorda_changes_only_description(client, db, auth, common_user):
+    recorda = add_recorda(db, common_user)
+    resp = client.put(
+        f"{PREFIX}/{recorda.recorda_id}",
+        json={"description": "Novo texto", "song_title": "Hacked"},
+        headers=auth,
+    )
     assert resp.status_code == 200
-    assert resp.json()["midia"] == "Hills"
-    assert resp.json()["music"] == "Song of Silence"
-    assert resp.json()["description"] == "By Disturbed"
+    assert resp.json()["description"] == "Novo texto"
+    assert resp.json()["song_title"] == "Song of Silence"
 
 
 def test_update_recorda_returns_404_when_missing(client, auth):
-    resp = client.put(f"{PREFIX}/999", json={"midia": "Hills"}, headers=auth)
+    resp = client.put(f"{PREFIX}/{MISSING_ID}", json={"description": "x"}, headers=auth)
     assert resp.status_code == 404
 
 
 def test_update_recorda_requires_auth(client):
-    resp = client.put(f"{PREFIX}/1", json={"midia": "Hills"})
+    resp = client.put(f"{PREFIX}/{MISSING_ID}", json={"description": "x"})
     assert resp.status_code == 401
 
 
-def test_delete_recorda_returns_204(client, db, auth):
-    db._recordas = {
-        1: Recorda(
-            id=1, midia="Song", music="Song of Silence", description="By Disturbed"
-        )
-    }
-    resp = client.delete(f"{PREFIX}/1", headers=auth)
+def test_update_recorda_of_other_user_returns_403(client, db, common_user):
+    recorda = add_recorda(db, common_user)
+    intruder = add_user(db, "intruder")
+    resp = client.put(
+        f"{PREFIX}/{recorda.recorda_id}",
+        json={"description": "x"},
+        headers=auth_headers(intruder),
+    )
+    assert resp.status_code == 403
+
+
+def test_delete_recorda_soft_deletes(client, db, auth, common_user):
+    recorda = add_recorda(db, common_user)
+
+    resp = client.delete(f"{PREFIX}/{recorda.recorda_id}", headers=auth)
+
     assert resp.status_code == 204
-    assert 1 not in db._recordas
+    db.refresh(recorda)
+    assert recorda.deleted_at is not None
+    again = client.get(f"{PREFIX}/{recorda.recorda_id}", headers=auth)
+    assert again.status_code == 404
 
 
 def test_delete_recorda_returns_404_when_missing(client, auth):
-    resp = client.delete(f"{PREFIX}/999", headers=auth)
+    resp = client.delete(f"{PREFIX}/{MISSING_ID}", headers=auth)
     assert resp.status_code == 404
 
 
 def test_delete_recorda_requires_auth(client):
-    resp = client.delete(f"{PREFIX}/1")
+    resp = client.delete(f"{PREFIX}/{MISSING_ID}")
     assert resp.status_code == 401
+
+
+def test_delete_recorda_of_other_user_returns_403(client, db, common_user):
+    recorda = add_recorda(db, common_user)
+    intruder = add_user(db, "intruder")
+    resp = client.delete(
+        f"{PREFIX}/{recorda.recorda_id}", headers=auth_headers(intruder)
+    )
+    assert resp.status_code == 403
+    db.refresh(recorda)
+    assert recorda.deleted_at is None
+
+
+def create_payload(**overrides) -> dict:
+    payload = {
+        "media_url": "/api/v1/recordas/media/abc.jpg",
+        "media_type": "PHOTO",
+        "song_title": "Song of Silence",
+        "deezer_track_id": "3135556",
+        "song_artist_name": "Disturbed",
+        "song_cover_url": "https://e.deezer.com/cover.jpg",
+        "song_preview_url": "https://cdns-preview.deezer.com/p.mp3",
+        "description": "Show incrível",
+    }
+    payload.update(overrides)
+    return payload

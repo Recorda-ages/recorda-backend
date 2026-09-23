@@ -89,6 +89,8 @@ postgresql+psycopg://USUARIO:SENHA@db:5432/BANCO
 
 O arquivo `.env` contém configurações locais e credenciais e não deve ser versionado.
 
+> **Sessões:** defina `ACCESS_TOKEN_SECRET_KEY` com um valor fixo. Sem ele, a API gera um segredo aleatório a cada inicialização e todos os tokens emitidos antes deixam de ser válidos (o app volta para o Login a cada restart). Em produção a variável é obrigatória.
+
 ### 3. Construa e inicie os containers
 
 Na raiz do projeto, execute:
@@ -258,7 +260,38 @@ O backend utiliza:
 - SQLAlchemy como ORM;
 - `psycopg` como driver PostgreSQL.
 
-A tabela `users` é criada automaticamente pela aplicação ao iniciar, portanto o projeto atualmente não depende de um processo separado de migrations para criar essa tabela.
+O schema segue o diagrama oficial do banco (wiki AGES → *Banco de Dados*) e é versionado com **Alembic** (`alembic/versions/`). A aplicação não cria tabelas ao iniciar: no Docker, o `docker-entrypoint.sh` roda `alembic upgrade head` antes de subir o uvicorn.
+
+Sem Docker, aplique as migrations manualmente:
+
+```bash
+alembic upgrade head
+```
+
+Para alterar o schema, edite os models em `app/models/` e gere uma nova migration:
+
+```bash
+alembic revision --autogenerate -m "descricao da mudanca"
+# revise o arquivo gerado em alembic/versions/ antes de commitar
+alembic upgrade head
+alembic check   # deve responder "No new upgrade operations detected."
+```
+
+Nunca edite uma migration que já foi mergeada na `dev` — crie outra.
+
+Os índices GIN `pg_trgm` só existem nas migrations (não são portáveis para o SQLite dos testes) e são ignorados pelo `--autogenerate`.
+
+### Banco criado antes do Alembic
+
+Se o seu volume `pgdata` foi criado pela versão antiga (que usava `create_all`), marque-o como estando no baseline antes do primeiro upgrade:
+
+```bash
+docker compose up -d db
+docker compose run --rm api alembic stamp 0001_baseline
+docker compose run --rm api alembic upgrade head
+```
+
+A migration `0002_diagram_schema` **recria** `users`, `recordas` e `music_preferences` como `app_user`, `recorda`, `genre`, `user_favorite_genre` e `user_favorite_artist`: os dados dessas tabelas não são preservados. Todos os tokens emitidos antes dela deixam de valer, então é preciso cadastrar a conta de novo. Se preferir, `docker compose down -v` recria o banco do zero.
 
 ## CORS
 
@@ -289,20 +322,15 @@ Se a porta do frontend mudar, atualize `CORS_ORIGINS` no `.env` antes de iniciar
 
 | Método | Caminho | Descrição |
 | ------ | ------- | --------- |
-| GET | `/api/v1/users` | Lista todos os usuários |
-| POST | `/api/v1/users` | Cria um usuário (`name`, `email`) |
-| GET | `/api/v1/users/{id}` | Retorna um usuário (404 se não existir) |
-| PUT | `/api/v1/users/{id}` | Atualiza um usuário |
-| DELETE | `/api/v1/users/{id}` | Remove um usuário |
+| GET | `/api/v1/users` | Lista os usuários ativos (admin) |
+| POST | `/api/v1/users` | Cria um usuário (`name`, `email`, `username`, `password`) |
+| GET | `/api/v1/users/{user_id}` | Retorna um usuário (UUID; 404 se não existir) |
+| PUT | `/api/v1/users/{user_id}` | Atualiza um usuário (admin) |
+| DELETE | `/api/v1/users/{user_id}` | Soft delete: preenche `deleted_at` (admin) |
+| PATCH | `/api/v1/users/{user_id}/role` | Altera o papel (`USER` / `ADMIN`) (admin) |
+| POST | `/api/v1/users/me/music-preferences` | Salva gêneros, artistas e música favorita do onboarding |
 
-Exemplo de criação de um usuário (`POST /users`):
-
-```json
-{
-  "name": "Maria Silva",
-  "email": "maria@example.com"
-}
-```
+Os identificadores são UUID (`user_id`, `recorda_id`). Nenhuma rota apaga linhas fisicamente: exclusões preenchem `deleted_at`, e as consultas ignoram registros excluídos.
 
 ## Testes
 

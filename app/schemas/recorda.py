@@ -1,25 +1,38 @@
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field
+
+MediaType = Literal["PHOTO", "VIDEO"]
 
 
 class RecordaCreate(BaseModel):
-    midia: str = Field(..., min_length=1)
-    music: str = Field(..., min_length=1)
+    media_url: str = Field(..., min_length=1)
+    media_type: MediaType
     description: str | None = Field(None, max_length=2200)
-    data: str | None = None
+    deezer_track_id: str = Field(..., min_length=1)
+    song_title: str = Field(..., min_length=1)
+    song_artist_name: str = Field(..., min_length=1)
+    song_cover_url: str = ""
+    song_preview_url: str | None = None
 
 
 class RecordaUpdate(BaseModel):
-    midia: str | None = None
-    music: str | None = None
-    description: str | None = None
-    data: str | None = None
+    description: str | None = Field(None, max_length=2200)
 
 
 class RecordaRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    midia: str | None
-    music: str | None
+    recorda_id: UUID
+    user_id: UUID
+    media_url: str
+    media_type: str
     description: str | None
-    data: str | None
+    deezer_track_id: str
+    song_title: str
+    song_artist_name: str
+    song_cover_url: str
+    song_preview_url: str | None
+    created_at: datetime

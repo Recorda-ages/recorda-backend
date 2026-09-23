@@ -1,34 +1,47 @@
 """Endpoint tests for the User API under /api/v1/users."""
 
+import uuid
+
+import pytest
+
 from app.core import security
 from app.core.config import settings
-from app.models import User
+from app.models import AppUser
+from app.models.app_user import ROLE_ADMIN, ROLE_USER
+from tests.factories import add_user, auth_headers
 
 PREFIX = "/api/v1/users"
+MISSING_ID = uuid.uuid4()
 
 
-def test_list_users_requires_admin_and_returns_records(client, db, monkeypatch):
-    # admin_headers seeds the admin user into the store; since it is the only
-    # record, the (admin-only) list endpoint returns just that admin.
-    headers = admin_headers(db, monkeypatch, user_id=1)
-    resp = client.get(PREFIX, headers=headers)
+@pytest.fixture
+def admin_headers(db):
+    return auth_headers(add_user(db, "admin", role=ROLE_ADMIN))
+
+
+def test_list_users_requires_admin_and_returns_records(client, admin_headers):
+    resp = client.get(PREFIX, headers=admin_headers)
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 1
     assert body[0]["name"] == "Admin"
     assert body[0]["email"] == "admin@example.com"
+    assert body[0]["role"] == ROLE_ADMIN
 
 
-def test_list_users_returns_all_records(client, db, monkeypatch):
-    db._users = {1: User(id=1, name="A", email="a@e.com")}
-    headers = admin_headers(db, monkeypatch, user_id=2)
-    resp = client.get(PREFIX, headers=headers)
+def test_list_users_returns_all_records(client, db, admin_headers):
+    add_user(db, "alice", name="A")
+    resp = client.get(PREFIX, headers=admin_headers)
     assert resp.status_code == 200
-    body = resp.json()
-    assert len(body) == 2
-    names = {u["name"] for u in body}
-    assert "A" in names
-    assert "Admin" in names
+    assert {u["name"] for u in resp.json()} == {"A", "Admin"}
+
+
+def test_list_users_hides_soft_deleted(client, db, admin_headers):
+    alice = add_user(db, "alice")
+    alice.deleted_at = alice.created_at
+    db.commit()
+    resp = client.get(PREFIX, headers=admin_headers)
+    assert [u["username"] for u in resp.json()] == ["admin"]
 
 
 def test_create_user_returns_201_and_hashes_password(client, db, monkeypatch):
@@ -44,15 +57,32 @@ def test_create_user_returns_201_and_hashes_password(client, db, monkeypatch):
     )
     assert resp.status_code == 201
     body = resp.json()
-    assert body["id"] == 1
     assert body["name"] == "A"
 
-    stored = db._users[1]
+    stored = db.get(AppUser, uuid.UUID(body["user_id"]))
     assert stored.username == "alice"
-    assert stored.account_type == "common"
+    assert stored.role == ROLE_USER
     assert stored.password_hash != "secret"
     assert security.verify_password("secret", stored.password_hash) is True
     assert security.verify_password("wrong", stored.password_hash) is False
+
+
+def test_create_user_with_taken_username_returns_409(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    payload = {
+        "name": "A",
+        "email": "a@e.com",
+        "username": "alice",
+        "password": "secret",
+    }
+    assert client.post(PREFIX, json=payload).status_code == 201
+
+    resp = client.post(PREFIX, json={**payload, "email": "other@e.com"})
+
+    assert resp.status_code == 409
+    fields = resp.json()["error"]["details"]["fields"]
+    assert [f["field"] for f in fields] == ["username"]
+    assert db.query(AppUser).count() == 1
 
 
 def test_create_user_validates_missing_field(client):
@@ -61,7 +91,7 @@ def test_create_user_validates_missing_field(client):
     assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_create_user_does_not_expose_password(client, db, monkeypatch):
+def test_create_user_does_not_expose_password(client, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
     resp = client.post(
         PREFIX,
@@ -78,111 +108,86 @@ def test_create_user_does_not_expose_password(client, db, monkeypatch):
     assert "hashed_password" not in body
 
 
-def test_get_user_returns_user(client, db, monkeypatch):
-    db._users = {1: User(id=1, name="A", email="a@e.com")}
-    headers = admin_headers(db, monkeypatch, user_id=2)
-    resp = client.get(f"{PREFIX}/1", headers=headers)
+def test_get_user_returns_user(client, db, admin_headers):
+    alice = add_user(db, "alice", name="A")
+    resp = client.get(f"{PREFIX}/{alice.user_id}", headers=admin_headers)
     assert resp.status_code == 200
     assert resp.json()["name"] == "A"
+    assert resp.json()["user_id"] == str(alice.user_id)
 
 
-def test_get_user_returns_404_when_missing(client, db, monkeypatch):
-    headers = admin_headers(db, monkeypatch)
-    resp = client.get(f"{PREFIX}/999", headers=headers)
+def test_get_user_returns_404_when_missing(client, admin_headers):
+    resp = client.get(f"{PREFIX}/{MISSING_ID}", headers=admin_headers)
     assert resp.status_code == 404
     assert resp.json()["error"]["code"] == "NOT_FOUND"
 
 
-def test_update_user_returns_200(client, db, monkeypatch):
-    db._users = {1: User(id=1, name="A", email="a@e.com")}
-    headers = admin_headers(db, monkeypatch, user_id=2)
-    resp = client.put(f"{PREFIX}/1", json={"name": "B"}, headers=headers)
+def test_get_user_rejects_non_uuid_id(client, admin_headers):
+    resp = client.get(f"{PREFIX}/1", headers=admin_headers)
+    assert resp.status_code == 422
+
+
+def test_update_user_returns_200(client, db, admin_headers):
+    alice = add_user(db, "alice", name="A", email="a@e.com")
+    resp = client.put(
+        f"{PREFIX}/{alice.user_id}", json={"name": "B"}, headers=admin_headers
+    )
     assert resp.status_code == 200
     assert resp.json()["name"] == "B"
     assert resp.json()["email"] == "a@e.com"
 
 
-def test_update_user_returns_404_when_missing(client, db, monkeypatch):
-    headers = admin_headers(db, monkeypatch)
-    resp = client.put(f"{PREFIX}/999", json={"name": "B"}, headers=headers)
+def test_update_user_returns_404_when_missing(client, admin_headers):
+    resp = client.put(
+        f"{PREFIX}/{MISSING_ID}", json={"name": "B"}, headers=admin_headers
+    )
     assert resp.status_code == 404
 
 
-def test_delete_user_returns_204(client, db, monkeypatch):
-    db._users = {1: User(id=1, name="A", email="a@e.com")}
-    headers = admin_headers(db, monkeypatch, user_id=2)
-    resp = client.delete(f"{PREFIX}/1", headers=headers)
+def test_delete_user_soft_deletes(client, db, admin_headers):
+    alice = add_user(db, "alice")
+    resp = client.delete(f"{PREFIX}/{alice.user_id}", headers=admin_headers)
     assert resp.status_code == 204
-    assert 1 not in db._users
+    db.refresh(alice)
+    assert alice.deleted_at is not None
+    again = client.get(f"{PREFIX}/{alice.user_id}", headers=admin_headers)
+    assert again.status_code == 404
 
 
-def test_delete_user_returns_404_when_missing(client, db, monkeypatch):
-    headers = admin_headers(db, monkeypatch)
-    resp = client.delete(f"{PREFIX}/999", headers=headers)
+def test_delete_user_returns_404_when_missing(client, admin_headers):
+    resp = client.delete(f"{PREFIX}/{MISSING_ID}", headers=admin_headers)
     assert resp.status_code == 404
 
 
-def test_change_account_type_to_admin(client, db, monkeypatch):
-    db._users = {
-        1: User(id=1, name="Alice", email="alice@e.com", account_type="common")
-    }
-    headers = admin_headers(db, monkeypatch, user_id=2)
+@pytest.mark.parametrize("role", [ROLE_ADMIN, ROLE_USER])
+def test_change_role(client, db, admin_headers, role):
+    alice = add_user(db, "alice")
     resp = client.patch(
-        f"{PREFIX}/1/account-type", json={"account_type": "admin"}, headers=headers
+        f"{PREFIX}/{alice.user_id}/role", json={"role": role}, headers=admin_headers
     )
     assert resp.status_code == 200
-    assert db._users[1].account_type == "admin"
+    db.refresh(alice)
+    assert alice.role == role
 
 
-def test_change_account_type_to_common(client, db, monkeypatch):
-    db._users = {1: User(id=1, name="Alice", email="alice@e.com", account_type="admin")}
-    headers = admin_headers(db, monkeypatch, user_id=2)
+def test_change_role_returns_404_when_missing(client, admin_headers):
     resp = client.patch(
-        f"{PREFIX}/1/account-type", json={"account_type": "common"}, headers=headers
-    )
-    assert resp.status_code == 200
-    assert db._users[1].account_type == "common"
-
-
-def test_change_account_type_returns_404_when_missing(client, db, monkeypatch):
-    headers = admin_headers(db, monkeypatch)
-    resp = client.patch(
-        f"{PREFIX}/999/account-type", json={"account_type": "admin"}, headers=headers
+        f"{PREFIX}/{MISSING_ID}/role", json={"role": ROLE_ADMIN}, headers=admin_headers
     )
     assert resp.status_code == 404
 
 
-def test_change_account_type_rejects_invalid_value(client, db, monkeypatch):
-    db._users = {
-        1: User(id=1, name="Alice", email="alice@e.com", account_type="common")
-    }
-    headers = admin_headers(db, monkeypatch, user_id=2)
+def test_change_role_rejects_invalid_value(client, db, admin_headers):
+    alice = add_user(db, "alice")
     resp = client.patch(
-        f"{PREFIX}/1/account-type", json={"account_type": "superuser"}, headers=headers
+        f"{PREFIX}/{alice.user_id}/role",
+        json={"role": "superuser"},
+        headers=admin_headers,
     )
     assert resp.status_code == 422
 
 
-def test_change_account_type_requires_admin(client, db):
-    db._users = {
-        1: User(id=1, name="Alice", email="alice@e.com", account_type="common")
-    }
-    resp = client.patch(f"{PREFIX}/1/account-type", json={"account_type": "admin"})
+def test_change_role_requires_admin(client, db):
+    alice = add_user(db, "alice")
+    resp = client.patch(f"{PREFIX}/{alice.user_id}/role", json={"role": ROLE_ADMIN})
     assert resp.status_code == 401
-
-
-def admin_headers(db, monkeypatch, *, user_id=1, username="admin") -> dict[str, str]:
-    monkeypatch.setattr(settings, "password_hash_iterations", 1)
-    db._users[user_id] = User(
-        id=user_id,
-        name=username.title(),
-        email=f"{username}@example.com",
-        username=username,
-        password_hash=security.hash_password("correct"),
-        account_type="admin",
-    )
-    token = security.create_access_token(
-        subject=str(user_id),
-        additional_claims={"username": username, "account_type": "admin"},
-    )
-    return {"Authorization": f"Bearer {token}"}
