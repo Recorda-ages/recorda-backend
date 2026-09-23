@@ -22,6 +22,11 @@ class RecordaUpdate(BaseModel):
     description: str | None = Field(None, max_length=2200)
 
 
+class RecordaLikeState(BaseModel):
+    likes_count: int
+    is_liked: bool
+
+
 class RecordaRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

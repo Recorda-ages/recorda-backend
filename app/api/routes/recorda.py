@@ -7,8 +7,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models import AppUser
-from app.schemas.recorda import RecordaCreate, RecordaRead, RecordaUpdate
-from app.services import recorda_service
+from app.schemas.recorda import (
+    RecordaCreate,
+    RecordaLikeState,
+    RecordaRead,
+    RecordaUpdate,
+)
+from app.services import recorda_like_service, recorda_service
 
 router = APIRouter(prefix="/recordas", tags=["recordas"])
 
@@ -38,6 +43,38 @@ def get_recorda(recorda_id: UUID, db: Session = Depends(get_db)) -> RecordaRead:
     if recorda is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
     return recorda
+
+
+@router.post("/{recorda_id}/likes", response_model=RecordaLikeState)
+def like_recorda(
+    recorda_id: UUID,
+    current_user: Annotated[AppUser, _current_user],
+    db: Session = Depends(get_db),
+) -> RecordaLikeState:
+    result = recorda_like_service.like(
+        db,
+        recorda_id=recorda_id,
+        current_user=current_user,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
+    return result
+
+
+@router.delete("/{recorda_id}/likes", response_model=RecordaLikeState)
+def unlike_recorda(
+    recorda_id: UUID,
+    current_user: Annotated[AppUser, _current_user],
+    db: Session = Depends(get_db),
+) -> RecordaLikeState:
+    result = recorda_like_service.unlike(
+        db,
+        recorda_id=recorda_id,
+        current_user=current_user,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
+    return result
 
 
 @router.put("/{recorda_id}", response_model=RecordaRead)
