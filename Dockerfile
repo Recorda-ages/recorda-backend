@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir .
 
 COPY app/ ./app/
 COPY alembic/ ./alembic/
+COPY scripts/ ./scripts/
 COPY alembic.ini docker-entrypoint.sh ./
 
 EXPOSE 8000
