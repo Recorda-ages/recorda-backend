@@ -31,6 +31,7 @@ class Follow(Base):
             "follower_id", "following_id", name="uq_follow_follower_id_following_id"
         ),
         Index("ix_follow_follower_id", "follower_id"),
+        Index("ix_follow_following_id", "following_id"),
     )
 
     follow_id: Mapped[uuid.UUID] = mapped_column(

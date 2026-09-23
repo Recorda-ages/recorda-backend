@@ -194,6 +194,54 @@ docker compose down -v
 
 Use `down -v` somente quando realmente quiser recriar o banco do zero.
 
+## Seed do banco de dados
+
+O projeto inclui um script de seed que popula o banco com dados iniciais para desenvolvimento:
+
+- Gêneros musicais canônicos
+- Usuário **administrador** (`role=ADMIN`)
+- Usuário **comum** com recordas e artistas favoritos de exemplo
+
+### Executar com Docker (recomendado)
+
+Com os containers em execução, rode o seed dentro do container da API:
+
+```bash
+docker compose exec api python scripts/seed.py
+```
+
+Se os containers ainda não estiverem rodando, suba o ambiente primeiro:
+
+```bash
+docker compose up -d --build
+docker compose exec api python scripts/seed.py
+```
+
+### Executar sem Docker
+
+Com o ambiente virtual ativado e o PostgreSQL acessível:
+
+```bash
+python scripts/seed.py
+```
+
+### Contas criadas pelo seed
+
+| Conta | E-mail | Senha | Role |
+| ----- | ------ | ----- | ---- |
+| Admin | `admin@recorda.com` | `Admin@1234` | `ADMIN` — acesso total |
+| Comum | `gabriel@recorda.com` | `User@1234` | `USER` — usuário padrão |
+
+O script é idempotente: pode ser executado múltiplas vezes sem duplicar dados.
+
+Para recriar o banco do zero e rodar o seed novamente:
+
+```bash
+docker compose down -v
+docker compose up -d --build
+docker compose exec api python scripts/seed.py
+```
+
 ## Desenvolvimento sem Docker
 
 O ambiente Docker é o procedimento recomendado para o projeto. Ainda assim, o backend pode ser executado diretamente com Python caso seja necessário.

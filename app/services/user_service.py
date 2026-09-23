@@ -7,12 +7,19 @@ from sqlalchemy.orm import Session
 from app.core import security
 from app.models import AppUser
 from app.models.app_user import ROLE_USER
+from app.models.follow import STATUS_ACCEPTED, STATUS_PENDING
 from app.repositories import user_repository
-from app.schemas.user import UserChangeRole, UserCreate, UserUpdate
+from app.schemas.user import UserChangeRole, UserCreate, UserSearchResult, UserUpdate
 
 USERNAME_TAKEN_MESSAGE = "Este usuário já está cadastrado."
 EMAIL_TAKEN_MESSAGE = "Este email já está cadastrado."
 USER_ALREADY_EXISTS_MESSAGE = "Usuário ou email já cadastrado"
+
+_FOLLOW_STATUS_MAP = {
+    STATUS_ACCEPTED: "seguindo",
+    STATUS_PENDING: "solicitado",
+    None: "nenhuma",
+}
 
 
 class UserAlreadyExistsError(Exception):
@@ -76,3 +83,22 @@ def change_role(db: Session, user_id: UUID, payload: UserChangeRole) -> AppUser 
         return None
     user.role = payload.role
     return user_repository.save(db, user)
+
+
+def search_by_username(
+    db: Session, query: str, current_user_id: UUID
+) -> list[UserSearchResult]:
+    stripped_query = query.strip()
+    if not stripped_query:
+        return []
+
+    results = user_repository.search_by_username(db, stripped_query, current_user_id)
+    return [
+        UserSearchResult(
+            user_id=user.user_id,
+            username=user.username,
+            avatar_url=user.profile_picture_url,
+            follow_status=_FOLLOW_STATUS_MAP[raw_status],
+        )
+        for user, raw_status in results
+    ]

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, feed, health, media, music, notification, recorda, user
+from app.api.routes import auth, feed, follow, health, media, music, notification, recorda, user
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 
@@ -19,6 +19,10 @@ tags_metadata = [
     {
         "name": "users",
         "description": "Gerenciamento de usuários (acesso administrativo).",
+    },
+    {
+        "name": "follows",
+        "description": "Listas de Seguidores/Seguindo e remoção de um seguidor.",
     },
     {"name": "health", "description": "Verificação de saúde da aplicação."},
     {
@@ -56,6 +60,7 @@ app.include_router(recorda.router, prefix="/api/v1")
 app.include_router(media.router, prefix="/api/v1")
 app.include_router(feed.router, prefix="/api/v1")
 app.include_router(notification.router, prefix="/api/v1")
+app.include_router(follow.router, prefix="/api/v1")
 
 
 @app.get("/api/v1")
