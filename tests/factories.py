@@ -83,6 +83,7 @@ def add_notification(
     db.refresh(notification)
     return notification
 
+
 def token_for(user: AppUser, expires_delta: timedelta | None = None) -> str:
     return security.create_access_token(
         subject=str(user.user_id),
