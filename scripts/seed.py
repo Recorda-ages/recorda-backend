@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.security import hash_password
 from app.db.seed_data import GENRE_SEED
-from app.db.session import SessionLocal, init_db
+from app.db.session import SessionLocal
 from app.models.app_user import ROLE_ADMIN, ROLE_USER, AppUser
 from app.models.genre import Genre
 from app.models.recorda import PHOTO, Recorda
@@ -149,7 +149,6 @@ def _seed_recordas(db, user: AppUser) -> None:
 def seed() -> None:
     print("🌱 Iniciando seed do banco de dados...\n")
 
-    init_db()
     db = SessionLocal()
 
     try:
