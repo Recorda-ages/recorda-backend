@@ -4,7 +4,7 @@ from sqlalchemy import Row, Select, func, or_, select, update
 from sqlalchemy.orm import Session, aliased
 
 from app.models.app_user import AppUser
-from app.models.notification import Notification
+from app.models.notification import TYPE_LIKE, Notification
 from app.models.recorda import Recorda
 
 Sender = aliased(AppUser)
@@ -71,4 +71,22 @@ def add(db: Session, notification: Notification) -> Notification:
     db.commit()
     db.refresh(notification)
 
+    return notification
+
+
+def create_like(
+    db: Session,
+    *,
+    recipient_id: UUID,
+    sender_id: UUID,
+    recorda_id: UUID,
+) -> Notification:
+    """Cria notificação de curtida sem commit (commit feito pelo service)."""
+    notification = Notification(
+        recipient_id=recipient_id,
+        sender_id=sender_id,
+        recorda_id=recorda_id,
+        type=TYPE_LIKE,
+    )
+    db.add(notification)
     return notification
