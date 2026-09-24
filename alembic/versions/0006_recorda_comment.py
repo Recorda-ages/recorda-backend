@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0005_recorda_comment"
-down_revision: str | None = "0004_follow_following_index"
+revision: str = "0006_recorda_comment"
+down_revision: str | None = "0005_notification"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
