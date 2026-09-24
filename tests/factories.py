@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core import security
 from app.core.time import now_utc
-from app.models import AppUser, Follow, Recorda
+from app.models import AppUser, Follow, Notification, Recorda
 from app.models.app_user import ROLE_USER
 from app.models.follow import STATUS_ACCEPTED
 
@@ -66,6 +66,22 @@ def add_follow(
     db.commit()
     db.refresh(follow)
     return follow
+
+
+def add_notification(
+    db: Session, recipient: AppUser, type_: str, **fields
+) -> Notification:
+    sender = fields.pop("sender", None)
+    notification = Notification(
+        recipient_id=recipient.user_id,
+        sender_id=sender.user_id if sender else None,
+        type=type_,
+        **fields,
+    )
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    return notification
 
 
 def token_for(user: AppUser, expires_delta: timedelta | None = None) -> str:

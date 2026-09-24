@@ -4,6 +4,7 @@ from app.models.app_user import AppUser
 from app.models.follow import Follow
 from app.models.genre import Genre
 from app.models.media import Media
+from app.models.notification import Notification
 from app.models.recorda import Recorda
 from app.models.recorda_like import RecordaLike
 from app.models.user_favorite_artist import UserFavoriteArtist
@@ -14,6 +15,7 @@ __all__ = [
     "Follow",
     "Genre",
     "Media",
+    "Notification",
     "Recorda",
     "RecordaLike",
     "UserFavoriteArtist",
