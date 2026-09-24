@@ -198,9 +198,16 @@ Use `down -v` somente quando realmente quiser recriar o banco do zero.
 
 O projeto inclui um script de seed que popula o banco com dados iniciais para desenvolvimento:
 
-- Gêneros musicais canônicos
-- Usuário **administrador** (`role=ADMIN`)
-- Usuário **comum** com recordas e artistas favoritos de exemplo
+- 18 gêneros musicais canônicos;
+- 10 perfis completos, com fotos, música preferida e preferências musicais;
+- 20 Recordas com fotos/vídeos públicos e snapshots reais do Deezer;
+- 29 relações de follow, incluindo relações aceitas e pendentes;
+- 40 likes e 20 comentários;
+- uma conta administrativa separada (`role=ADMIN`).
+
+O seed é idempotente: executar o comando novamente adiciona somente os dados que
+estiverem ausentes. Ele não apaga nem sobrescreve dados locais existentes e recusa
+execução quando `ENVIRONMENT=production`.
 
 ### Executar com Docker (recomendado)
 
@@ -217,22 +224,43 @@ docker compose up -d --build
 docker compose exec api python scripts/seed.py
 ```
 
+O entrypoint do container aplica `alembic upgrade head` ao iniciar. Caso a API não
+esteja em execução, aplique as migrations antes de chamar o script.
+
 ### Executar sem Docker
 
 Com o ambiente virtual ativado e o PostgreSQL acessível:
 
 ```bash
+alembic upgrade head
 python scripts/seed.py
 ```
 
+O mesmo script pode apontar para um projeto Supabase de desenvolvimento por meio de
+`DATABASE_URL`:
+
+```bash
+DATABASE_URL='postgresql+psycopg://USUARIO:SENHA@HOST:5432/postgres?sslmode=require' \
+python scripts/seed.py
+```
+
+Nunca configure uma URL de produção para executar o seed.
+
 ### Contas criadas pelo seed
 
-| Conta | E-mail | Senha | Role |
-| ----- | ------ | ----- | ---- |
-| Admin | `admin@recorda.com` | `Admin@1234` | `ADMIN` — acesso total |
-| Comum | `gabriel@recorda.com` | `User@1234` | `USER` — usuário padrão |
+| Conta | Username | Senha padrão | Role |
+| ----- | -------- | ------------ | ---- |
+| Administrador | `admin` | `Admin@1234` | `ADMIN` |
+| Demonstração principal | `gabriel` | `User@1234` | `USER` |
+| Perfis adicionais | `ana`, `lucas`, `marina`, `pedro`, `julia`, `rafael`, `camila`, `bruno`, `beatriz` | `User@1234` | `USER` |
 
-O script é idempotente: pode ser executado múltiplas vezes sem duplicar dados.
+O login da API utiliza `username`, não e-mail. As senhas podem ser alteradas no
+`.env` antes de subir os containers:
+
+```ini
+SEED_USER_PASSWORD=uma-senha-local
+SEED_ADMIN_PASSWORD=outra-senha-local
+```
 
 Para recriar o banco do zero e rodar o seed novamente:
 
