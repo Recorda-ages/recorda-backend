@@ -1,6 +1,10 @@
 """Deterministic fixtures used by the development database seed."""
 
 from dataclasses import dataclass
+from typing import Literal
+
+MediaType = Literal["PHOTO", "VIDEO"]
+FollowStatus = Literal["ACCEPTED", "PENDING"]
 
 
 @dataclass(frozen=True)
@@ -30,7 +34,7 @@ class RecordaSeed:
     key: str
     username: str
     media_url: str
-    media_type: str
+    media_type: MediaType
     description: str
     track: str
     age_days: int
@@ -40,7 +44,7 @@ class RecordaSeed:
 class FollowSeed:
     follower: str
     following: str
-    status: str = "ACCEPTED"
+    status: FollowStatus = "ACCEPTED"
 
 
 @dataclass(frozen=True)

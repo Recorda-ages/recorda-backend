@@ -205,9 +205,14 @@ O projeto inclui um script de seed que popula o banco com dados iniciais para de
 - 40 likes e 20 comentários;
 - uma conta administrativa separada (`role=ADMIN`).
 
-O seed é idempotente: executar o comando novamente adiciona somente os dados que
-estiverem ausentes. Ele não apaga nem sobrescreve dados locais existentes e recusa
-execução quando `ENVIRONMENT=production`.
+O seed é idempotente: executar o comando novamente não duplica os fixtures. Ele
+restaura usuários, Recordas e comentários determinísticos que sofreram exclusão
+lógica, reconcilia status, roles, senhas e timestamps dos fixtures com o estado
+esperado para usuários e interações sociais, e preenche campos ausentes dos perfis
+de demonstração sem substituir valores já preenchidos. Dados que não pertencem ao
+seed são preservados. A atualização também aplica exclusão lógica somente aos dois
+Recordas com `exemplo.com` gerados pela versão anterior. O comando recusa execução
+quando `ENVIRONMENT=production`.
 
 ### Executar com Docker (recomendado)
 
@@ -261,6 +266,16 @@ O login da API utiliza `username`, não e-mail. As senhas podem ser alteradas no
 SEED_USER_PASSWORD=uma-senha-local
 SEED_ADMIN_PASSWORD=outra-senha-local
 ```
+
+As senhas configuradas são reconciliadas em todas as execuções do seed. Portanto,
+alterar uma dessas variáveis e executar o comando novamente atualiza a senha das
+respectivas contas de demonstração e administrativa.
+
+Depois do login, o frontend pode consumir os fixtures diretamente pelos endpoints:
+
+- `GET /api/v1/feed/following` para o feed;
+- `GET /api/v1/users/me/profile` para foto, música, preferências e Recordas do
+  perfil autenticado.
 
 Para recriar o banco do zero e rodar o seed novamente:
 

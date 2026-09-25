@@ -2,13 +2,13 @@
 
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.core.time import now_utc
 from app.db.development_seed_data import (
     COMMENTS,
@@ -29,13 +29,17 @@ from app.models import (
     UserFavoriteArtist,
     UserFavoriteGenre,
 )
-from app.models.app_user import ROLE_ADMIN, ROLE_USER
+from app.models.app_user import ROLE_ADMIN, ROLE_USER, STATUS_ACTIVE
 from app.models.follow import STATUS_ACCEPTED
 
 DEFAULT_DEMO_PASSWORD = "User@1234"
 DEFAULT_ADMIN_PASSWORD = "Admin@1234"
 DEMO_USERNAMES = tuple(user.username for user in USERS)
 SEED_NAMESPACE = uuid.UUID("8f353bc4-ef23-4e44-97e4-0a02cabf64f6")
+SEED_REFERENCE_TIME = datetime(2026, 2, 15, 12, tzinfo=UTC)
+SEED_USER_CREATED_AT = datetime(2026, 1, 1, 12, tzinfo=UTC)
+SEED_FOLLOW_REQUESTED_AT = datetime(2026, 1, 15, 12, tzinfo=UTC)
+SEED_FOLLOW_ACCEPTED_AT = datetime(2026, 1, 16, 12, tzinfo=UTC)
 
 
 @dataclass(frozen=True)
@@ -56,6 +60,7 @@ def seed_database(
 ) -> SeedResult:
     """Insert missing development fixtures and commit them atomically."""
     try:
+        _retire_legacy_recordas(db)
         genre_ids = _seed_genres(db)
         admin_created = int(_seed_admin(db, admin_password))
         users_by_username: dict[str, AppUser] = {}
@@ -106,15 +111,17 @@ def _seed_genres(db: Session) -> dict[str, UUID]:
 
 
 def _seed_admin(db: Session, password: str) -> bool:
-    existing = db.scalar(
-        select(AppUser).where(
-            or_(
-                AppUser.email == "admin@recorda.com",
-                AppUser.username == "admin",
-            )
-        )
+    existing = _find_seed_user(
+        db,
+        email="admin@recorda.com",
+        username="admin",
     )
     if existing is not None:
+        existing.deleted_at = None
+        existing.status = STATUS_ACTIVE
+        existing.role = ROLE_ADMIN
+        _set_timestamp(existing, "created_at", SEED_USER_CREATED_AT)
+        _reconcile_password(existing, password)
         return False
 
     db.add(
@@ -124,6 +131,8 @@ def _seed_admin(db: Session, password: str) -> bool:
             name="Administrador",
             password_hash=hash_password(password),
             role=ROLE_ADMIN,
+            status=STATUS_ACTIVE,
+            created_at=SEED_USER_CREATED_AT,
         )
     )
     db.flush()
@@ -133,13 +142,10 @@ def _seed_admin(db: Session, password: str) -> bool:
 def _seed_user(
     db: Session, user_seed: UserSeed, demo_password: str
 ) -> tuple[AppUser, bool]:
-    user = db.scalar(
-        select(AppUser).where(
-            or_(
-                AppUser.email == user_seed.email,
-                AppUser.username == user_seed.username,
-            )
-        )
+    user = _find_seed_user(
+        db,
+        email=user_seed.email,
+        username=user_seed.username,
     )
     favorite_track = TRACKS[user_seed.favorite_track]
 
@@ -152,11 +158,13 @@ def _seed_user(
             profile_picture_url=user_seed.profile_picture_url,
             is_private=user_seed.is_private,
             role=ROLE_USER,
+            status=STATUS_ACTIVE,
             fav_song_deezer_track_id=favorite_track.deezer_track_id,
             fav_song_title=favorite_track.title,
             fav_song_artist_name=favorite_track.artist_name,
             fav_song_cover_url=favorite_track.cover_url,
             fav_song_preview_url=None,
+            created_at=SEED_USER_CREATED_AT,
         )
         db.add(user)
         db.flush()
@@ -164,13 +172,114 @@ def _seed_user(
 
     if user.profile_picture_url is None:
         user.profile_picture_url = user_seed.profile_picture_url
-    if user.fav_song_deezer_track_id is None:
-        user.fav_song_deezer_track_id = favorite_track.deezer_track_id
-        user.fav_song_title = favorite_track.title
-        user.fav_song_artist_name = favorite_track.artist_name
-        user.fav_song_cover_url = favorite_track.cover_url
-        user.fav_song_preview_url = None
+    user.deleted_at = None
+    user.status = STATUS_ACTIVE
+    user.role = ROLE_USER
+    _set_timestamp(user, "created_at", SEED_USER_CREATED_AT)
+    _reconcile_password(user, demo_password)
+    favorite_fields = {
+        "fav_song_deezer_track_id": favorite_track.deezer_track_id,
+        "fav_song_title": favorite_track.title,
+        "fav_song_artist_name": favorite_track.artist_name,
+        "fav_song_cover_url": favorite_track.cover_url,
+    }
+    for field_name, value in favorite_fields.items():
+        if getattr(user, field_name) is None:
+            setattr(user, field_name, value)
     return user, False
+
+
+def _reconcile_password(user: AppUser, password: str) -> None:
+    """Keep a fixture password aligned without rehashing on every seed run."""
+    if not verify_password(password, user.password_hash):
+        user.password_hash = hash_password(password)
+
+
+def _set_timestamp(entity: object, field_name: str, expected: datetime | None) -> None:
+    """Set a canonical UTC timestamp only when its stored value differs."""
+    current = getattr(entity, field_name)
+    if current is None or expected is None:
+        if current != expected:
+            setattr(entity, field_name, expected)
+        return
+
+    if _as_utc(current) != _as_utc(expected):
+        setattr(entity, field_name, expected)
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Treat naive database timestamps as UTC and normalize aware values."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _find_seed_user(
+    db: Session,
+    *,
+    email: str,
+    username: str,
+) -> AppUser | None:
+    """Resolve a fixture identity without merging two different accounts."""
+    user_by_email = db.scalar(select(AppUser).where(AppUser.email == email))
+    user_by_username = db.scalar(select(AppUser).where(AppUser.username == username))
+    if user_by_email is None and user_by_username is None:
+        return None
+    if (
+        user_by_email is None
+        or user_by_username is None
+        or user_by_email.user_id != user_by_username.user_id
+    ):
+        raise RuntimeError(
+            "Conflito no seed: email e username não identificam a mesma conta "
+            f"({email}, {username})."
+        )
+    return user_by_email
+
+
+def _retire_legacy_recordas(db: Session) -> None:
+    """Hide only the known fake fixtures created by the previous seed."""
+    legacy_fixtures = (
+        (
+            "https://exemplo.com/fotos/praia.jpg",
+            "Dia incrível na praia com os amigos.",
+            "3135556",
+            "Harder, Better, Faster, Stronger",
+            "Daft Punk",
+            "https://exemplo.com/covers/daftpunk.jpg",
+        ),
+        (
+            "https://exemplo.com/fotos/formatura.jpg",
+            "Formatura — fim de uma era.",
+            "908460",
+            "Good Riddance (Time of Your Life)",
+            "Green Day",
+            "https://exemplo.com/covers/greenday.jpg",
+        ),
+    )
+    legacy_recordas = db.scalars(
+        select(Recorda)
+        .join(AppUser, AppUser.user_id == Recorda.user_id)
+        .where(
+            AppUser.username == "gabriel",
+            AppUser.email == "gabriel@recorda.com",
+            Recorda.deleted_at.is_(None),
+            or_(
+                *(
+                    and_(
+                        Recorda.media_url == media_url,
+                        Recorda.description == description,
+                        Recorda.deezer_track_id == track_id,
+                        Recorda.song_title == title,
+                        Recorda.song_artist_name == artist,
+                        Recorda.song_cover_url == cover_url,
+                    )
+                    for media_url, description, track_id, title, artist, cover_url in legacy_fixtures
+                )
+            ),
+        )
+    )
+    retired_at = now_utc()
+    for recorda in legacy_recordas:
+        recorda.deleted_at = retired_at
 
 
 def _seed_preferences(
@@ -201,10 +310,13 @@ def _seed_preferences(
 
 def _seed_recordas(db: Session, users_by_username: dict[str, AppUser]) -> int:
     created = 0
-    seed_time = now_utc()
     for recorda_seed in RECORDAS:
         recorda_id = uuid.uuid5(SEED_NAMESPACE, f"recorda:{recorda_seed.key}")
-        if db.get(Recorda, recorda_id) is not None:
+        created_at = SEED_REFERENCE_TIME - timedelta(days=recorda_seed.age_days)
+        existing = db.get(Recorda, recorda_id)
+        if existing is not None:
+            existing.deleted_at = None
+            _set_timestamp(existing, "created_at", created_at)
             continue
 
         track = TRACKS[recorda_seed.track]
@@ -221,7 +333,7 @@ def _seed_recordas(db: Session, users_by_username: dict[str, AppUser]) -> int:
                 song_artist_name=track.artist_name,
                 song_cover_url=track.cover_url,
                 song_preview_url=None,
-                created_at=seed_time - timedelta(days=recorda_seed.age_days),
+                created_at=created_at,
             )
         )
         created += 1
@@ -231,10 +343,12 @@ def _seed_recordas(db: Session, users_by_username: dict[str, AppUser]) -> int:
 
 def _seed_follows(db: Session, users_by_username: dict[str, AppUser]) -> int:
     created = 0
-    seed_time = now_utc()
     for follow_seed in FOLLOWS:
         follower = users_by_username[follow_seed.follower]
         following = users_by_username[follow_seed.following]
+        accepted_at = (
+            SEED_FOLLOW_ACCEPTED_AT if follow_seed.status == STATUS_ACCEPTED else None
+        )
         follow_id = uuid.uuid5(
             SEED_NAMESPACE,
             f"follow:{follow_seed.follower}:{follow_seed.following}",
@@ -246,6 +360,9 @@ def _seed_follows(db: Session, users_by_username: dict[str, AppUser]) -> int:
             )
         )
         if existing is not None:
+            existing.status = follow_seed.status
+            _set_timestamp(existing, "requested_at", SEED_FOLLOW_REQUESTED_AT)
+            _set_timestamp(existing, "accepted_at", accepted_at)
             continue
 
         db.add(
@@ -254,12 +371,8 @@ def _seed_follows(db: Session, users_by_username: dict[str, AppUser]) -> int:
                 follower_id=follower.user_id,
                 following_id=following.user_id,
                 status=follow_seed.status,
-                requested_at=seed_time - timedelta(days=30),
-                accepted_at=(
-                    seed_time - timedelta(days=29)
-                    if follow_seed.status == STATUS_ACCEPTED
-                    else None
-                ),
+                requested_at=SEED_FOLLOW_REQUESTED_AT,
+                accepted_at=accepted_at,
             )
         )
         created += 1
@@ -274,21 +387,26 @@ def _seed_likes(
 ) -> int:
     created = 0
     recorda_keys = tuple(recorda.key for recorda in RECORDAS)
-    seed_time = now_utc()
     for user_index, user_seed in enumerate(USERS):
         user = users_by_username[user_seed.username]
-        for offset in (2, 5, 8, 11):
+        for interaction_index, offset in enumerate((2, 5, 8, 11)):
             recorda_key = recorda_keys[(user_index * 2 + offset) % len(recorda_keys)]
             recorda = recordas_by_key[recorda_key]
             if recorda is None:
                 raise RuntimeError(f"Recorda de seed ausente: {recorda_key}")
-            if db.get(RecordaLike, (user.user_id, recorda.recorda_id)) is not None:
+            created_at = recorda.created_at + timedelta(
+                hours=interaction_index + 1,
+                minutes=user_index,
+            )
+            existing = db.get(RecordaLike, (user.user_id, recorda.recorda_id))
+            if existing is not None:
+                _set_timestamp(existing, "created_at", created_at)
                 continue
             db.add(
                 RecordaLike(
                     user_id=user.user_id,
                     recorda_id=recorda.recorda_id,
-                    created_at=seed_time - timedelta(days=offset),
+                    created_at=created_at,
                 )
             )
             created += 1
@@ -302,14 +420,20 @@ def _seed_comments(
     recordas_by_key: dict[str, Recorda | None],
 ) -> int:
     created = 0
-    seed_time = now_utc()
     for index, comment_seed in enumerate(COMMENTS):
         comment_id = uuid.uuid5(SEED_NAMESPACE, f"comment:{comment_seed.key}")
-        if db.get(RecordaComment, comment_id) is not None:
-            continue
         recorda = recordas_by_key[comment_seed.recorda]
         if recorda is None:
             raise RuntimeError(f"Recorda de seed ausente: {comment_seed.recorda}")
+        created_at = recorda.created_at + timedelta(
+            hours=12,
+            minutes=index,
+        )
+        existing = db.get(RecordaComment, comment_id)
+        if existing is not None:
+            existing.deleted_at = None
+            _set_timestamp(existing, "created_at", created_at)
+            continue
         author = users_by_username[comment_seed.username]
         db.add(
             RecordaComment(
@@ -317,7 +441,7 @@ def _seed_comments(
                 user_id=author.user_id,
                 recorda_id=recorda.recorda_id,
                 content=comment_seed.content,
-                created_at=seed_time - timedelta(hours=index + 1),
+                created_at=created_at,
             )
         )
         created += 1
