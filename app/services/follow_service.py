@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
 from app.models import AppUser, Follow
-from app.repositories import follow_repository
+from app.repositories import follow_repository, user_repository
 
 
 def create_follow(db: Session, user_id: UUID, current_user: AppUser) -> None:
@@ -15,18 +15,21 @@ def create_follow(db: Session, user_id: UUID, current_user: AppUser) -> None:
         raise ValueError("Você não pode seguir a si mesmo.")
 
     # Verifica se conta do user_id é privada
-    # is_private = user_id.is_private
-
-    # if is_private:
-    #   follow = Follow(follower_id=current_user.user_id,
-    #                   following_id=user_id,
-    #                   status="PENDING",
-    #                   requested_at=now_utc(),
-    #                   accepted_at=now_utc())
-    #   follow = follow_repository.create(db, follow)
+    target_user = user_repository.get_by_id(db, user_id)
+    if target_user is None:
+        raise ValueError("O usuário que você está tentando seguir não existe.")
+    is_private = target_user.is_private
+    if is_private:
+        follow = Follow(follower_id=current_user.user_id,
+                       following_id=user_id,
+                       status="PENDING",
+                       requested_at=now_utc(),
+                       accepted_at=now_utc())
+        follow = follow_repository.create(db, follow)
+        return  # Retorna sem criar a relação de follow ainda
     #   mandar notificação para o usuário privado
     #   return "Requisição de follow enviada para o usuário privado."  # Retorna uma mensagem de sucesso
-
+        print(f"Follow relationship created: {follow} private user")
     follow = Follow(
         follower_id=current_user.user_id,
         following_id=user_id,
@@ -37,6 +40,7 @@ def create_follow(db: Session, user_id: UUID, current_user: AppUser) -> None:
     follow = follow_repository.create(db, follow)
     # mandar notificação para o usuário publico
     print(f"Follow relationship created: {follow}")
+    return
 
 
 def delete_follow(db: Session, follow_id: UUID) -> bool:
