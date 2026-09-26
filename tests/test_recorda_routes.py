@@ -131,8 +131,9 @@ def test_get_recorda_returns_author_and_likes_count(client, db, auth, common_use
     body = resp.json()
     assert body["author"]["user_id"] == str(common_user.user_id)
     assert body["author"]["username"] == common_user.username
+    assert body["deezer_track_id"] == recorda.deezer_track_id
     assert body["likes_count"] == 0
-    assert "user_id" not in body  # substituído pelo objeto author aninhado
+    assert "user_id" not in body
 
 
 def test_get_recorda_author_can_access_own_private_recorda(client, db):

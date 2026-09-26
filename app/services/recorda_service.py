@@ -103,6 +103,7 @@ def get_by_id_for_viewer(
         media_url=recorda.media_url,
         media_type=recorda.media_type,
         description=recorda.description,
+        deezer_track_id=recorda.deezer_track_id,
         song_title=recorda.song_title,
         song_artist_name=recorda.song_artist_name,
         song_cover_url=recorda.song_cover_url,

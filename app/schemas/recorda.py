@@ -57,6 +57,7 @@ class RecordaDetail(BaseModel):
     media_url: str
     media_type: str
     description: str | None
+    deezer_track_id: str
     song_title: str
     song_artist_name: str
     song_cover_url: str
