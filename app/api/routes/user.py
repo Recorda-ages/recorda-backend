@@ -1,3 +1,4 @@
+from typing_extensions import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,6 +19,7 @@ from app.services import follow_service, music_preference_service, user_service
 router = APIRouter(prefix="/users", tags=["users"])
 
 _current_admin = Depends(get_current_admin_user)
+_current_user = Depends(get_current_user)
 
 
 @router.get("", response_model=list[UserRead], dependencies=[_current_admin])
@@ -86,10 +88,10 @@ def save_music_preferences(
 
 
 @router.post("/{user_id}/follow")
-def create_follow(user_id: UUID, db: Session = Depends(get_db)) -> None:
-    print(f"Received follow request for user_id: {user_id}")
+def create_follow(user_id: UUID, current_user: Annotated[AppUser, _current_user], db: Session = Depends(get_db)) -> None:
+    print(f"Received follow request for user_id: {user_id} by current_user: {current_user.user_id}  ")
     try:
-        return follow_service.create_follow(db, user_id)
+        return follow_service.create_follow(db, user_id, current_user)
     except exc.IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
