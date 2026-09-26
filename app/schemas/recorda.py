@@ -42,12 +42,14 @@ class RecordaRead(BaseModel):
     song_preview_url: str | None
     created_at: datetime
 
+
 class RecordaAuthor(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     user_id: UUID
     username: str
     avatar_url: str | None
+
 
 class RecordaDetail(BaseModel):
     recorda_id: UUID
