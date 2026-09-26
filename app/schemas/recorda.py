@@ -41,3 +41,23 @@ class RecordaRead(BaseModel):
     song_cover_url: str
     song_preview_url: str | None
     created_at: datetime
+
+class RecordaAuthor(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: UUID
+    username: str
+    avatar_url: str | None
+
+class RecordaDetail(BaseModel):
+    recorda_id: UUID
+    author: RecordaAuthor
+    media_url: str
+    media_type: str
+    description: str | None
+    song_title: str
+    song_artist_name: str
+    song_cover_url: str
+    song_preview_url: str | None
+    created_at: datetime  # Data de Publicação
+    likes_count: int
