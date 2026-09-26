@@ -47,22 +47,29 @@ class TestGetGeneralFeedFlow:
 
         with (
             patch.object(
-                general_feed_repository, "get_candidate_author_ids"
-            ) as candidates,
+                general_feed_repository, "get_followed_author_ids"
+            ) as followed,
+            patch.object(
+                general_feed_repository, "get_discovery_candidate_author_ids"
+            ) as discovery,
             pytest.raises(InvalidCursorError),
         ):
             get_general_feed(mock_db, uuid.uuid4(), cursor="invalido!!!", limit=20)
 
-        candidates.assert_not_called()
+        followed.assert_not_called()
+        discovery.assert_not_called()
         mock_db.execute.assert_not_called()
 
-    def test_returns_empty_page_without_querying_feed_when_no_author_has_affinity(self):
+    def test_returns_empty_page_without_querying_feed_when_no_author_eligible(self):
         mock_db = MagicMock()
 
         with (
             patch.object(
+                general_feed_repository, "get_followed_author_ids", return_value=[]
+            ),
+            patch.object(
                 general_feed_repository,
-                "get_candidate_author_ids",
+                "get_discovery_candidate_author_ids",
                 return_value=[uuid.uuid4(), uuid.uuid4()],
             ),
             patch.object(general_feed_service, "calculate_affinity", return_value=0.0),
@@ -73,7 +80,34 @@ class TestGetGeneralFeedFlow:
         assert page.next_cursor is None
         mock_db.execute.assert_not_called()
 
-    def test_only_authors_with_affinity_reach_the_feed_query(self):
+    def test_followed_authors_reach_the_feed_query_without_calculating_affinity(self):
+        current_user_id = uuid.uuid4()
+        followed_author = uuid.uuid4()
+        mock_db = MagicMock()
+        mock_db.execute.return_value.all.return_value = []
+
+        with (
+            patch.object(
+                general_feed_repository,
+                "get_followed_author_ids",
+                return_value=[followed_author],
+            ),
+            patch.object(
+                general_feed_repository,
+                "get_discovery_candidate_author_ids",
+                return_value=[],
+            ),
+            patch.object(general_feed_service, "calculate_affinity") as mock_affinity,
+            patch.object(
+                general_feed_repository, "get_general_feed_query"
+            ) as feed_query,
+        ):
+            get_general_feed(mock_db, current_user_id, cursor=None, limit=20)
+
+        mock_affinity.assert_not_called()
+        feed_query.assert_called_once_with(current_user_id, [followed_author])
+
+    def test_only_discovery_authors_with_affinity_reach_the_feed_query(self):
         current_user_id = uuid.uuid4()
         with_affinity, without_affinity = uuid.uuid4(), uuid.uuid4()
         affinity_by_author = {with_affinity: 50.0, without_affinity: 0.0}
@@ -83,7 +117,12 @@ class TestGetGeneralFeedFlow:
         with (
             patch.object(
                 general_feed_repository,
-                "get_candidate_author_ids",
+                "get_followed_author_ids",
+                return_value=[],
+            ),
+            patch.object(
+                general_feed_repository,
+                "get_discovery_candidate_author_ids",
                 return_value=[with_affinity, without_affinity],
             ),
             patch.object(
@@ -106,11 +145,13 @@ class TestGetGeneralFeedFlow:
         with (
             patch.object(
                 general_feed_repository,
-                "get_candidate_author_ids",
+                "get_followed_author_ids",
                 return_value=[uuid.uuid4()],
             ),
             patch.object(
-                general_feed_service, "calculate_affinity", return_value=100.0
+                general_feed_repository,
+                "get_discovery_candidate_author_ids",
+                return_value=[],
             ),
             patch.object(
                 general_feed_repository, "get_general_feed_query"
@@ -128,11 +169,13 @@ class TestGetGeneralFeedFlow:
         with (
             patch.object(
                 general_feed_repository,
-                "get_candidate_author_ids",
+                "get_followed_author_ids",
                 return_value=[uuid.uuid4()],
             ),
             patch.object(
-                general_feed_service, "calculate_affinity", return_value=100.0
+                general_feed_repository,
+                "get_discovery_candidate_author_ids",
+                return_value=[],
             ),
             patch.object(general_feed_repository, "get_general_feed_query"),
         ):
@@ -195,6 +238,7 @@ class TestGetGeneralFeedIntegration:
         assert _feed_author_ids(db, viewer) == {
             public_with_affinity.user_id,
             private_followed.user_id,
+            followed_without_affinity.user_id,
             artist_only_affinity.user_id,
         }
         # Referências explícitas aos excluídos, para deixar claro o que a regra barra.
@@ -202,12 +246,11 @@ class TestGetGeneralFeedIntegration:
             public_without_affinity.user_id,
             private_not_followed.user_id,
             private_pending.user_id,
-            followed_without_affinity.user_id,
             viewer.user_id,
         }
         assert excluded.isdisjoint(_feed_author_ids(db, viewer))
 
-    def test_user_without_musical_profile_gets_empty_feed(self, db):
+    def test_user_without_musical_profile_and_no_follows_gets_empty_feed(self, db):
         viewer = add_user(db, "viewer")
         other = add_user(db, "outro")
         _add_favorite_genre(db, other, ROCK_GENRE_ID)
@@ -216,3 +259,14 @@ class TestGetGeneralFeedIntegration:
         page = get_general_feed(db, viewer.user_id, cursor=None, limit=20)
         assert page.items == []
         assert page.next_cursor is None
+
+    def test_user_without_musical_profile_still_sees_followed_users(self, db):
+        viewer = add_user(db, "viewer")
+        followed = add_user(db, "seguido")
+        _add_favorite_genre(db, followed, ROCK_GENRE_ID)
+        add_follow(db, viewer, followed)
+        add_recorda(db, followed)
+
+        page = get_general_feed(db, viewer.user_id, cursor=None, limit=20)
+        assert len(page.items) == 1
+        assert page.items[0].author.user_id == followed.user_id

@@ -39,6 +39,39 @@ def _is_visible_to_user_condition(current_user_id: UUID):
     )
 
 
+def get_followed_author_ids(db: Session, current_user_id: UUID) -> list[UUID]:
+    """Autores ativos que o usuário segue com follow aceito."""
+    stmt = (
+        select(AppUser.user_id)
+        .join(Follow, Follow.following_id == AppUser.user_id)
+        .where(
+            Follow.follower_id == current_user_id,
+            Follow.status == STATUS_ACCEPTED,
+            AppUser.deleted_at.is_(None),
+            AppUser.status == STATUS_ACTIVE,
+        )
+    )
+    return list(db.scalars(stmt))
+
+
+def get_discovery_candidate_author_ids(
+    db: Session, current_user_id: UUID
+) -> list[UUID]:
+    """Autores públicos ativos que o usuário NÃO segue com follow aceito.
+
+    Candidatos para a regra de Descoberta (passam por filtro de Afinidade Musical > 0).
+    Contas privadas nunca entram na descoberta.
+    """
+    stmt = select(AppUser.user_id).where(
+        AppUser.is_private.is_(False),
+        AppUser.deleted_at.is_(None),
+        AppUser.status == STATUS_ACTIVE,
+        AppUser.user_id != current_user_id,
+        ~_is_accepted_follower_condition(current_user_id),
+    )
+    return list(db.scalars(stmt))
+
+
 def get_candidate_author_ids(db: Session, current_user_id: UUID) -> list[UUID]:
     """Autores que o usuário pode ver, antes do filtro de afinidade."""
     stmt = select(AppUser.user_id).where(

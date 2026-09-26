@@ -9,6 +9,8 @@ from app.models.follow import STATUS_PENDING
 from app.repositories.feed_repository import apply_cursor
 from app.repositories.general_feed_repository import (
     get_candidate_author_ids,
+    get_discovery_candidate_author_ids,
+    get_followed_author_ids,
     get_general_feed_query,
 )
 from tests.factories import add_follow, add_recorda, add_user
@@ -70,6 +72,60 @@ class TestGetCandidateAuthorIds:
         candidates = get_candidate_author_ids(db, viewer.user_id)
 
         assert candidates.count(public_author.user_id) == 1
+
+
+class TestGetFollowedAuthorIds:
+    def test_includes_accepted_follow(self, db):
+        viewer = add_user(db, "viewer")
+        author = add_user(db, "autor")
+        add_follow(db, viewer, author)
+
+        assert author.user_id in get_followed_author_ids(db, viewer.user_id)
+
+    def test_excludes_pending_follow(self, db):
+        viewer = add_user(db, "viewer")
+        author = add_user(db, "autor", is_private=True)
+        add_follow(db, viewer, author, status=STATUS_PENDING)
+
+        assert author.user_id not in get_followed_author_ids(db, viewer.user_id)
+
+    def test_excludes_unfollowed_user(self, db):
+        viewer = add_user(db, "viewer")
+        author = add_user(db, "autor")
+
+        assert author.user_id not in get_followed_author_ids(db, viewer.user_id)
+
+
+class TestGetDiscoveryCandidateAuthorIds:
+    def test_includes_public_unfollowed_account(self, db):
+        viewer = add_user(db, "viewer")
+        author = add_user(db, "publico")
+
+        assert author.user_id in get_discovery_candidate_author_ids(db, viewer.user_id)
+
+    def test_excludes_followed_public_account(self, db):
+        viewer = add_user(db, "viewer")
+        author = add_user(db, "publico")
+        add_follow(db, viewer, author)
+
+        assert author.user_id not in get_discovery_candidate_author_ids(
+            db, viewer.user_id
+        )
+
+    def test_excludes_private_account(self, db):
+        viewer = add_user(db, "viewer")
+        private_author = add_user(db, "privado", is_private=True)
+
+        assert private_author.user_id not in get_discovery_candidate_author_ids(
+            db, viewer.user_id
+        )
+
+    def test_excludes_current_user(self, db):
+        viewer = add_user(db, "viewer")
+
+        assert viewer.user_id not in get_discovery_candidate_author_ids(
+            db, viewer.user_id
+        )
 
 
 class TestGetGeneralFeedQuery:

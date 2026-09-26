@@ -25,14 +25,18 @@ __all__ = ["InvalidCursorError", "get_general_feed"]
 
 
 def _get_eligible_author_ids(db: Session, current_user_id: UUID) -> list[UUID]:
-    candidate_ids = general_feed_repository.get_candidate_author_ids(
+    followed_ids = general_feed_repository.get_followed_author_ids(db, current_user_id)
+    discovery_candidates = general_feed_repository.get_discovery_candidate_author_ids(
         db, current_user_id
     )
-    return [
+
+    discovery_ids = [
         candidate_id
-        for candidate_id in candidate_ids
+        for candidate_id in discovery_candidates
         if calculate_affinity(db, current_user_id, candidate_id) > 0
     ]
+
+    return list(set(followed_ids) | set(discovery_ids))
 
 
 def _build_page(rows: list[Row], limit: int) -> FeedPage:
