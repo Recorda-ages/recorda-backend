@@ -1,10 +1,20 @@
+import uuid
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
 from app.core import security
 from app.core.time import now_utc
-from app.models import AppUser, Follow, Notification, Recorda, RecordaComment
+from app.db.seed_data import GENRE_NAMESPACE
+from app.models import (
+    AppUser,
+    Follow,
+    Notification,
+    Recorda,
+    RecordaComment,
+    UserFavoriteArtist,
+    UserFavoriteGenre,
+)
 from app.models.app_user import ROLE_USER
 from app.models.follow import STATUS_ACCEPTED
 
@@ -97,6 +107,31 @@ def add_notification(
     db.commit()
     db.refresh(notification)
     return notification
+
+
+def add_favorite_genres(db: Session, user: AppUser, *genre_names: str) -> None:
+    """Marca gêneros do seed como favoritos do usuário, pelo nome."""
+    db.add_all(
+        UserFavoriteGenre(
+            user_id=user.user_id,
+            genre_id=uuid.uuid5(GENRE_NAMESPACE, name),
+        )
+        for name in genre_names
+    )
+    db.commit()
+
+
+def add_favorite_artists(db: Session, user: AppUser, *artist_names: str) -> None:
+    """Marca artistas como favoritos, usando o nome também como id do Deezer."""
+    db.add_all(
+        UserFavoriteArtist(
+            user_id=user.user_id,
+            deezer_artist_id=name,
+            artist_name=name,
+        )
+        for name in artist_names
+    )
+    db.commit()
 
 
 def token_for(user: AppUser, expires_delta: timedelta | None = None) -> str:

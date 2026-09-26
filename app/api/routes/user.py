@@ -12,6 +12,7 @@ from app.schemas.music_preference import (
     MusicPreferencesRead,
 )
 from app.schemas.user import (
+    SuggestedUser,
     UserChangeRole,
     UserCreate,
     UserProfileRead,
@@ -33,6 +34,14 @@ def search_users(
     db: Session = Depends(get_db),
 ) -> list[UserSearchResult]:
     return user_service.search_by_username(db, q, current_user.user_id)
+
+
+@router.get("/suggestions", response_model=list[SuggestedUser])
+def suggest_users(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[SuggestedUser]:
+    return user_service.suggest_by_affinity(db, current_user.user_id)
 
 
 @router.get("/me/profile", response_model=UserProfileRead)

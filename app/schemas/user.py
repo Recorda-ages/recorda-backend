@@ -44,6 +44,21 @@ class UserSearchResult(BaseModel):
     follow_status: FollowStatus
 
 
+class SuggestedUser(BaseModel):
+    """Perfil sugerido por afinidade musical (US27).
+
+    Sem `follow_status`: a sugestão exclui quem já é seguido e quem tem
+    solicitação pendente, então a relação é sempre inexistente.
+    """
+
+    user_id: UUID
+    username: str
+    avatar_url: str | None
+    affinity: float
+    common_genres: list[str]
+    common_artists: list[str]
+
+
 class ProfileFavoriteSong(BaseModel):
     deezer_track_id: str
     title: str
