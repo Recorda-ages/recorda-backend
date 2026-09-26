@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.models import AppUser
 from app.schemas.recorda import (
     RecordaCreate,
+    RecordaDetail,
     RecordaLikeState,
     RecordaRead,
     RecordaUpdate,
@@ -21,6 +22,7 @@ _current_user = Depends(get_current_user)
 
 NOT_FOUND_MESSAGE = "Recorda not found"
 NOT_OWNER_MESSAGE = "Apenas o autor pode alterar esta Recorda"
+ACCESS_DENIED_MESSAGE = "Você não tem permissão para ver esta Recorda"
 
 
 @router.get("", response_model=list[RecordaRead], dependencies=[_current_user])
@@ -37,9 +39,16 @@ def create_recorda(
     return recorda_service.create(db, payload, current_user)
 
 
-@router.get("/{recorda_id}", response_model=RecordaRead, dependencies=[_current_user])
-def get_recorda(recorda_id: UUID, db: Session = Depends(get_db)) -> RecordaRead:
-    recorda = recorda_service.get_by_id(db, recorda_id)
+@router.get("/{recorda_id}", response_model=RecordaDetail)
+def get_recorda(
+    recorda_id: UUID,
+    current_user: Annotated[AppUser, _current_user],
+    db: Session = Depends(get_db),
+) -> RecordaDetail:
+    try:
+        recorda = recorda_service.get_by_id_for_viewer(db, recorda_id, current_user)
+    except recorda_service.RecordaAccessDeniedError as exc:
+        raise _access_denied_error() from exc
     if recorda is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
     return recorda
@@ -110,4 +119,10 @@ def delete_recorda(
 def _not_owner_error() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_403_FORBIDDEN, detail=NOT_OWNER_MESSAGE
+    )
+
+
+def _access_denied_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail=ACCESS_DENIED_MESSAGE
     )

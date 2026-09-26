@@ -7,7 +7,7 @@ import pytest
 from app.core import security
 from app.core.config import settings
 from app.models import AppUser
-from app.models.app_user import ROLE_ADMIN, ROLE_USER
+from app.models.app_user import ROLE_ADMIN, ROLE_USER, STATUS_SUSPENDED
 from tests.factories import add_user, auth_headers
 
 PREFIX = "/api/v1/users"
@@ -27,6 +27,34 @@ def test_list_users_requires_admin_and_returns_records(client, admin_headers):
     assert body[0]["name"] == "Admin"
     assert body[0]["email"] == "admin@example.com"
     assert body[0]["role"] == ROLE_ADMIN
+
+
+def test_own_profile_requires_authentication(client):
+    response = client.get(f"{PREFIX}/me/profile")
+
+    assert response.status_code == 401
+
+
+def test_own_profile_rejects_incomplete_onboarding(client, db):
+    user = add_user(db, "incomplete")
+
+    response = client.get(f"{PREFIX}/me/profile", headers=auth_headers(user))
+
+    assert response.status_code == 409
+    assert response.json()["error"]["message"] == (
+        "Complete o onboarding musical para acessar o perfil."
+    )
+
+
+def test_own_profile_rejects_token_issued_before_suspension(client, db):
+    user = add_user(db, "suspended")
+    headers = auth_headers(user)
+    user.status = STATUS_SUSPENDED
+    db.commit()
+
+    response = client.get(f"{PREFIX}/me/profile", headers=headers)
+
+    assert response.status_code == 401
 
 
 def test_list_users_returns_all_records(client, db, admin_headers):

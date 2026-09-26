@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     auth,
+    comment,
     feed,
     follow,
     general_feed,
@@ -35,6 +36,7 @@ tags_metadata = [
         "name": "follows",
         "description": "Listas de Seguidores/Seguindo e remoção de um seguidor.",
     },
+    {"name": "comments", "description": "Comentários em Recordas."},
     {"name": "health", "description": "Verificação de saúde da aplicação."},
     {
         "name": "notifications",
@@ -73,6 +75,7 @@ app.include_router(feed.router, prefix="/api/v1")
 app.include_router(notification.router, prefix="/api/v1")
 app.include_router(follow.router, prefix="/api/v1")
 app.include_router(general_feed.router, prefix="/api/v1")
+app.include_router(comment.router, prefix="/api/v1")
 
 
 @app.get("/api/v1")

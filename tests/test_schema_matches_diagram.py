@@ -44,6 +44,14 @@ DIAGRAM = {
         "created_at": (DateTime, REQUIRED),
         "deleted_at": (DateTime, NULLABLE),
     },
+    "recorda_comment": {
+        "comment_id": (Uuid, REQUIRED),
+        "user_id": (Uuid, REQUIRED),
+        "recorda_id": (Uuid, REQUIRED),
+        "content": (Text, REQUIRED),
+        "created_at": (DateTime, REQUIRED),
+        "deleted_at": (DateTime, NULLABLE),
+    },
     "genre": {
         "genre_id": (Uuid, REQUIRED),
         "name": (String, REQUIRED),
@@ -67,6 +75,7 @@ DIAGRAM = {
 PRIMARY_KEYS = {
     "app_user": {"user_id"},
     "recorda": {"recorda_id"},
+    "recorda_comment": {"comment_id"},
     "genre": {"genre_id"},
     "user_favorite_genre": {"user_id", "genre_id"},
     "user_favorite_artist": {"user_id", "deezer_artist_id"},
@@ -74,6 +83,8 @@ PRIMARY_KEYS = {
 
 FOREIGN_KEYS = {
     ("recorda", "user_id"): "app_user.user_id",
+    ("recorda_comment", "user_id"): "app_user.user_id",
+    ("recorda_comment", "recorda_id"): "recorda.recorda_id",
     ("user_favorite_genre", "user_id"): "app_user.user_id",
     ("user_favorite_genre", "genre_id"): "genre.genre_id",
     ("user_favorite_artist", "user_id"): "app_user.user_id",

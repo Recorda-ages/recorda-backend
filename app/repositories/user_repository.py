@@ -74,3 +74,26 @@ def search_by_username(
     )
     stmt = only_live(stmt, AppUser)
     return list(db.execute(stmt).all())
+
+
+def list_suggestion_candidates(db: Session, current_user_id: UUID) -> list[AppUser]:
+    """Usuários elegíveis a virar sugestão para `current_user_id`.
+
+    Aplica os três critérios de exclusão da US27 de uma vez: fora o próprio
+    usuário e fora quem já tem qualquer vínculo de follow partindo dele —
+    uma linha ACCEPTED cobre "já seguido" e uma PENDING cobre "solicitação
+    pendente". Apagados também ficam de fora, como manda o D34 do modelo de
+    dados, que cita sugestões explicitamente.
+
+    Não aplica limite: o corte acontece depois do ranqueamento por afinidade,
+    que é feito em memória.
+    """
+    already_linked = select(Follow.following_id).where(
+        Follow.follower_id == current_user_id
+    )
+    stmt = (
+        select(AppUser)
+        .where(AppUser.user_id != current_user_id)
+        .where(AppUser.user_id.not_in(already_linked))
+    )
+    return list(db.scalars(only_live(stmt, AppUser)))
