@@ -1,7 +1,7 @@
 """create recorda_comment table
 
-Revision ID: 0005_recorda_comment
-Revises: 0004_follow_following_index
+Revision ID: 0006_recorda_comment
+Revises: 0005_notification
 Create Date: 2026-09-24
 """
 

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core import security
 from app.models import AppUser
+from app.models.app_user import STATUS_ACTIVE
 from app.repositories import user_repository
 from app.schemas.auth import (
     LoginRequest,
@@ -74,7 +75,7 @@ def reset_password(db: Session, payload: ResetPasswordRequest) -> ResetPasswordR
 
 def authenticate_user(db: Session, username: str, password: str) -> AppUser | None:
     user = user_repository.get_by_username(db, username)
-    if user is None or not user.password_hash:
+    if user is None or user.status != STATUS_ACTIVE or not user.password_hash:
         return None
     if not security.verify_password(password, user.password_hash):
         return None
@@ -92,7 +93,7 @@ def get_user_from_access_token(db: Session, token: str) -> AppUser | None:
         return None
 
     user = user_repository.get_by_id(db, user_id)
-    if user is None:
+    if user is None or user.status != STATUS_ACTIVE:
         return None
 
     token_username = payload.get("username")

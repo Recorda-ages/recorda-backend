@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core import security
 from app.core.time import now_utc
-from app.models import AppUser, Follow, Recorda, Notification, RecordaComment
+from app.models import AppUser, Follow, Notification, Recorda, RecordaComment
 from app.models.app_user import ROLE_USER
 from app.models.follow import STATUS_ACCEPTED
 
