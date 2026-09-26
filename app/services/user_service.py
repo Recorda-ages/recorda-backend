@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core import security
 from app.models import AppUser
-from app.models.app_user import ROLE_USER, ROLE_ADMIN
+from app.models.app_user import ROLE_USER
 from app.repositories import user_repository
 from app.schemas.user import UserChangeRole, UserCreate, UserUpdate
 
@@ -36,7 +36,7 @@ def create(db: Session, payload: UserCreate) -> AppUser:
         email=payload.email,
         username=payload.username,
         password_hash=security.hash_password(payload.password),
-        role=ROLE_ADMIN,
+        role=ROLE_USER,
     )
     return user_repository.create(db, user)
 

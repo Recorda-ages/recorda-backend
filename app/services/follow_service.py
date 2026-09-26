@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
 from app.models import AppUser, Follow
-from app.repositories import follow_repository, user_repository
+from app.repositories import follow_repository
 
 
 def create_follow(db: Session, user_id: UUID, current_user: AppUser) -> None:
@@ -23,7 +23,7 @@ def create_follow(db: Session, user_id: UUID, current_user: AppUser) -> None:
        #follow = follow_repository.create(db, follow)
        #mandar notificação para o usuário privado
        #return "Requisição de follow enviada para o usuário privado."  # Retorna uma mensagem de sucesso
-    
+
     follow = Follow(follower_id=current_user.user_id, following_id=user_id, status="ACCEPTED", requested_at=now_utc(), accepted_at=now_utc())
     follow = follow_repository.create(db, follow)
     #mandar notificação para o usuário publico

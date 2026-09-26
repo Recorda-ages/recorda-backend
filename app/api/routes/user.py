@@ -96,7 +96,7 @@ def create_follow(user_id: UUID, current_user: Annotated[AppUser, _current_user]
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You are already following this user or the user does not exist.",
-        )
+        ) from None
 
 @router.delete("/{follow_id}/follow")
 def delete_follow(follow_id: UUID, db: Session = Depends(get_db)) -> None:
