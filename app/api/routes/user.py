@@ -15,6 +15,7 @@ from app.schemas.user import (
     SuggestedUser,
     UserChangeRole,
     UserCreate,
+    UserProfileRead,
     UserRead,
     UserSearchResult,
     UserUpdate,
@@ -41,6 +42,20 @@ def suggest_users(
     db: Session = Depends(get_db),
 ) -> list[SuggestedUser]:
     return user_service.suggest_by_affinity(db, current_user.user_id)
+
+
+@router.get("/me/profile", response_model=UserProfileRead)
+def get_own_profile(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserProfileRead:
+    try:
+        return user_service.get_own_profile(db, current_user)
+    except user_service.IncompleteProfileError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Complete o onboarding musical para acessar o perfil.",
+        ) from exc
 
 
 @router.get("", response_model=list[UserRead], dependencies=[_current_admin])

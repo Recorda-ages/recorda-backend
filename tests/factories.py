@@ -11,6 +11,7 @@ from app.models import (
     Follow,
     Notification,
     Recorda,
+    RecordaComment,
     UserFavoriteArtist,
     UserFavoriteGenre,
 )
@@ -56,6 +57,21 @@ def add_recorda(db: Session, author: AppUser, **fields) -> Recorda:
     db.commit()
     db.refresh(recorda)
     return recorda
+
+
+def add_comment(
+    db: Session, author: AppUser, recorda: Recorda, **fields
+) -> RecordaComment:
+    comment = RecordaComment(
+        user_id=author.user_id,
+        recorda_id=recorda.recorda_id,
+        content=fields.pop("content", "Comentário de teste"),
+        **fields,
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment
 
 
 def add_follow(

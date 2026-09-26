@@ -20,6 +20,15 @@ def get_by_id(db: Session, recorda_id: UUID) -> Recorda | None:
     return db.scalars(only_live(stmt, Recorda)).first()
 
 
+def list_by_user(db: Session, user_id: UUID) -> list[Recorda]:
+    stmt = (
+        select(Recorda)
+        .where(Recorda.user_id == user_id)
+        .order_by(Recorda.created_at.desc())
+    )
+    return list(db.scalars(only_live(stmt, Recorda)))
+
+
 def create(db: Session, recorda: Recorda) -> Recorda:
     db.add(recorda)
     db.commit()
