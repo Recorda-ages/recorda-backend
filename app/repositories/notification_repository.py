@@ -1,10 +1,10 @@
 from uuid import UUID
 
-from sqlalchemy import Row, Select, func, or_, select, update
+from sqlalchemy import Row, Select, delete, func, or_, select, update
 from sqlalchemy.orm import Session, aliased
 
 from app.models.app_user import AppUser
-from app.models.notification import TYPE_LIKE, Notification
+from app.models.notification import TYPE_FOLLOW_REQUEST, TYPE_LIKE, Notification
 from app.models.recorda import Recorda
 
 Sender = aliased(AppUser)
@@ -90,3 +90,28 @@ def create_like(
     )
     db.add(notification)
     return notification
+
+
+def convert_follow_request(db: Session, follow_id: UUID, type_: str) -> None:
+    """Troca o tipo do pedido de follow sem commit (commit feito pelo service)."""
+    db.execute(
+        update(Notification)
+        .where(
+            Notification.follow_id == follow_id,
+            Notification.type == TYPE_FOLLOW_REQUEST,
+        )
+        .values(type=type_)
+        .execution_options(synchronize_session=False)
+    )
+
+
+def delete_follow_request(db: Session, follow_id: UUID) -> None:
+    """Apaga o pedido de follow sem commit (commit feito pelo service)."""
+    db.execute(
+        delete(Notification)
+        .where(
+            Notification.follow_id == follow_id,
+            Notification.type == TYPE_FOLLOW_REQUEST,
+        )
+        .execution_options(synchronize_session=False)
+    )

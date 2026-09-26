@@ -8,6 +8,7 @@ from app.api.routes import (
     comment,
     feed,
     follow,
+    follow_request,
     health,
     media,
     music,
@@ -33,7 +34,10 @@ tags_metadata = [
     },
     {
         "name": "follows",
-        "description": "Listas de Seguidores/Seguindo e remoção de um seguidor.",
+        "description": (
+            "Listas de Seguidores/Seguindo, remoção de um seguidor e "
+            "solicitações para seguir."
+        ),
     },
     {"name": "comments", "description": "Comentários em Recordas."},
     {"name": "health", "description": "Verificação de saúde da aplicação."},
@@ -73,6 +77,7 @@ app.include_router(media.router, prefix="/api/v1")
 app.include_router(feed.router, prefix="/api/v1")
 app.include_router(notification.router, prefix="/api/v1")
 app.include_router(follow.router, prefix="/api/v1")
+app.include_router(follow_request.router, prefix="/api/v1")
 app.include_router(comment.router, prefix="/api/v1")
 
 
