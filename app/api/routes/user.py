@@ -1,4 +1,4 @@
-from typing_extensions import Annotated
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_admin_user, get_current_user
 from app.api.routes.auth import user_already_exists_error
 from app.db.session import get_db
-from app.models import AppUser 
+from app.models import AppUser
 from app.schemas.music_preference import (
     MusicPreferencesCreate,
     MusicPreferencesRead,
@@ -98,8 +98,8 @@ def create_follow(user_id: UUID, current_user: Annotated[AppUser, _current_user]
             detail="You are already following this user or the user does not exist.",
         )
 
-@router.delete("/{user_id}/follow")
-def delete_follow(user_id: UUID, db: Session = Depends(get_db)) -> None:
-    if not follow_service.delete_follow(db, user_id):
-        raise HTTPException(status_code=404, detail="User not found ")
+@router.delete("/{follow_id}/follow")
+def delete_follow(follow_id: UUID, db: Session = Depends(get_db)) -> None:
+    if not follow_service.delete_follow(db, follow_id):
+        raise HTTPException(status_code=404, detail="Follow not found")
     return {"message": "You are no longer following the user."}
