@@ -4,7 +4,7 @@ import pytest
 
 from app.core import security
 from app.core.config import settings
-from app.models.app_user import ROLE_USER
+from app.models.app_user import ROLE_USER, STATUS_SUSPENDED
 from app.schemas.auth import LoginRequest
 from app.services import auth_service
 from tests.factories import add_user
@@ -61,6 +61,15 @@ def test_authenticate_user_ignores_soft_deleted_user(db, monkeypatch):
     monkeypatch.setattr(settings, "password_hash_iterations", 1)
     alice = add_user(db, "alice", password="correct")
     alice.deleted_at = alice.created_at
+    db.commit()
+
+    assert auth_service.authenticate_user(db, "alice", "correct") is None
+
+
+def test_authenticate_user_rejects_suspended_user(db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    alice = add_user(db, "alice", password="correct")
+    alice.status = STATUS_SUSPENDED
     db.commit()
 
     assert auth_service.authenticate_user(db, "alice", "correct") is None

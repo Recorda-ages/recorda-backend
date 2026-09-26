@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core import security
 from app.core.time import now_utc
-from app.models import AppUser, Follow, Notification, Recorda
+from app.models import AppUser, Follow, Notification, Recorda, RecordaComment
 from app.models.app_user import ROLE_USER
 from app.models.follow import STATUS_ACCEPTED
 
@@ -47,6 +47,21 @@ def add_recorda(db: Session, author: AppUser, **fields) -> Recorda:
     db.commit()
     db.refresh(recorda)
     return recorda
+
+
+def add_comment(
+    db: Session, author: AppUser, recorda: Recorda, **fields
+) -> RecordaComment:
+    comment = RecordaComment(
+        user_id=author.user_id,
+        recorda_id=recorda.recorda_id,
+        content=fields.pop("content", "Comentário de teste"),
+        **fields,
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment
 
 
 def add_follow(
