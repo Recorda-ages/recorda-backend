@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core import security
 from app.models import AppUser
-from app.models.app_user import ROLE_ADMIN
+from app.models.app_user import ROLE_USER, ROLE_ADMIN
 from app.repositories import user_repository
 from app.schemas.user import UserChangeRole, UserCreate, UserUpdate
 
