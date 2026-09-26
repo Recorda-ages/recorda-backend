@@ -15,18 +15,27 @@ def create_follow(db: Session, user_id: UUID, current_user: AppUser) -> None:
         raise ValueError("Você não pode seguir a si mesmo.")
 
     # Verifica se conta do user_id é privada
-    #is_private = user_id.is_private
+    # is_private = user_id.is_private
 
+    # if is_private:
+    #   follow = Follow(follower_id=current_user.user_id,
+    #                   following_id=user_id,
+    #                   status="PENDING",
+    #                   requested_at=now_utc(),
+    #                   accepted_at=now_utc())
+    #   follow = follow_repository.create(db, follow)
+    #   mandar notificação para o usuário privado
+    #   return "Requisição de follow enviada para o usuário privado."  # Retorna uma mensagem de sucesso
 
-    #if is_private:
-       #follow = Follow(follower_id=current_user.user_id, following_id=user_id, status="PENDING", requested_at=now_utc(), accepted_at=now_utc())
-       #follow = follow_repository.create(db, follow)
-       #mandar notificação para o usuário privado
-       #return "Requisição de follow enviada para o usuário privado."  # Retorna uma mensagem de sucesso
-
-    follow = Follow(follower_id=current_user.user_id, following_id=user_id, status="ACCEPTED", requested_at=now_utc(), accepted_at=now_utc())
+    follow = Follow(
+        follower_id=current_user.user_id,
+        following_id=user_id,
+        status="ACCEPTED",
+        requested_at=now_utc(),
+        accepted_at=now_utc(),
+    )
     follow = follow_repository.create(db, follow)
-    #mandar notificação para o usuário publico
+    # mandar notificação para o usuário publico
     print(f"Follow relationship created: {follow}")
 
 
