@@ -4,7 +4,6 @@ from uuid import UUID
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
-from sqlalchemy import delete
 
 from app.models.recorda_like import RecordaLike
 
@@ -44,6 +43,7 @@ def count_for_recorda(db: Session, recorda_id: UUID) -> int:
         .where(RecordaLike.recorda_id == recorda_id)
     )
     return int(db.scalar(statement) or 0)
+
 
 def delete_all_for_recorda(db: Session, recorda_id: UUID) -> None:
     db.execute(delete(RecordaLike).where(RecordaLike.recorda_id == recorda_id))
