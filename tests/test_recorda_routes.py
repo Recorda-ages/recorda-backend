@@ -123,6 +123,7 @@ def test_get_recorda_requires_auth(client):
     resp = client.get(f"{PREFIX}/{MISSING_ID}")
     assert resp.status_code == 401
 
+
 def test_get_recorda_returns_author_and_likes_count(client, db, auth, common_user):
     recorda = add_recorda(db, common_user)
     resp = client.get(f"{PREFIX}/{recorda.recorda_id}", headers=auth)
@@ -190,6 +191,7 @@ def test_get_recorda_public_account_is_visible_to_anyone(client, db):
 
     assert resp.status_code == 200
     assert resp.json()["recorda_id"] == str(recorda.recorda_id)
+
 
 def test_update_recorda_changes_only_description(client, db, auth, common_user):
     recorda = add_recorda(db, common_user)
