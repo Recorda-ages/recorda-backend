@@ -1,4 +1,5 @@
 import base64
+import binascii
 from datetime import datetime
 from uuid import UUID
 
@@ -49,7 +50,7 @@ def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
         raw = base64.urlsafe_b64decode(cursor.encode()).decode()
         created_at_str, recorda_id_str = raw.split("|", 1)
         return datetime.fromisoformat(created_at_str), UUID(recorda_id_str)
-    except (ValueError, UnicodeDecodeError) as exc:
+    except (binascii.Error, ValueError, UnicodeDecodeError) as exc:
         raise InvalidCursorError("Cursor inválido.") from exc
 
 

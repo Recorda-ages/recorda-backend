@@ -59,6 +59,10 @@ class TestEncodeDecodeCursor:
         with pytest.raises(InvalidCursorError):
             _decode_cursor("isso não é base64 válido!!!")
 
+    def test_decode_bad_base64_padding_raises_invalid_cursor_error(self):
+        with pytest.raises(InvalidCursorError):
+            _decode_cursor("a")
+
     def test_decode_missing_separator_raises_invalid_cursor_error(self):
         malformed = base64.urlsafe_b64encode(b"sem separador").decode()
 
