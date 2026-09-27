@@ -1,14 +1,13 @@
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import exc
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin_user, get_current_user
 from app.api.routes.auth import user_already_exists_error
 from app.db.session import get_db
 from app.models import AppUser
+from app.schemas.follow_mutation import FollowMutationResult
 from app.schemas.music_preference import (
     MusicPreferencesCreate,
     MusicPreferencesRead,
@@ -19,7 +18,6 @@ from app.services import follow_service, music_preference_service, user_service
 router = APIRouter(prefix="/users", tags=["users"])
 
 _current_admin = Depends(get_current_admin_user)
-_current_user = Depends(get_current_user)
 
 
 @router.get("", response_model=list[UserRead], dependencies=[_current_admin])
@@ -87,26 +85,38 @@ def save_music_preferences(
     return music_preference_service.replace_for_user(db, current_user, payload)
 
 
-@router.post("/{user_id}/follow")
+@router.post("/{user_id}/follow", response_model=FollowMutationResult)
 def create_follow(
     user_id: UUID,
-    current_user: Annotated[AppUser, _current_user],
+    current_user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> None:
-    print(
-        f"Received follow request for user_id: {user_id} by current_user: {current_user.user_id}  "
-    )
+) -> FollowMutationResult:
     try:
-        return follow_service.create_follow(db, user_id, current_user)
-    except exc.IntegrityError:
+        follow_status = follow_service.create_follow(db, user_id, current_user)
+    except follow_service.SelfFollowError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You are already following this user or the user does not exist.",
-        ) from None
+            detail="Você não pode seguir a si mesmo.",
+        ) from exc
+    except follow_service.DuplicateFollowError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Você já segue ou solicitou seguir este usuário.",
+        ) from exc
+    except follow_service.FollowTargetNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    return FollowMutationResult(follow_status=follow_status)
 
 
-@router.delete("/{follow_id}/follow")
-def delete_follow(follow_id: UUID, db: Session = Depends(get_db)) -> None:
-    if not follow_service.delete_follow(db, follow_id):
-        raise HTTPException(status_code=404, detail="Follow not found")
-    return {"message": "You are no longer following the user."}
+@router.delete("/{user_id}/follow", response_model=FollowMutationResult)
+def delete_follow(
+    user_id: UUID,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FollowMutationResult:
+    if not follow_service.delete_follow(db, user_id, current_user):
+        raise HTTPException(status_code=404, detail="Você não segue este usuário.")
+    return FollowMutationResult(follow_status="nenhuma")

@@ -11,6 +11,14 @@ def get_by_id(db: Session, follow_id: UUID) -> Follow | None:
     return db.scalars(stmt).first()
 
 
+def get_by_users(db: Session, follower_id: UUID, following_id: UUID) -> Follow | None:
+    stmt = select(Follow).where(
+        Follow.follower_id == follower_id,
+        Follow.following_id == following_id,
+    )
+    return db.scalars(stmt).first()
+
+
 def create(db: Session, follow: Follow) -> Follow:
     db.add(follow)
     db.commit()

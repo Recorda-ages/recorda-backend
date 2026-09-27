@@ -6,7 +6,7 @@ from app.services import follow_service
 from tests.factories import add_user
 
 
-def test_delete_follow_by_follow_id(db):
+def test_delete_follow_by_follower_and_target(db):
     follower = add_user(db, "follower")
     following = add_user(db, "following")
     follow = Follow(
@@ -17,9 +17,12 @@ def test_delete_follow_by_follow_id(db):
     db.add(follow)
     db.commit()
 
-    assert follow_service.delete_follow(db, follow.follow_id) is True
-    assert follow_repository.get_by_id(db, follow.follow_id) is None
+    assert follow_service.delete_follow(db, following.user_id, follower) is True
+    assert (
+        follow_repository.get_by_users(db, follower.user_id, following.user_id) is None
+    )
 
 
-def test_delete_follow_returns_false_when_id_does_not_exist(db):
-    assert follow_service.delete_follow(db, uuid.uuid4()) is False
+def test_delete_follow_returns_false_when_relationship_does_not_exist(db):
+    follower = add_user(db, "follower")
+    assert follow_service.delete_follow(db, uuid.uuid4(), follower) is False

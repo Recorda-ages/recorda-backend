@@ -7,44 +7,43 @@ from app.models import AppUser, Follow
 from app.repositories import follow_repository, user_repository
 
 
-def create_follow(db: Session, user_id: UUID, current_user: AppUser) -> None:
-    print(f"Creating follow relationship: user_id={user_id}")
-    print(f"Current user: {current_user.user_id}")
-    # Obtém o usuário autenticado (sessão) usando a dependência get_current_user
-    if current_user.user_id == user_id:
-        raise ValueError("Você não pode seguir a si mesmo.")
+class FollowTargetNotFoundError(Exception):
+    pass
 
-    # Verifica se conta do user_id é privada
+
+class SelfFollowError(Exception):
+    pass
+
+
+class DuplicateFollowError(Exception):
+    pass
+
+
+def create_follow(db: Session, user_id: UUID, current_user: AppUser) -> str:
+    if current_user.user_id == user_id:
+        raise SelfFollowError
+
     target_user = user_repository.get_by_id(db, user_id)
     if target_user is None:
-        raise ValueError("O usuário que você está tentando seguir não existe.")
+        raise FollowTargetNotFoundError
+    if follow_repository.get_by_users(db, current_user.user_id, user_id) is not None:
+        raise DuplicateFollowError
+
+    requested_at = now_utc()
     is_private = target_user.is_private
-    if is_private:
-        follow = Follow(follower_id=current_user.user_id,
-                       following_id=user_id,
-                       status="PENDING",
-                       requested_at=now_utc(),
-                       accepted_at=now_utc())
-        follow = follow_repository.create(db, follow)
-        return  # Retorna sem criar a relação de follow ainda
-    #   mandar notificação para o usuário privado
-    #   return "Requisição de follow enviada para o usuário privado."  # Retorna uma mensagem de sucesso
-        print(f"Follow relationship created: {follow} private user")
     follow = Follow(
         follower_id=current_user.user_id,
         following_id=user_id,
-        status="ACCEPTED",
-        requested_at=now_utc(),
-        accepted_at=now_utc(),
+        status="PENDING" if is_private else "ACCEPTED",
+        requested_at=requested_at,
+        accepted_at=None if is_private else requested_at,
     )
-    follow = follow_repository.create(db, follow)
-    # mandar notificação para o usuário publico
-    print(f"Follow relationship created: {follow}")
-    return
+    follow_repository.create(db, follow)
+    return "solicitado" if is_private else "seguindo"
 
 
-def delete_follow(db: Session, follow_id: UUID) -> bool:
-    follow = follow_repository.get_by_id(db, follow_id)
+def delete_follow(db: Session, user_id: UUID, current_user: AppUser) -> bool:
+    follow = follow_repository.get_by_users(db, current_user.user_id, user_id)
     if follow is None:
         return False
     follow_repository.delete(db, follow)
