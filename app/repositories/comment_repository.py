@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
@@ -18,3 +18,13 @@ def get_by_id(db: Session, comment_id: UUID) -> RecordaComment | None:
 def soft_delete(db: Session, comment: RecordaComment) -> None:
     comment.deleted_at = now_utc()
     db.commit()
+
+
+def soft_delete_all_for_recorda(db: Session, recorda_id: UUID) -> None:
+    db.execute(
+        update(RecordaComment)
+        .where(
+            RecordaComment.recorda_id == recorda_id, RecordaComment.deleted_at.is_(None)
+        )
+        .values(deleted_at=now_utc())
+    )

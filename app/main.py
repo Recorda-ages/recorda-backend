@@ -9,6 +9,7 @@ from app.api.routes import (
     feed,
     follow,
     follow_request,
+    general_feed,
     health,
     media,
     music,
@@ -77,6 +78,7 @@ app.include_router(media.router, prefix="/api/v1")
 app.include_router(feed.router, prefix="/api/v1")
 app.include_router(notification.router, prefix="/api/v1")
 app.include_router(follow.router, prefix="/api/v1")
+app.include_router(general_feed.router, prefix="/api/v1")
 app.include_router(follow_request.router, prefix="/api/v1")
 app.include_router(comment.router, prefix="/api/v1")
 
