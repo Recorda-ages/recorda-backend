@@ -146,7 +146,23 @@ def test_get_recorda_returns_author_and_likes_count(client, db, auth, common_use
     assert body["author"]["username"] == common_user.username
     assert body["deezer_track_id"] == recorda.deezer_track_id
     assert body["likes_count"] == 0
+    assert body["is_liked"] is False
     assert "user_id" not in body
+
+
+def test_get_recorda_returns_current_users_like_state(client, db, common_user):
+    author = add_user(db, "recorda_author")
+    recorda = add_recorda(db, author)
+    db.add(RecordaLike(user_id=common_user.user_id, recorda_id=recorda.recorda_id))
+    db.commit()
+
+    response = client.get(
+        f"{PREFIX}/{recorda.recorda_id}", headers=auth_headers(common_user)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_liked"] is True
+    assert response.json()["likes_count"] == 1
 
 
 def test_get_recorda_author_can_access_own_private_recorda(client, db):

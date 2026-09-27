@@ -63,4 +63,5 @@ class RecordaDetail(BaseModel):
     song_cover_url: str
     song_preview_url: str | None
     created_at: datetime  # Data de Publicação
+    is_liked: bool
     likes_count: int

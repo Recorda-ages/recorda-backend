@@ -86,6 +86,11 @@ def get_by_id_for_viewer(
     author = user_repository.get_by_id(db, recorda.user_id)
 
     likes_count = recorda_like_repository.count_for_recorda(db, recorda.recorda_id)
+    is_liked = recorda_like_repository.is_liked_by_user(
+        db,
+        user_id=viewer.user_id,
+        recorda_id=recorda.recorda_id,
+    )
 
     return RecordaDetail(
         recorda_id=recorda.recorda_id,
@@ -103,6 +108,7 @@ def get_by_id_for_viewer(
         song_cover_url=recorda.song_cover_url,
         song_preview_url=recorda.song_preview_url,
         created_at=recorda.created_at,
+        is_liked=is_liked,
         likes_count=likes_count,
     )
 
