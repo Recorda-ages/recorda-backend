@@ -4,7 +4,8 @@ import uuid
 
 import pytest
 
-from tests.factories import add_recorda, add_user, auth_headers
+from app.models import RecordaComment, RecordaLike
+from tests.factories import add_follow, add_recorda, add_user, auth_headers
 
 PREFIX = "/api/v1/recordas"
 MISSING_ID = uuid.uuid4()
@@ -124,6 +125,76 @@ def test_get_recorda_requires_auth(client):
     assert resp.status_code == 401
 
 
+def test_get_recorda_returns_author_and_likes_count(client, db, auth, common_user):
+    recorda = add_recorda(db, common_user)
+    resp = client.get(f"{PREFIX}/{recorda.recorda_id}", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["author"]["user_id"] == str(common_user.user_id)
+    assert body["author"]["username"] == common_user.username
+    assert body["deezer_track_id"] == recorda.deezer_track_id
+    assert body["likes_count"] == 0
+    assert "user_id" not in body
+
+
+def test_get_recorda_author_can_access_own_private_recorda(client, db):
+    author = add_user(db, "private_author", is_private=True)
+    recorda = add_recorda(db, author)
+
+    resp = client.get(f"{PREFIX}/{recorda.recorda_id}", headers=auth_headers(author))
+
+    assert resp.status_code == 200
+    assert resp.json()["recorda_id"] == str(recorda.recorda_id)
+
+
+def test_get_recorda_accepted_follower_can_access_private_recorda(client, db):
+    author = add_user(db, "private_author", is_private=True)
+    follower = add_user(db, "follower")
+    add_follow(db, follower, author)  # status ACCEPTED por padrão
+    recorda = add_recorda(db, author)
+
+    resp = client.get(f"{PREFIX}/{recorda.recorda_id}", headers=auth_headers(follower))
+
+    assert resp.status_code == 200
+    assert resp.json()["recorda_id"] == str(recorda.recorda_id)
+
+
+def test_get_recorda_pending_follower_cannot_access_private_recorda(client, db):
+    author = add_user(db, "private_author", is_private=True)
+    pending_follower = add_user(db, "pending_follower")
+    add_follow(db, pending_follower, author, status="PENDING")
+    recorda = add_recorda(db, author)
+
+    resp = client.get(
+        f"{PREFIX}/{recorda.recorda_id}", headers=auth_headers(pending_follower)
+    )
+
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_get_recorda_stranger_cannot_access_private_recorda(client, db):
+    author = add_user(db, "private_author", is_private=True)
+    stranger = add_user(db, "stranger")
+    recorda = add_recorda(db, author)
+
+    resp = client.get(f"{PREFIX}/{recorda.recorda_id}", headers=auth_headers(stranger))
+
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_get_recorda_public_account_is_visible_to_anyone(client, db):
+    public_author = add_user(db, "public_author")  # is_private=False por padrão
+    stranger = add_user(db, "another_stranger")
+    recorda = add_recorda(db, public_author)
+
+    resp = client.get(f"{PREFIX}/{recorda.recorda_id}", headers=auth_headers(stranger))
+
+    assert resp.status_code == 200
+    assert resp.json()["recorda_id"] == str(recorda.recorda_id)
+
+
 def test_update_recorda_changes_only_description(client, db, auth, common_user):
     recorda = add_recorda(db, common_user)
     resp = client.put(
@@ -203,3 +274,23 @@ def create_payload(**overrides) -> dict:
     }
     payload.update(overrides)
     return payload
+
+
+def test_delete_recorda_removes_likes_and_soft_deletes_comments(
+    client, db, auth, common_user
+):
+    recorda = add_recorda(db, common_user)
+    liker = add_user(db, "liker")
+    db.add(RecordaLike(user_id=liker.user_id, recorda_id=recorda.recorda_id))
+    comment = RecordaComment(
+        user_id=liker.user_id, recorda_id=recorda.recorda_id, content="Oi!"
+    )
+    db.add(comment)
+    db.commit()
+
+    resp = client.delete(f"{PREFIX}/{recorda.recorda_id}", headers=auth)
+    assert resp.status_code == 204
+
+    assert db.get(RecordaLike, (liker.user_id, recorda.recorda_id)) is None
+    db.refresh(comment)
+    assert comment.deleted_at is not None

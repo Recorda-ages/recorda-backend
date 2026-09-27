@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin_user, get_current_user
@@ -12,12 +12,51 @@ from app.schemas.music_preference import (
     MusicPreferencesCreate,
     MusicPreferencesRead,
 )
-from app.schemas.user import UserChangeRole, UserCreate, UserRead, UserUpdate
+from app.schemas.user import (
+    SuggestedUser,
+    UserChangeRole,
+    UserCreate,
+    UserProfileRead,
+    UserRead,
+    UserSearchResult,
+    UserUpdate,
+)
 from app.services import follow_service, music_preference_service, user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 _current_admin = Depends(get_current_admin_user)
+
+
+@router.get("/search", response_model=list[UserSearchResult])
+def search_users(
+    q: str = Query(default=""),
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[UserSearchResult]:
+    return user_service.search_by_username(db, q, current_user.user_id)
+
+
+@router.get("/suggestions", response_model=list[SuggestedUser])
+def suggest_users(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[SuggestedUser]:
+    return user_service.suggest_by_affinity(db, current_user.user_id)
+
+
+@router.get("/me/profile", response_model=UserProfileRead)
+def get_own_profile(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserProfileRead:
+    try:
+        return user_service.get_own_profile(db, current_user)
+    except user_service.IncompleteProfileError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Complete o onboarding musical para acessar o perfil.",
+        ) from exc
 
 
 @router.get("", response_model=list[UserRead], dependencies=[_current_admin])

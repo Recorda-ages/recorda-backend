@@ -1,7 +1,7 @@
-from typing import Literal
-
 from pydantic import BaseModel
+
+from app.schemas.user import FollowStatus
 
 
 class FollowMutationResult(BaseModel):
-    follow_status: Literal["nenhuma", "seguindo", "solicitado"]
+    follow_status: FollowStatus

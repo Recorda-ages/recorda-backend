@@ -194,6 +194,97 @@ docker compose down -v
 
 Use `down -v` somente quando realmente quiser recriar o banco do zero.
 
+## Seed do banco de dados
+
+O projeto inclui um script de seed que popula o banco com dados iniciais para desenvolvimento:
+
+- 18 gêneros musicais canônicos;
+- 10 perfis completos, com fotos, música preferida e preferências musicais;
+- 20 Recordas com fotos/vídeos públicos e snapshots reais do Deezer;
+- 29 relações de follow, incluindo relações aceitas e pendentes;
+- 40 likes e 20 comentários;
+- uma conta administrativa separada (`role=ADMIN`).
+
+O seed é idempotente: executar o comando novamente não duplica os fixtures. Ele
+restaura usuários, Recordas e comentários determinísticos que sofreram exclusão
+lógica, reconcilia status, roles, senhas e timestamps dos fixtures com o estado
+esperado para usuários e interações sociais, e preenche campos ausentes dos perfis
+de demonstração sem substituir valores já preenchidos. Dados que não pertencem ao
+seed são preservados. A atualização também aplica exclusão lógica somente aos dois
+Recordas com `exemplo.com` gerados pela versão anterior. O comando recusa execução
+quando `ENVIRONMENT=production`.
+
+### Executar com Docker (recomendado)
+
+Com os containers em execução, rode o seed dentro do container da API:
+
+```bash
+docker compose exec api python scripts/seed.py
+```
+
+Se os containers ainda não estiverem rodando, suba o ambiente primeiro:
+
+```bash
+docker compose up -d --build
+docker compose exec api python scripts/seed.py
+```
+
+O entrypoint do container aplica `alembic upgrade head` ao iniciar. Caso a API não
+esteja em execução, aplique as migrations antes de chamar o script.
+
+### Executar sem Docker
+
+Com o ambiente virtual ativado e o PostgreSQL acessível:
+
+```bash
+alembic upgrade head
+python scripts/seed.py
+```
+
+O mesmo script pode apontar para um projeto Supabase de desenvolvimento por meio de
+`DATABASE_URL`:
+
+```bash
+DATABASE_URL='postgresql+psycopg://USUARIO:SENHA@HOST:5432/postgres?sslmode=require' \
+python scripts/seed.py
+```
+
+Nunca configure uma URL de produção para executar o seed.
+
+### Contas criadas pelo seed
+
+| Conta | Username | Senha padrão | Role |
+| ----- | -------- | ------------ | ---- |
+| Administrador | `admin` | `Admin@1234` | `ADMIN` |
+| Demonstração principal | `gabriel` | `User@1234` | `USER` |
+| Perfis adicionais | `ana`, `lucas`, `marina`, `pedro`, `julia`, `rafael`, `camila`, `bruno`, `beatriz` | `User@1234` | `USER` |
+
+O login da API utiliza `username`, não e-mail. As senhas podem ser alteradas no
+`.env` antes de subir os containers:
+
+```ini
+SEED_USER_PASSWORD=uma-senha-local
+SEED_ADMIN_PASSWORD=outra-senha-local
+```
+
+As senhas configuradas são reconciliadas em todas as execuções do seed. Portanto,
+alterar uma dessas variáveis e executar o comando novamente atualiza a senha das
+respectivas contas de demonstração e administrativa.
+
+Depois do login, o frontend pode consumir os fixtures diretamente pelos endpoints:
+
+- `GET /api/v1/feed/following` para o feed;
+- `GET /api/v1/users/me/profile` para foto, música, preferências e Recordas do
+  perfil autenticado.
+
+Para recriar o banco do zero e rodar o seed novamente:
+
+```bash
+docker compose down -v
+docker compose up -d --build
+docker compose exec api python scripts/seed.py
+```
+
 ## Desenvolvimento sem Docker
 
 O ambiente Docker é o procedimento recomendado para o projeto. Ainda assim, o backend pode ser executado diretamente com Python caso seja necessário.

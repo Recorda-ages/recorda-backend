@@ -3,7 +3,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, feed, health, media, music, recorda, user
+from app.api.routes import (
+    auth,
+    comment,
+    feed,
+    follow,
+    general_feed,
+    health,
+    media,
+    music,
+    notification,
+    recorda,
+    user,
+)
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 
@@ -20,7 +32,16 @@ tags_metadata = [
         "name": "users",
         "description": "Gerenciamento de usuários (acesso administrativo).",
     },
+    {
+        "name": "follows",
+        "description": "Listas de Seguidores/Seguindo e remoção de um seguidor.",
+    },
+    {"name": "comments", "description": "Comentários em Recordas."},
     {"name": "health", "description": "Verificação de saúde da aplicação."},
+    {
+        "name": "notifications",
+        "description": "Central de Notificações do usuário autenticado.",
+    },
 ]
 
 app = FastAPI(
@@ -51,6 +72,10 @@ app.include_router(music.router, prefix="/api/v1")
 app.include_router(recorda.router, prefix="/api/v1")
 app.include_router(media.router, prefix="/api/v1")
 app.include_router(feed.router, prefix="/api/v1")
+app.include_router(notification.router, prefix="/api/v1")
+app.include_router(follow.router, prefix="/api/v1")
+app.include_router(general_feed.router, prefix="/api/v1")
+app.include_router(comment.router, prefix="/api/v1")
 
 
 @app.get("/api/v1")
