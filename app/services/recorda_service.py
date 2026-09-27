@@ -79,20 +79,11 @@ def get_by_id_for_viewer(
             2) conta pública é visível pra qualquer usuário autenticado;
             3) conta privada só é visível pro próprio autor ou por um seguidor com vínculo ACCEPTED.
     """
-    recorda = recorda_repository.get_by_id(db, recorda_id)
+    recorda = get_viewable_recorda(db, recorda_id, viewer)
     if recorda is None:
         return None
 
     author = user_repository.get_by_id(db, recorda.user_id)
-    if author is None or author.status != STATUS_ACTIVE:
-        return None
-
-    is_author = author.user_id == viewer.user_id
-    if not is_author and author.is_private:
-        if not follow_repository.is_accepted_follower(
-            db, viewer.user_id, author.user_id
-        ):
-            raise RecordaAccessDeniedError
 
     likes_count = recorda_like_repository.count_for_recorda(db, recorda.recorda_id)
 
@@ -114,3 +105,22 @@ def get_by_id_for_viewer(
         created_at=recorda.created_at,
         likes_count=likes_count,
     )
+
+
+def get_viewable_recorda(
+    db: Session, recorda_id: UUID, viewer: AppUser
+) -> Recorda | None:
+    recorda = recorda_repository.get_by_id(db, recorda_id)
+    if recorda is None:
+        return None
+
+    author = user_repository.get_by_id(db, recorda.user_id)
+    if author is None or author.status != STATUS_ACTIVE:
+        return None
+
+    if author.user_id != viewer.user_id and author.is_private:
+        if not follow_repository.is_accepted_follower(
+            db, viewer.user_id, author.user_id
+        ):
+            raise RecordaAccessDeniedError
+    return recorda
