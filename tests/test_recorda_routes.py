@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 
+from app.models import RecordaComment, RecordaLike
 from tests.factories import add_follow, add_recorda, add_user, auth_headers
 
 PREFIX = "/api/v1/recordas"
@@ -273,3 +274,23 @@ def create_payload(**overrides) -> dict:
     }
     payload.update(overrides)
     return payload
+
+
+def test_delete_recorda_removes_likes_and_soft_deletes_comments(
+    client, db, auth, common_user
+):
+    recorda = add_recorda(db, common_user)
+    liker = add_user(db, "liker")
+    db.add(RecordaLike(user_id=liker.user_id, recorda_id=recorda.recorda_id))
+    comment = RecordaComment(
+        user_id=liker.user_id, recorda_id=recorda.recorda_id, content="Oi!"
+    )
+    db.add(comment)
+    db.commit()
+
+    resp = client.delete(f"{PREFIX}/{recorda.recorda_id}", headers=auth)
+    assert resp.status_code == 204
+
+    assert db.get(RecordaLike, (liker.user_id, recorda.recorda_id)) is None
+    db.refresh(comment)
+    assert comment.deleted_at is not None

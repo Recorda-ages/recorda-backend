@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.models import AppUser, Recorda
 from app.models.app_user import STATUS_ACTIVE
 from app.repositories import (
+    comment_repository,
     follow_repository,
     recorda_like_repository,
     recorda_repository,
@@ -52,6 +53,8 @@ def delete(db: Session, recorda_id: UUID, author: AppUser) -> bool:
     recorda = _get_owned(db, recorda_id, author)
     if recorda is None:
         return False
+    recorda_like_repository.delete_all_for_recorda(db, recorda_id)
+    comment_repository.soft_delete_all_for_recorda(db, recorda_id)
     recorda_repository.soft_delete(db, recorda)
     return True
 
