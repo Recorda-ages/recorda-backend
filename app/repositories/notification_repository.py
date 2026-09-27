@@ -4,7 +4,12 @@ from sqlalchemy import Row, Select, delete, func, or_, select, update
 from sqlalchemy.orm import Session, aliased
 
 from app.models.app_user import AppUser
-from app.models.notification import TYPE_FOLLOW_REQUEST, TYPE_LIKE, Notification
+from app.models.notification import (
+    TYPE_COMMENT,
+    TYPE_FOLLOW_REQUEST,
+    TYPE_LIKE,
+    Notification,
+)
 from app.models.recorda import Recorda
 
 Sender = aliased(AppUser)
@@ -87,6 +92,25 @@ def create_like(
         sender_id=sender_id,
         recorda_id=recorda_id,
         type=TYPE_LIKE,
+    )
+    db.add(notification)
+    return notification
+
+
+def create_comment(
+    db: Session,
+    *,
+    recipient_id: UUID,
+    sender_id: UUID,
+    recorda_id: UUID,
+    comment_id: UUID,
+) -> Notification:
+    notification = Notification(
+        recipient_id=recipient_id,
+        sender_id=sender_id,
+        recorda_id=recorda_id,
+        comment_id=comment_id,
+        type=TYPE_COMMENT,
     )
     db.add(notification)
     return notification

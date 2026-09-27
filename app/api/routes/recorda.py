@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models import AppUser
+from app.schemas.comment import CommentCreate, CommentRead
 from app.schemas.recorda import (
     RecordaCreate,
     RecordaDetail,
@@ -14,7 +15,7 @@ from app.schemas.recorda import (
     RecordaRead,
     RecordaUpdate,
 )
-from app.services import recorda_like_service, recorda_service
+from app.services import comment_service, recorda_like_service, recorda_service
 
 router = APIRouter(prefix="/recordas", tags=["recordas"])
 
@@ -52,6 +53,41 @@ def get_recorda(
     if recorda is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
     return recorda
+
+
+@router.get("/{recorda_id}/comments", response_model=list[CommentRead])
+def list_comments(
+    recorda_id: UUID,
+    current_user: Annotated[AppUser, _current_user],
+    db: Session = Depends(get_db),
+) -> list[CommentRead]:
+    try:
+        comments = comment_service.list_for_recorda(db, recorda_id, current_user)
+    except recorda_service.RecordaAccessDeniedError as exc:
+        raise _access_denied_error() from exc
+    if comments is None:
+        raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
+    return comments
+
+
+@router.post(
+    "/{recorda_id}/comments",
+    response_model=CommentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_comment(
+    recorda_id: UUID,
+    payload: CommentCreate,
+    current_user: Annotated[AppUser, _current_user],
+    db: Session = Depends(get_db),
+) -> CommentRead:
+    try:
+        comment = comment_service.create(db, recorda_id, current_user, payload.content)
+    except recorda_service.RecordaAccessDeniedError as exc:
+        raise _access_denied_error() from exc
+    if comment is None:
+        raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
+    return comment
 
 
 @router.post("/{recorda_id}/likes", response_model=RecordaLikeState)

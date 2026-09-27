@@ -6,13 +6,26 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
-from app.models import RecordaComment
+from app.models import AppUser, RecordaComment
 from app.repositories._query import only_live
 
 
 def get_by_id(db: Session, comment_id: UUID) -> RecordaComment | None:
     stmt = select(RecordaComment).where(RecordaComment.comment_id == comment_id)
     return db.scalars(only_live(stmt, RecordaComment)).first()
+
+
+def list_for_recorda(db: Session, recorda_id: UUID):
+    stmt = (
+        select(RecordaComment, AppUser.username, AppUser.profile_picture_url)
+        .join(AppUser, AppUser.user_id == RecordaComment.user_id)
+        .where(
+            RecordaComment.recorda_id == recorda_id,
+            RecordaComment.deleted_at.is_(None),
+        )
+        .order_by(RecordaComment.created_at, RecordaComment.comment_id)
+    )
+    return db.execute(stmt).all()
 
 
 def soft_delete(db: Session, comment: RecordaComment) -> None:
