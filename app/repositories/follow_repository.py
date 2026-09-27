@@ -1,6 +1,7 @@
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, delete, select
+from sqlalchemy import ColumnElement, Select, select
+from sqlalchemy import delete as delete_stmt
 from sqlalchemy.orm import Session
 
 from app.models.app_user import STATUS_ACTIVE, AppUser
@@ -47,6 +48,31 @@ def _page(db: Session, stmt: Select, limit: int, offset: int) -> list[AppUser]:
     return list(db.scalars(stmt.limit(limit).offset(offset)))
 
 
+def get_by_id(db: Session, follow_id: UUID) -> Follow | None:
+    stmt = select(Follow).where(Follow.follow_id == follow_id)
+    return db.scalars(stmt).first()
+
+
+def get_by_users(db: Session, follower_id: UUID, following_id: UUID) -> Follow | None:
+    stmt = select(Follow).where(
+        Follow.follower_id == follower_id,
+        Follow.following_id == following_id,
+    )
+    return db.scalars(stmt).first()
+
+
+def create(db: Session, follow: Follow) -> Follow:
+    db.add(follow)
+    db.flush()
+    db.refresh(follow)
+    return follow
+
+
+def delete(db: Session, follow: Follow) -> None:
+    db.delete(follow)
+    db.commit()
+
+
 def list_followers(
     db: Session, owner_id: UUID, *, q: str | None, limit: int, offset: int
 ) -> list[AppUser]:
@@ -84,7 +110,7 @@ def is_accepted_follower(db: Session, follower_id: UUID, following_id: UUID) -> 
 
 def remove_follower(db: Session, *, follower_id: UUID, following_id: UUID) -> bool:
     """Apaga o vínculo aceito. Retorna False se ele não existia."""
-    stmt = delete(Follow).where(
+    stmt = delete_stmt(Follow).where(
         Follow.follower_id == follower_id,
         Follow.following_id == following_id,
         Follow.status == STATUS_ACCEPTED,

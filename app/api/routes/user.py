@@ -7,6 +7,7 @@ from app.api.deps import get_current_admin_user, get_current_user
 from app.api.routes.auth import user_already_exists_error
 from app.db.session import get_db
 from app.models import AppUser
+from app.schemas.follow_mutation import FollowMutationResult
 from app.schemas.music_preference import (
     MusicPreferencesCreate,
     MusicPreferencesRead,
@@ -20,7 +21,7 @@ from app.schemas.user import (
     UserSearchResult,
     UserUpdate,
 )
-from app.services import music_preference_service, user_service
+from app.services import follow_service, music_preference_service, user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -121,3 +122,40 @@ def save_music_preferences(
 ) -> MusicPreferencesRead:
     """Persist the onboarding selection of the authenticated user."""
     return music_preference_service.replace_for_user(db, current_user, payload)
+
+
+@router.post("/{user_id}/follow", response_model=FollowMutationResult)
+def create_follow(
+    user_id: UUID,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FollowMutationResult:
+    try:
+        follow_status = follow_service.create_follow(db, user_id, current_user)
+    except follow_service.SelfFollowError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Você não pode seguir a si mesmo.",
+        ) from exc
+    except follow_service.DuplicateFollowError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Você já segue ou solicitou seguir este usuário.",
+        ) from exc
+    except follow_service.FollowTargetNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    return FollowMutationResult(follow_status=follow_status)
+
+
+@router.delete("/{user_id}/follow", response_model=FollowMutationResult)
+def delete_follow(
+    user_id: UUID,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FollowMutationResult:
+    if not follow_service.delete_follow(db, user_id, current_user):
+        raise HTTPException(status_code=404, detail="Você não segue este usuário.")
+    return FollowMutationResult(follow_status="nenhuma")
