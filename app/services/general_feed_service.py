@@ -36,7 +36,9 @@ def _get_eligible_author_ids(db: Session, current_user_id: UUID) -> list[UUID]:
         if calculate_affinity(db, current_user_id, candidate_id) > 0
     ]
 
-    return list(set(followed_ids) | set(discovery_ids))
+    # A própria Recorda deve aparecer no feed após a publicação, sem exigir
+    # follow ou afinidade musical com o próprio autor.
+    return list(set(followed_ids) | set(discovery_ids) | {current_user_id})
 
 
 def _build_page(rows: list[Row], limit: int) -> FeedPage:

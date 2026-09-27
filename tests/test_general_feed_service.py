@@ -60,8 +60,10 @@ class TestGetGeneralFeedFlow:
         discovery.assert_not_called()
         mock_db.execute.assert_not_called()
 
-    def test_returns_empty_page_without_querying_feed_when_no_author_eligible(self):
+    def test_queries_own_recordas_when_no_external_author_is_eligible(self):
         mock_db = MagicMock()
+        current_user_id = uuid.uuid4()
+        mock_db.execute.return_value.all.return_value = []
 
         with (
             patch.object(
@@ -73,12 +75,16 @@ class TestGetGeneralFeedFlow:
                 return_value=[uuid.uuid4(), uuid.uuid4()],
             ),
             patch.object(general_feed_service, "calculate_affinity", return_value=0.0),
+            patch.object(
+                general_feed_repository, "get_general_feed_query"
+            ) as feed_query,
         ):
-            page = get_general_feed(mock_db, uuid.uuid4(), cursor=None, limit=20)
+            page = get_general_feed(mock_db, current_user_id, cursor=None, limit=20)
 
         assert page.items == []
         assert page.next_cursor is None
-        mock_db.execute.assert_not_called()
+        feed_query.assert_called_once_with(current_user_id, [current_user_id])
+        mock_db.execute.assert_called_once()
 
     def test_followed_authors_reach_the_feed_query_without_calculating_affinity(self):
         current_user_id = uuid.uuid4()
@@ -105,7 +111,7 @@ class TestGetGeneralFeedFlow:
             get_general_feed(mock_db, current_user_id, cursor=None, limit=20)
 
         mock_affinity.assert_not_called()
-        feed_query.assert_called_once_with(current_user_id, [followed_author])
+        assert set(feed_query.call_args.args[1]) == {followed_author, current_user_id}
 
     def test_only_discovery_authors_with_affinity_reach_the_feed_query(self):
         current_user_id = uuid.uuid4()
@@ -136,7 +142,7 @@ class TestGetGeneralFeedFlow:
         ):
             get_general_feed(mock_db, current_user_id, cursor=None, limit=20)
 
-        feed_query.assert_called_once_with(current_user_id, [with_affinity])
+        assert set(feed_query.call_args.args[1]) == {with_affinity, current_user_id}
 
     def test_requests_one_extra_row_for_pagination_lookahead(self):
         mock_db = MagicMock()
@@ -208,6 +214,14 @@ def _feed_author_ids(db, current_user):
 
 
 class TestGetGeneralFeedIntegration:
+    def test_author_sees_own_recorda_without_follows_or_music_profile(self, db):
+        viewer = add_user(db, "viewer")
+        recorda = add_recorda(db, viewer)
+
+        page = get_general_feed(db, viewer.user_id, cursor=None, limit=20)
+
+        assert [item.recorda_id for item in page.items] == [recorda.recorda_id]
+
     def test_applies_access_and_affinity_rules_together(self, db):
         viewer = add_user(db, "viewer")
         _add_favorite_genre(db, viewer, ROCK_GENRE_ID)
@@ -233,20 +247,20 @@ class TestGetGeneralFeedIntegration:
         add_follow(db, viewer, private_followed)
         add_follow(db, viewer, private_pending, status=STATUS_PENDING)
         add_follow(db, viewer, followed_without_affinity)
-        add_recorda(db, viewer)  # o próprio post nunca entra
+        add_recorda(db, viewer)
 
         assert _feed_author_ids(db, viewer) == {
             public_with_affinity.user_id,
             private_followed.user_id,
             followed_without_affinity.user_id,
             artist_only_affinity.user_id,
+            viewer.user_id,
         }
         # Referências explícitas aos excluídos, para deixar claro o que a regra barra.
         excluded = {
             public_without_affinity.user_id,
             private_not_followed.user_id,
             private_pending.user_id,
-            viewer.user_id,
         }
         assert excluded.isdisjoint(_feed_author_ids(db, viewer))
 
