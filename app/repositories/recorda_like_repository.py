@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.orm import Session
 
 from app.models.recorda_like import RecordaLike
@@ -43,6 +43,16 @@ def count_for_recorda(db: Session, recorda_id: UUID) -> int:
         .where(RecordaLike.recorda_id == recorda_id)
     )
     return int(db.scalar(statement) or 0)
+
+
+def is_liked_by_user(db: Session, *, user_id: UUID, recorda_id: UUID) -> bool:
+    statement = select(
+        exists().where(
+            RecordaLike.user_id == user_id,
+            RecordaLike.recorda_id == recorda_id,
+        )
+    )
+    return bool(db.scalar(statement))
 
 
 def delete_all_for_recorda(db: Session, recorda_id: UUID) -> None:
