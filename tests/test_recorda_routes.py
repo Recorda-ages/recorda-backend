@@ -60,6 +60,18 @@ def test_create_recorda_returns_201(client, auth, common_user):
     assert "deleted_at" not in body
 
 
+def test_created_recorda_appears_in_own_general_feed(client, auth):
+    created = client.post(PREFIX, json=create_payload(), headers=auth)
+    assert created.status_code == 201
+
+    feed = client.get("/api/v1/feed/general", headers=auth)
+
+    assert feed.status_code == 200
+    assert [item["recorda_id"] for item in feed.json()["items"]] == [
+        created.json()["recorda_id"]
+    ]
+
+
 def test_create_recorda_accepts_missing_cover_and_preview(client, auth):
     payload = create_payload()
     payload.pop("song_cover_url")

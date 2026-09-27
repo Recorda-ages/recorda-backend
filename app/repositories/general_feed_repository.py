@@ -77,7 +77,7 @@ def get_candidate_author_ids(db: Session, current_user_id: UUID) -> list[UUID]:
     stmt = select(AppUser.user_id).where(
         AppUser.deleted_at.is_(None),
         AppUser.status == STATUS_ACTIVE,
-        # O próprio post não entra: o app o exibe localmente logo após a publicação.
+        # Esta lista é de candidatos externos; o service inclui o autor atual.
         AppUser.user_id != current_user_id,
         _is_visible_to_user_condition(current_user_id),
     )
