@@ -54,7 +54,8 @@ def test_create_recorda_returns_201(client, auth, common_user):
     assert body["deezer_track_id"] == "3135556"
     assert body["song_artist_name"] == "Disturbed"
     assert body["song_cover_url"] == "https://e.deezer.com/cover.jpg"
-    assert body["song_preview_url"] == "https://cdns-preview.deezer.com/p.mp3"
+    # The stored Deezer link expires; the response points at the route that renews it.
+    assert body["song_preview_url"] == "/api/v1/music/tracks/3135556/preview"
     assert body["description"] == "Show incrível"
     assert body["created_at"]
     assert "deleted_at" not in body

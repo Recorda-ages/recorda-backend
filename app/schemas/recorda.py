@@ -2,7 +2,9 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.core.music_preview import public_preview_url
 
 MediaType = Literal["PHOTO", "VIDEO"]
 
@@ -41,6 +43,14 @@ class RecordaRead(BaseModel):
     song_cover_url: str
     song_preview_url: str | None
     created_at: datetime
+
+    @model_validator(mode="after")
+    def _serve_preview_through_api(self) -> "RecordaRead":
+        # The stored Deezer link expires; responses carry the API route that renews it.
+        self.song_preview_url = public_preview_url(
+            self.deezer_track_id, self.song_preview_url
+        )
+        return self
 
 
 class RecordaAuthor(BaseModel):

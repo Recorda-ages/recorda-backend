@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.core.http import get_deezer_client
 from app.main import app
 from app.services import music_service
+from tests.factories import auth_headers as make_auth_headers
 
 GENRES_RESPONSE = {
     "data": [
@@ -125,6 +126,97 @@ def error_client():
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.pop(get_deezer_client, None)
+
+
+PREVIEW_PATH = "/api/v1/music/tracks/{}/preview"
+
+
+@pytest.fixture
+def preview_client(client: TestClient, common_user):
+    """App client with a fake Deezer and the headers of a logged-in user."""
+    music_service._preview_cache.clear()
+    fake = FakeDeezerClient(
+        {
+            "/track/10": {
+                "id": 10,
+                "preview": "https://cdnt-preview.dzcdn.net/fresh.mp3",
+            },
+            "/track/11": {"id": 11, "preview": ""},
+            "/track/99": {"error": {"type": "DataException", "code": 800}},
+        }
+    )
+
+    def _override():
+        yield fake
+
+    app.dependency_overrides[get_deezer_client] = _override
+    yield client, fake, make_auth_headers(common_user)
+    app.dependency_overrides.pop(get_deezer_client, None)
+    music_service._preview_cache.clear()
+
+
+def test_track_preview_requires_login(preview_client):
+    client, fake, _ = preview_client
+    resp = client.get(PREVIEW_PATH.format(10))
+    assert resp.status_code == 401
+    assert fake.calls == []
+
+
+def test_track_preview_returns_fresh_deezer_link(preview_client):
+    client, _, headers = preview_client
+    resp = client.get(PREVIEW_PATH.format(10), headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == {"preview_url": "https://cdnt-preview.dzcdn.net/fresh.mp3"}
+
+
+def test_track_preview_is_cached_between_requests(preview_client):
+    client, fake, headers = preview_client
+    client.get(PREVIEW_PATH.format(10), headers=headers)
+    client.get(PREVIEW_PATH.format(10), headers=headers)
+    assert [path for path, _ in fake.calls] == ["/track/10"]
+
+
+def test_track_preview_refetches_after_cache_expires(preview_client, monkeypatch):
+    client, fake, headers = preview_client
+    client.get(PREVIEW_PATH.format(10), headers=headers)
+    now = music_service.time.monotonic()
+    monkeypatch.setattr(
+        music_service.time,
+        "monotonic",
+        lambda: now + music_service.PREVIEW_CACHE_SECONDS + 1,
+    )
+    client.get(PREVIEW_PATH.format(10), headers=headers)
+    assert [path for path, _ in fake.calls] == ["/track/10", "/track/10"]
+
+
+@pytest.mark.parametrize("track_id", ["11", "99"])
+def test_track_preview_404_when_deezer_has_no_preview(preview_client, track_id):
+    client, _, headers = preview_client
+    resp = client.get(PREVIEW_PATH.format(track_id), headers=headers)
+    assert resp.status_code == 404
+
+
+def test_track_preview_rejects_non_numeric_ids(preview_client):
+    client, fake, headers = preview_client
+    resp = client.get(PREVIEW_PATH.format("abc"), headers=headers)
+    assert resp.status_code == 422
+    assert fake.calls == []
+
+
+def test_track_preview_returns_502_when_deezer_fails(client: TestClient, common_user):
+    music_service._preview_cache.clear()
+
+    def _override():
+        yield FakeErrorClient()
+
+    app.dependency_overrides[get_deezer_client] = _override
+    try:
+        resp = client.get(
+            PREVIEW_PATH.format(10), headers=make_auth_headers(common_user)
+        )
+    finally:
+        app.dependency_overrides.pop(get_deezer_client, None)
+    assert resp.status_code == 502
 
 
 def test_genres_returns_list(music_client: TestClient):

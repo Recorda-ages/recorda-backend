@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.core.media_validation import detect_content_type, is_size_allowed
+from app.core.mp4_faststart import move_moov_to_front
 from app.repositories import media_storage_repository
 from app.schemas.media import MediaUploadResponse
 
@@ -34,6 +35,9 @@ def upload_media(db: Session, content: bytes) -> MediaUploadResponse:
 
     if not is_size_allowed(len(content)):
         raise MediaTooLargeError()
+
+    if content_type == "video/mp4":
+        content = move_moov_to_front(content)
 
     filename = f"{uuid.uuid4()}.{_EXTENSIONS[content_type]}"
 

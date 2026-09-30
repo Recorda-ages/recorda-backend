@@ -26,10 +26,11 @@ def _make_row(**overrides):
         media_url="https://example.com/media.jpg",
         media_type="PHOTO",
         description="uma recordação",
+        deezer_track_id="3135556",
         song_title="Song",
         song_artist_name="Artist",
         song_cover_url="https://example.com/cover.jpg",
-        song_preview_url=None,
+        song_preview_url="https://cdns-preview.deezer.com/p.mp3",
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     row = SimpleNamespace(
@@ -90,6 +91,13 @@ class TestToFeedItem:
         assert item.author.profile_picture_url == row.profile_picture_url
         assert item.likes_count == row.likes_count
         assert item.is_liked == row.is_liked
+        assert item.song_preview_url == "/api/v1/music/tracks/3135556/preview"
+
+    def test_leaves_preview_empty_when_the_track_had_none(self):
+        row = _make_row()
+        row.Recorda.song_preview_url = None
+
+        assert _to_feed_item(row).song_preview_url is None
 
 
 class TestGetFollowingFeed:
@@ -123,6 +131,7 @@ class TestGetFollowingFeed:
                     media_url="u",
                     media_type="PHOTO",
                     description=None,
+                    deezer_track_id="1",
                     song_title="s",
                     song_artist_name="a",
                     song_cover_url="c",

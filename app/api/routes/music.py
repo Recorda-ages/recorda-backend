@@ -1,8 +1,9 @@
 import httpx
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
+from app.api.deps import get_current_user
 from app.core.http import get_deezer_client
-from app.schemas.music import ArtistRead, GenreRead, TrackRead
+from app.schemas.music import ArtistRead, GenreRead, TrackPreviewRead, TrackRead
 from app.services import music_service
 
 router = APIRouter(prefix="/music", tags=["music"])
@@ -36,6 +37,24 @@ def get_popular_tracks(
     client: httpx.Client = Depends(get_deezer_client),
 ) -> list[TrackRead]:
     return music_service.get_popular_tracks(client)
+
+
+@router.get(
+    "/tracks/{track_id}/preview",
+    response_model=TrackPreviewRead,
+    dependencies=[Depends(get_current_user)],
+)
+def get_track_preview(
+    track_id: str = Path(pattern=r"^\d+$"),
+    client: httpx.Client = Depends(get_deezer_client),
+) -> TrackPreviewRead:
+    # Requires login because each uncached id costs a call to Deezer. Returns the link
+    # instead of redirecting to it: a player following a redirect would carry the user's
+    # Authorization header over to Deezer.
+    preview_url = music_service.get_track_preview_url(client, track_id)
+    if preview_url is None:
+        raise HTTPException(status_code=404, detail="Prévia indisponível")
+    return TrackPreviewRead(preview_url=preview_url)
 
 
 @router.get("/tracks/search", response_model=list[TrackRead])

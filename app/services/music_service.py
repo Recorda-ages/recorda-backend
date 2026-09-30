@@ -1,6 +1,7 @@
 """Business logic for music: proxies Deezer API and maps responses to schemas."""
 
 import re
+import time
 import unicodedata
 from typing import Any
 
@@ -15,6 +16,11 @@ ARTIST_SEARCH_FETCH_LIMIT = 50
 ARTIST_SEARCH_RESULT_LIMIT = 25
 ARTIST_POPULAR_LIMIT = 25
 TRACK_POPULAR_LIMIT = 25
+
+# Deezer preview links expire ~15 minutes after being issued; cache for less than that.
+PREVIEW_CACHE_SECONDS = 600
+PREVIEW_CACHE_MAX_ENTRIES = 2000
+_preview_cache: dict[str, tuple[float, str]] = {}
 
 _NAME_EXACT = 0
 _NAME_PREFIX = 1
@@ -102,6 +108,27 @@ def search_tracks(client: httpx.Client, q: str) -> list[TrackRead]:
         )
         for t in rank_tracks(data, q)
     ]
+
+
+def get_track_preview_url(client: httpx.Client, track_id: str) -> str | None:
+    now = time.monotonic()
+    cached = _preview_cache.get(track_id)
+    if cached and cached[0] > now:
+        return cached[1]
+
+    try:
+        response = client.get(f"/track/{track_id}")
+        response.raise_for_status()
+    except httpx.HTTPError as err:
+        raise HTTPException(status_code=502, detail=MUSIC_UNAVAILABLE_MESSAGE) from err
+
+    # Unknown ids come back as 200 with an "error" body, so a missing preview covers both.
+    preview = response.json().get("preview") or None
+    if preview:
+        if len(_preview_cache) >= PREVIEW_CACHE_MAX_ENTRIES:
+            _preview_cache.clear()
+        _preview_cache[track_id] = (now + PREVIEW_CACHE_SECONDS, preview)
+    return preview
 
 
 def rank_artists(artists: list[dict[str, Any]], q: str) -> list[dict[str, Any]]:

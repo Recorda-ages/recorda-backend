@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session
 
+from app.core.music_preview import public_preview_url
 from app.repositories.feed_repository import apply_cursor, get_following_feed_query
 from app.schemas.feed import FeedAuthor, FeedItem, FeedPage
 
@@ -29,7 +30,9 @@ def _to_feed_item(row: Row) -> FeedItem:
         song_title=recorda.song_title,
         song_artist_name=recorda.song_artist_name,
         song_cover_url=recorda.song_cover_url,
-        song_preview_url=recorda.song_preview_url,
+        song_preview_url=public_preview_url(
+            recorda.deezer_track_id, recorda.song_preview_url
+        ),
         likes_count=row.likes_count,
         is_liked=row.is_liked,
         created_at=recorda.created_at,

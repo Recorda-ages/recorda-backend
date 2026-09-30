@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.music_preview import track_preview_path
 from app.core.security import hash_password, verify_password
 from app.core.time import now_utc
 from app.db.development_seed_data import (
@@ -163,7 +164,9 @@ def _seed_user(
             fav_song_title=favorite_track.title,
             fav_song_artist_name=favorite_track.artist_name,
             fav_song_cover_url=favorite_track.cover_url,
-            fav_song_preview_url=None,
+            # Seed tracks all have Deezer previews; the stored value only marks that
+            # (responses expose a route that renews the expiring Deezer link).
+            fav_song_preview_url=track_preview_path(favorite_track.deezer_track_id),
             created_at=SEED_USER_CREATED_AT,
         )
         db.add(user)
@@ -332,7 +335,7 @@ def _seed_recordas(db: Session, users_by_username: dict[str, AppUser]) -> int:
                 song_title=track.title,
                 song_artist_name=track.artist_name,
                 song_cover_url=track.cover_url,
-                song_preview_url=None,
+                song_preview_url=track_preview_path(track.deezer_track_id),
                 created_at=created_at,
             )
         )

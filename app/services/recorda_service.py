@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.music_preview import public_preview_url
 from app.models import AppUser, Recorda
 from app.models.app_user import STATUS_ACTIVE
 from app.repositories import (
@@ -106,7 +107,9 @@ def get_by_id_for_viewer(
         song_title=recorda.song_title,
         song_artist_name=recorda.song_artist_name,
         song_cover_url=recorda.song_cover_url,
-        song_preview_url=recorda.song_preview_url,
+        song_preview_url=public_preview_url(
+            recorda.deezer_track_id, recorda.song_preview_url
+        ),
         created_at=recorda.created_at,
         is_liked=is_liked,
         likes_count=likes_count,

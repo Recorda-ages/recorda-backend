@@ -26,6 +26,7 @@ def _make_row(day: int = 1):
         media_url="https://example.com/media.jpg",
         media_type="PHOTO",
         description=None,
+        deezer_track_id="3135556",
         song_title="Song",
         song_artist_name="Artist",
         song_cover_url="https://example.com/cover.jpg",

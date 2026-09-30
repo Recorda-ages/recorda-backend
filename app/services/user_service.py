@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core import security
+from app.core.music_preview import public_preview_url
 from app.models import AppUser
 from app.models.app_user import ROLE_USER
 from app.models.follow import STATUS_ACCEPTED, STATUS_PENDING
@@ -79,7 +80,9 @@ def get_own_profile(db: Session, user: AppUser) -> UserProfileRead:
             title=user.fav_song_title,
             artist_name=user.fav_song_artist_name,
             cover_url=user.fav_song_cover_url,
-            preview_url=user.fav_song_preview_url,
+            preview_url=public_preview_url(
+                user.fav_song_deezer_track_id, user.fav_song_preview_url
+            ),
         ),
         favorite_genres=[
             ProfileGenre(genre_id=genre.genre_id, name=genre.name) for genre in genres

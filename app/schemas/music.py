@@ -15,6 +15,12 @@ class ArtistRead(BaseModel):
     picture_url: str | None
 
 
+class TrackPreviewRead(BaseModel):
+    """A freshly issued Deezer preview link (Deezer links expire ~15 minutes after issue)."""
+
+    preview_url: str
+
+
 class TrackRead(BaseModel):
     id: int
     title: str
