@@ -4,6 +4,7 @@ from app.models.app_user import AppUser
 from app.models.follow import Follow
 from app.models.genre import Genre
 from app.models.media import Media
+from app.models.moderation_action import ModerationAction
 from app.models.notification import Notification
 from app.models.recorda import Recorda
 from app.models.recorda_comment import RecordaComment
@@ -17,6 +18,7 @@ __all__ = [
     "Follow",
     "Genre",
     "Media",
+    "ModerationAction",
     "Notification",
     "Recorda",
     "RecordaComment",
