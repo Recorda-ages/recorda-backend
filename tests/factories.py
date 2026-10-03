@@ -1,5 +1,5 @@
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -12,11 +12,13 @@ from app.models import (
     Notification,
     Recorda,
     RecordaComment,
+    Report,
     UserFavoriteArtist,
     UserFavoriteGenre,
 )
 from app.models.app_user import ROLE_USER
 from app.models.follow import STATUS_ACCEPTED
+from app.models.report import STATUS_OPEN
 
 
 def add_user(
@@ -72,6 +74,35 @@ def add_comment(
     db.commit()
     db.refresh(comment)
     return comment
+
+
+def add_report(
+    db: Session,
+    reporter: AppUser,
+    *,
+    recorda: Recorda | None = None,
+    reported_user: AppUser | None = None,
+    status: str = STATUS_OPEN,
+    description: str | None = None,
+    created_at: datetime | None = None,
+) -> Report:
+    """Denúncia direta no banco, sem passar pelas rotas do E9."""
+    fields = {}
+    if created_at is not None:
+        fields["created_at"] = created_at
+
+    report = Report(
+        reporter_id=reporter.user_id,
+        recorda_id=recorda.recorda_id if recorda else None,
+        reported_user_id=reported_user.user_id if reported_user else None,
+        status=status,
+        description=description,
+        **fields,
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return report
 
 
 def add_follow(

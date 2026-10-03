@@ -8,6 +8,7 @@ from app.models.notification import Notification
 from app.models.recorda import Recorda
 from app.models.recorda_comment import RecordaComment
 from app.models.recorda_like import RecordaLike
+from app.models.report import Report
 from app.models.user_favorite_artist import UserFavoriteArtist
 from app.models.user_favorite_genre import UserFavoriteGenre
 
@@ -20,6 +21,7 @@ __all__ = [
     "Recorda",
     "RecordaComment",
     "RecordaLike",
+    "Report",
     "UserFavoriteArtist",
     "UserFavoriteGenre",
 ]
