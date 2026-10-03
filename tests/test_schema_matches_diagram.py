@@ -1,7 +1,15 @@
 """The ORM metadata must match the official database diagram (wiki)."""
 
 import pytest
-from sqlalchemy import Boolean, CheckConstraint, DateTime, String, Text, Uuid
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    String,
+    Text,
+    Uuid,
+)
 
 from app.db.seed_data import GENRE_NAMES, GENRE_SEED
 from app.db.session import Base
@@ -63,6 +71,16 @@ DIAGRAM = {
         "created_at": (DateTime, REQUIRED),
         "resolved_at": (DateTime, NULLABLE),
     },
+    "moderation_action": {
+        "action_id": (Uuid, REQUIRED),
+        "admin_id": (Uuid, REQUIRED),
+        "action_type": (String, REQUIRED),
+        "target_user_id": (Uuid, NULLABLE),
+        "target_recorda_id": (Uuid, NULLABLE),
+        "reason": (Text, REQUIRED),
+        "details": (JSON, NULLABLE),
+        "created_at": (DateTime, REQUIRED),
+    },
     "genre": {
         "genre_id": (Uuid, REQUIRED),
         "name": (String, REQUIRED),
@@ -88,6 +106,7 @@ PRIMARY_KEYS = {
     "recorda": {"recorda_id"},
     "recorda_comment": {"comment_id"},
     "report": {"report_id"},
+    "moderation_action": {"action_id"},
     "genre": {"genre_id"},
     "user_favorite_genre": {"user_id", "genre_id"},
     "user_favorite_artist": {"user_id", "deezer_artist_id"},
@@ -101,6 +120,9 @@ FOREIGN_KEYS = {
     ("report", "reported_user_id"): "app_user.user_id",
     ("report", "recorda_id"): "recorda.recorda_id",
     ("report", "comment_id"): "recorda_comment.comment_id",
+    ("moderation_action", "admin_id"): "app_user.user_id",
+    ("moderation_action", "target_user_id"): "app_user.user_id",
+    ("moderation_action", "target_recorda_id"): "recorda.recorda_id",
     ("user_favorite_genre", "user_id"): "app_user.user_id",
     ("user_favorite_genre", "genre_id"): "genre.genre_id",
     ("user_favorite_artist", "user_id"): "app_user.user_id",
@@ -141,6 +163,15 @@ def test_foreign_keys_match_diagram(column, target):
         ("app_user", ("'ACTIVE'", "'SUSPENDED'")),
         ("recorda", ("'PHOTO'", "'VIDEO'")),
         ("report", ("'OPEN'", "'RESOLVED'", "'DISMISSED'")),
+        (
+            "moderation_action",
+            (
+                "'REMOVE_RECORDA'",
+                "'CHANGE_REPORT_STATUS'",
+                "'SUSPEND_USER'",
+                "'REACTIVATE_USER'",
+            ),
+        ),
     ],
 )
 def test_enum_checks_match_diagram(table_name, values):

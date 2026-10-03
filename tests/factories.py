@@ -9,6 +9,7 @@ from app.db.seed_data import GENRE_NAMESPACE
 from app.models import (
     AppUser,
     Follow,
+    ModerationAction,
     Notification,
     Recorda,
     RecordaComment,
@@ -18,6 +19,7 @@ from app.models import (
 )
 from app.models.app_user import ROLE_USER
 from app.models.follow import STATUS_ACCEPTED
+from app.models.moderation_action import ACTION_SUSPEND_USER
 from app.models.report import STATUS_OPEN
 
 
@@ -103,6 +105,37 @@ def add_report(
     db.commit()
     db.refresh(report)
     return report
+
+
+def add_moderation_action(
+    db: Session,
+    admin: AppUser,
+    *,
+    action_type: str = ACTION_SUSPEND_USER,
+    target_user: AppUser | None = None,
+    target_recorda: Recorda | None = None,
+    reason: str = "Motivo de teste",
+    details: dict | None = None,
+    created_at: datetime | None = None,
+) -> ModerationAction:
+    """Ação administrativa direta no banco, sem passar pelos services do E10."""
+    fields = {}
+    if created_at is not None:
+        fields["created_at"] = created_at
+
+    action = ModerationAction(
+        admin_id=admin.user_id,
+        action_type=action_type,
+        target_user_id=target_user.user_id if target_user else None,
+        target_recorda_id=target_recorda.recorda_id if target_recorda else None,
+        reason=reason,
+        details=details,
+        **fields,
+    )
+    db.add(action)
+    db.commit()
+    db.refresh(action)
+    return action
 
 
 def add_follow(

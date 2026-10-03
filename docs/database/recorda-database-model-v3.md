@@ -1,6 +1,6 @@
 # Recorda — Modelo de Dados v3.0 (MVP)
 
-**Status:** Decisões fechadas pelo sênior com adaptações técnicas consolidadas no backend (alinhado ao [ADR 0001](../adr/0001-alinhamento-ao-diagrama-do-banco.md)). Este documento substitui a v2.0 e serve de referência canônica para os models SQLAlchemy, schemas Pydantic e migrations Alembic.
+**Status:** Decisões fechadas pelo sênior com adaptações técnicas consolidadas no backend (alinhado ao [ADR 0001](../adr/0001-alinhamento-ao-diagrama-do-banco.md) e ao [ADR 0002](../adr/0002-trilha-de-auditoria-de-moderacao.md)). Este documento substitui a v2.0 e serve de referência canônica para os models SQLAlchemy, schemas Pydantic e migrations Alembic.
 
 **Escopo.** Isto é um **MVP / POC**. O modelo cobre exatamente o que foi decidido — nada além. Tudo que não foi decidido está **fora do escopo** (ver Parte 7) e pode ser adicionado numa iteração futura sem quebrar o que existe: quase tudo seria coluna ou tabela nova, não migração destrutiva.
 
@@ -11,7 +11,7 @@
 > - Toda PK e FK é `UUID`. No backend, são geradas na aplicação (`uuid.uuid4()`) para compatibilidade com SQLite nos testes, e com `DEFAULT gen_random_uuid()` nas migrations PostgreSQL (D65).
 > - Toda coluna temporal é `TIMESTAMPTZ` (D68). O "dia" do streak é calculado no backend com fuso **fixo `America/Sao_Paulo`** (D41).
 > - Enums são `VARCHAR` + `CHECK` (D67).
-> - **Soft delete** com `deleted_at`. Nunca há `DELETE` físico de conteúdo principal. Toda leitura (feed, perfil, busca, contagens) filtra `deleted_at IS NULL` — filtro simples no backend, sem views (D71).
+> - **Soft delete** com `deleted_at`. Nunca há `DELETE` físico de conteúdo principal. Toda leitura (feed, perfil, busca, contagens) filtra `deleted_at IS NULL` — filtro simples no backend, sem views (D71). A trilha de auditoria `moderation_action` é exceção: append-only, sem `deleted_at`.
 > - Provedor de música único: **Deezer**. O app **nunca** consulta a API do Deezer para renderizar — os dados da música ficam gravados (snapshot) no banco (D1, D9, D11).
 > - Migrações versionadas via **Alembic** (`alembic/`) (D69).
 
@@ -42,11 +42,19 @@
 | `notification` | `comment_id`, `follow_id` (FK opcionais) | D47 |
 | `user_favorite_artist` | `deezer_artist_id`, `artist_name`, `artist_image_url` | D19 (snapshot; sem FK para tabela de artista). |
 
+**Incremento da Sprint 3 — Épicos 09 e 10 (03 out 2026)**
+
+Implementado nas issues **#79** (`report`) e **#83** (`moderation_action`), com as decisões registradas no [ADR 0002](../adr/0002-trilha-de-auditoria-de-moderacao.md).
+
+- `report` é **materializada no schema físico**: a tabela já constava deste contrato, mas não tinha model nem migration. Migration `0007_report`. A constraint de alvo único passou a usar uma expressão portável, e a tabela ganhou dois índices únicos parciais e três índices de consulta.
+- `moderation_action` é **nova**: o estado corrente da Parte 2 passa de 13 para **14 tabelas**. Migration `0008_moderation_action`. Append-only, imutável por trigger no PostgreSQL.
+- **D55 supersedida.** **D71** e **D56** qualificadas. **D51 preservada.**
+
 **Simplificações**
 
 - `report.status` passa de 4 para **3** valores (`OPEN`, `RESOLVED`, `DISMISSED`) — sem `UNDER_REVIEW`.
 - `report` **não** tem coluna de motivo estruturado; só `description` livre e opcional (D51).
-- Sem `MODERATION_ACTION`, sem papel `MODERATOR`, sem tabela `BLOCK` (D55, D54, D37).
+- Sem papel `MODERATOR`, sem tabela `BLOCK` (D54, D37). A decisão D55 (sem `MODERATION_ACTION`) foi **supersedida** no incremento da Sprint 3 — ver a subseção acima e o [ADR 0002](../adr/0002-trilha-de-auditoria-de-moderacao.md).
 - `recorda_mention` **não** tem status de aprovação (D24).
 
 ---
@@ -55,7 +63,7 @@
 
 1. **Snapshot-first.** A busca de música/artista acontece no cliente, contra o Deezer, no momento da escolha. O que interessa (`deezer_track_id`, título, artista principal, capa, preview) é **copiado** para o banco. Não há refresh: o dado é estático (D9). Se a busca ao Deezer falhar na criação de um Recorda, a criação é **bloqueada** — todo Recorda nasce com música resolvida (D10).
 2. **Privacidade vive no perfil, nunca no post.** `app_user.is_private` decide tudo. Não existe visibilidade por Recorda.
-3. **Soft delete universal.** Excluir conta, Recorda ou comentário = preencher `deleted_at`. A moderação usa o mesmo mecanismo (D56). Integridade referencial preservada; o backend filtra.
+3. **Soft delete universal para conteúdo.** Excluir conta, Recorda ou comentário = preencher `deleted_at`. A moderação usa o mesmo mecanismo (D56), agora acompanhado do registro em `moderation_action`. Integridade referencial preservada; o backend filtra. **Exceção:** `moderation_action` é append-only — não tem `deleted_at` e é imutável por trigger.
 4. **Recorda é imutável.** Criado, não se edita (sem `updated_at`). Só se exclui (D27). Comentário idem.
 5. **Regras "quantitativas" são da aplicação, não do banco.** Mínimos do onboarding (1 música, ≥1 gênero, ≥3 artistas), máximos visuais (~5 gêneros, ~10 artistas), limite de marcações (~10) — tudo validado no app (D16, D17, D22).
 6. **Cache derivado explícito.** `user_streak` é um placar recalculável a partir de `streak_activity`, que é a fonte da verdade.
@@ -63,7 +71,7 @@
 
 ---
 
-## Parte 2 — As 13 Tabelas
+## Parte 2 — As 14 Tabelas
 
 ### 1. `app_user`
 
@@ -210,7 +218,7 @@ A entidade central: uma memória musical. Amarra um usuário, uma mídia e o **s
 - Visibilidade derivada de `app_user.is_private`, nunca armazenada aqui.
 - Filtro de perfil por artista = `song_artist_name ILIKE '%texto%'` (D3). Por música = `deezer_track_id`. Por data = `created_at`.
 
-**Deleção.** Soft delete: excluir = setar `deleted_at`; `recorda_like`, `recorda_comment`, `recorda_mention` e `notification` permanecem. A moderação também seta `deleted_at` para remover conteúdo (D56). Toda leitura filtra `deleted_at IS NULL` e checa a conta do autor ativa (D34, D71).
+**Deleção.** Soft delete: excluir = setar `deleted_at`; `recorda_like`, `recorda_comment`, `recorda_mention` e `notification` permanecem. A moderação também seta `deleted_at` para remover conteúdo (D56), registrando a ação em `moderation_action` na mesma transação. Toda leitura filtra `deleted_at IS NULL` e checa a conta do autor ativa (D34, D71).
 
 ---
 
@@ -272,7 +280,7 @@ Comentário de texto em um Recorda.
 
 **Regras (MVP)**
 - Não editável (sem `updated_at`). Comentar é atividade de streak (D42).
-- Soft delete: o autor apaga → `deleted_at`; a moderação também (D56). Preserva o vínculo com `report`.
+- Soft delete: o autor apaga → `deleted_at`; a moderação também (D56), registrando a ação em `moderation_action` na mesma transação. Preserva o vínculo com `report`.
 - Contagem por `COUNT(*)` (D33).
 
 **Deleção.** `CASCADE` a partir de `recorda`. A partir de `app_user`, como contas são soft-deleted, o comentário sobrevive atribuído à conta inativa.
@@ -356,13 +364,53 @@ Caso de moderação aberto por um usuário contra **exatamente um** alvo: outro 
 | created_at | TIMESTAMPTZ | — | Não | |
 | resolved_at | TIMESTAMPTZ | — | Sim | quando foi encerrada |
 
-**Chaves & constraints.** PK `report_id`. `CHECK (num_nonnulls(reported_user_id, recorda_id, comment_id) = 1)` — exatamente um alvo.
+**Chaves & constraints.** PK `report_id`.
+
+- `ck_report_single_target` — exatamente um alvo. Escrita como soma de `CASE WHEN <alvo> IS NOT NULL THEN 1 ELSE 0 END = 1` sobre as três colunas de alvo, e não com `num_nonnulls()`: essa função é exclusiva do PostgreSQL e não existe no SQLite usado pela suíte de testes.
+- `uq_report_reporter_recorda` — índice **único parcial** em `(reporter_id, recorda_id)` com `WHERE recorda_id IS NOT NULL`.
+- `uq_report_reporter_user` — índice **único parcial** em `(reporter_id, reported_user_id)` com `WHERE reported_user_id IS NOT NULL`.
+
+Os dois índices únicos impedem que o mesmo denunciante denuncie o mesmo alvo duas vezes, sem impedir denúncias de alvos diferentes — a cláusula `WHERE` evita a colisão entre as linhas cujo alvo é nulo.
 
 **Regras (MVP)**
-- **Sem motivo estruturado** (sem coluna `reason`, sem ENUM). Só `description` opcional (D51).
-- **Sem tabela de auditoria** (`MODERATION_ACTION` não existe). O admin resolve setando `deleted_at` no `recorda`/`recorda_comment` ou `status = 'SUSPENDED'` no `app_user`, e então `status`/`resolved_at` aqui (D55, D56).
+- **Sem motivo estruturado** (sem coluna `reason`, sem ENUM). Só `description` opcional (D51). O `reason` de `moderation_action` é outro conceito: é o motivo da **decisão do moderador**, não o motivo alegado pelo denunciante — D51 segue valendo aqui.
+- `description` aceita no máximo **500 caracteres**, validado na aplicação (D-04); sem restrição de tamanho no banco.
+- O admin resolve setando `deleted_at` no `recorda`/`recorda_comment` ou `status = 'SUSPENDED'` no `app_user`, e então `status`/`resolved_at` aqui (D56). A ação é registrada em `moderation_action` **na mesma transação** (D55 supersedida — ADR 0002).
 
-**Deleção.** Nunca `CASCADE` que apague um `report`. Com soft delete em `app_user`/`recorda`/`recorda_comment`, o alvo continua existindo para o moderador ver.
+**Deleção.** Uma denúncia nunca é apagada em cascata: as quatro FKs ficam **sem `ondelete`**, isto é `NO ACTION`, o que **bloqueia** o hard delete do registro referenciado. Com soft delete em `app_user`/`recorda`/`recorda_comment`, o alvo continua existindo para o moderador ver.
+
+---
+
+### 14. `moderation_action`
+
+Trilha de auditoria das ações administrativas de moderação: quem agiu, qual ação, sobre qual alvo, quando e por qual motivo. **Append-only e imutável** (ADR 0002).
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| action_id | UUID | PK | Não | |
+| admin_id | UUID | FK → app_user | Não | quem executou a ação |
+| action_type | VARCHAR | — | Não | `CHECK IN ('REMOVE_RECORDA','CHANGE_REPORT_STATUS','SUSPEND_USER','REACTIVATE_USER')` |
+| target_user_id | UUID | FK → app_user | Sim | alvo usuário |
+| target_recorda_id | UUID | FK → recorda | Sim | alvo Recorda |
+| reason | TEXT | — | Não | motivo **obrigatório** da decisão (D-02) |
+| details | JSON | — | Sim | contexto livre, ex.: `{"from":"OPEN","to":"DISMISSED","report_count":3,"target_type":"RECORDA"}` |
+| created_at | TIMESTAMPTZ | — | Não | quando a ação ocorreu |
+
+**Chaves & constraints.** PK `action_id`. FKs `admin_id` e `target_user_id` → `app_user(user_id)`, `target_recorda_id` → `recorda(recorda_id)`, todas **sem `ondelete`**.
+
+- `ck_moderation_action_type` — vocabulário fechado dos quatro `action_type` (D67).
+- `ck_moderation_action_has_target` — `target_user_id IS NOT NULL OR target_recorda_id IS NOT NULL`: **pelo menos um** alvo, diferente de `ck_report_single_target`, que exige exatamente um.
+
+**Regras (MVP)**
+- **Append-only.** Nunca sofre `UPDATE` nem `DELETE`. Sem `updated_at`, sem `deleted_at` — exceção explícita ao soft delete universal (D71).
+- **Imutabilidade imposta no banco.** A migration `0008_moderation_action` cria a função `moderation_action_immutable()` e o trigger `trg_moderation_action_immutable` (`BEFORE UPDATE OR DELETE ... FOR EACH ROW`), que levanta a exceção `moderation_action é imutável`. O trigger é **específico do PostgreSQL**; o SQLite da suíte de testes não tem equivalente.
+- `reason` é obrigatório e aceita no máximo **500 caracteres**, validado na aplicação (D-04); sem restrição de tamanho no banco. O backend normaliza com `strip()` antes de validar e de persistir.
+- `details` é JSON livre, sem schema por `action_type` e sem validação de estrutura.
+- `REMOVE_RECORDA` preenche **os dois** alvos: `target_recorda_id` com a Recorda e `target_user_id` com o autor dela, para que o histórico administrativo da conta saia de uma consulta direta a `target_user_id`.
+- Não há alvo de comentário: `report.comment_id` existe como coluna reservada, mas não há rota de denúncia de comentário no MVP.
+- **Atomicidade.** A mudança de estado administrativa e o registro da auditoria são persistidos no mesmo commit: não há estado alterado sem auditoria, nem auditoria de algo que não aconteceu.
+
+**Deleção.** Nunca. As FKs em `NO ACTION` bloqueiam o hard delete do admin, do usuário-alvo e da Recorda-alvo, e o trigger recusa `DELETE` de linhas da própria trilha.
 
 ---
 
@@ -385,6 +433,9 @@ Caso de moderação aberto por um usuário contra **exatamente um** alvo: outro 
 | recorda | é alvo de | report | 1 : N | — |
 | recorda_comment | é alvo de | report | 1 : N | — |
 | recorda / recorda_comment / follow | deep-link de | notification | 1 : N | — |
+| app_user | executa | moderation_action | 1 : N | — (via `admin_id`) |
+| app_user | é alvo de | moderation_action | 1 : N | — (via `target_user_id`) |
+| recorda | é alvo de | moderation_action | 1 : N | — (via `target_recorda_id`) |
 
 ---
 
@@ -412,6 +463,8 @@ erDiagram
     app_user ||--o{ report : "reporter / reported"
     recorda ||--o{ report : ""
     recorda_comment ||--o{ report : ""
+    app_user ||--o{ moderation_action : "executa / é alvo"
+    recorda ||--o{ moderation_action : ""
 
     app_user {
         uuid user_id PK
@@ -509,6 +562,16 @@ erDiagram
         boolean is_read
         timestamptz created_at
     }
+    moderation_action {
+        uuid action_id PK
+        uuid admin_id FK
+        varchar action_type
+        uuid target_user_id FK
+        uuid target_recorda_id FK
+        text reason
+        json details
+        timestamptz created_at
+    }
     report {
         uuid report_id PK
         uuid reporter_id FK
@@ -537,6 +600,14 @@ Enxutos — nas FKs e nos campos de ordenação/busca:
 - `notification (recipient_id, is_read, created_at DESC)` — central de notificações
 - `user_favorite_genre (genre_id)` e `user_favorite_artist (deezer_artist_id)` — afinidade do Explorar
 - `app_user` — índice **GIN `pg_trgm`** em `username` para a busca de usuários (D75) *(definido nas migrações Alembic)*
+- `report (status, created_at DESC)` — `ix_report_status_created_at`, fila de moderação (E10)
+- `report (recorda_id)` — `ix_report_recorda_id`
+- `report (reported_user_id)` — `ix_report_reported_user_id`
+- `report` — índices **únicos parciais** `uq_report_reporter_recorda` e `uq_report_reporter_user` (ver Parte 2, tabela 13)
+- `moderation_action (created_at DESC)` — `ix_moderation_action_created_at`, leitura cronológica da trilha (US47)
+- `moderation_action (admin_id, created_at DESC)` — `ix_moderation_action_admin_id_created_at`, ações por administrador (US47)
+- `moderation_action (target_user_id)` — `ix_moderation_action_target_user_id`, histórico administrativo da conta (US46)
+- `moderation_action (target_recorda_id)` — `ix_moderation_action_target_recorda_id`, histórico da Recorda (US45)
 
 ---
 
@@ -562,7 +633,7 @@ Itens avaliados e **conscientemente adiados**. Nenhum bloqueia o lançamento; qu
 | Marcações | Aprovação de marcação (status `PENDING`/`ACCEPTED`) |
 | Conteúdo | Edição irrestrita de Recorda e de comentário; contadores desnormalizados de like/comentário; localização/geotag; limites de legenda/vídeo no banco |
 | Streak | Fuso por usuário; recompensas / badges; regra de "voltar a 0 vs 1" (detalhe de aplicação) |
-| Moderação | `MODERATION_ACTION` (auditoria); papel `MODERATOR`; status `UNDER_REVIEW`; motivos estruturados de denúncia (`reason` ENUM) |
+| Moderação | Papel `MODERATOR`; status `UNDER_REVIEW`; motivos estruturados de denúncia (`reason` ENUM) |
 | Conta / LGPD | Login social; anonimização / processo formal de eliminação; reativação de conta; histórico de música preferida; `duration_ms` da faixa |
 | Descoberta | Salvar Recorda de terceiros; feed materializado (fan-out-on-write) |
 
@@ -590,7 +661,7 @@ E: `recorda` (snapshot completo), `recorda_mention` (1 por amigo), `notification
 
 **H · Exportar card para o Instagram.** L: `recorda` (snapshot). E: **nenhuma** — renderização 100% no cliente (D73).
 
-**I · Moderação.** L: `report` (`OPEN`) + alvo. E: `deleted_at` no `recorda`/`recorda_comment` **ou** `app_user.status = 'SUSPENDED'`; depois `report.status` = `RESOLVED`/`DISMISSED` + `resolved_at`.
+**I · Moderação.** L: `report` (`OPEN`) + alvo. E: `deleted_at` no `recorda`/`recorda_comment` **ou** `app_user.status = 'SUSPENDED'`; depois `report.status` = `RESOLVED`/`DISMISSED` + `resolved_at`; e `moderation_action` (admin, tipo, alvo, `reason` obrigatório). A mudança de estado e o registro da auditoria vão no **mesmo commit** — nenhuma das duas escritas sobrevive sem a outra.
 
 **J · Excluir conta.** E: `app_user.deleted_at`. Recordas e comentários permanecem no banco mas somem das telas alheias pelo filtro (D34). Sem anonimização no MVP (D58).
 
