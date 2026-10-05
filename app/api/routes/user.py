@@ -159,3 +159,30 @@ def delete_follow(
     if not follow_service.delete_follow(db, user_id, current_user):
         raise HTTPException(status_code=404, detail="Você não segue este usuário.")
     return FollowMutationResult(follow_status="nenhuma")
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: UUID,
+    db: Session = Depends(get_db)
+) -> None:
+    if not user_service.delete(db, user_id):
+        raise HTTPException(status_code=400, detail="User not found")
+    if user_service.is_admin(db, user_id):
+        raise HTTPException(status_code=403, detail="You cannot delete an admin user.")
+
+@router.post("/users/{user_id}", status_code=status.HTTP_200_OK)
+def suspend_user(
+    user_id: UUID,
+    current_admin: AppUser = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+) -> None:
+    try:
+        user_service.suspend_user(db, user_id, current_admin)
+    except user_service.UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except user_service.UserAlreadySuspendedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except user_service.SelfActionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except user_service.AdminActionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
