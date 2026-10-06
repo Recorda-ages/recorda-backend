@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    admin,
     auth,
     comment,
     feed,
@@ -28,6 +29,12 @@ async def lifespan(app: FastAPI):
 
 
 tags_metadata = [
+    {
+        "name": "admin",
+        "description": (
+            "Moderação: denúncias, usuários e auditoria. Somente administradores."
+        ),
+    },
     {"name": "auth", "description": "Autenticação e sessão do usuário."},
     {
         "name": "users",
@@ -70,6 +77,7 @@ app.add_middleware(
 # Registry for feature routers. Each new module under app/api/routes/
 # should be included here, e.g. from app.api.routes import user; app.include_router(user.router).
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(user.router, prefix="/api/v1")
 app.include_router(music.router, prefix="/api/v1")
