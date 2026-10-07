@@ -16,6 +16,7 @@ from app.api.routes import (
     music,
     notification,
     recorda,
+    report,
     user,
 )
 from app.core.config import settings
@@ -53,6 +54,10 @@ tags_metadata = [
         "name": "notifications",
         "description": "Central de Notificações do usuário autenticado.",
     },
+    {
+        "name": "reports",
+        "description": "Denúncias de conteúdo enviadas pelos usuários.",
+    },
 ]
 
 app = FastAPI(
@@ -89,6 +94,7 @@ app.include_router(follow.router, prefix="/api/v1")
 app.include_router(general_feed.router, prefix="/api/v1")
 app.include_router(follow_request.router, prefix="/api/v1")
 app.include_router(comment.router, prefix="/api/v1")
+app.include_router(report.router, prefix="/api/v1")
 
 
 @app.get("/api/v1")
