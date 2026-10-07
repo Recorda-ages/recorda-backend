@@ -4,6 +4,7 @@ from uuid import UUID
 
 from app.models.app_user import AppUser
 import app.repositories.admin_user_status_repository as set_status, get_for_update
+from sqlalchemy.orm import Session
 
 
 
@@ -31,10 +32,6 @@ def reactivate_user(db: Session, admin_user: AppUser, * , target_user_id: UUID, 
         raise HTTPException(status_code=404, detail=f"User with ID {target_user_id} not found.")
     if user.status != "suspended":
         raise HTTPException(status_code=409, detail=f"User with ID {target_user_id} is not suspended.")
-    if user.id == admin_user.id:
-        raise HTTPException(status_code=400, detail="You cannot reactivate yourself.")
-    if user.role == "admin":
-        raise HTTPException(status_code=403, detail="You cannot reactivate another admin user.")
     try:
         set_status(db, user, "active")
         db.commit()
