@@ -1,5 +1,6 @@
 """Persistence and query access for the AppUser entity."""
 
+from collections.abc import Collection
 from uuid import UUID
 
 from sqlalchemy import select
@@ -97,3 +98,8 @@ def list_suggestion_candidates(db: Session, current_user_id: UUID) -> list[AppUs
         .where(AppUser.user_id.not_in(already_linked))
     )
     return list(db.scalars(only_live(stmt, AppUser)))
+
+
+def list_by_ids(db: Session, user_ids: Collection[UUID]) -> list[AppUser]:
+    """Inclui contas excluídas: a moderação precisa ver o que foi denunciado."""
+    return list(db.scalars(select(AppUser).where(AppUser.user_id.in_(user_ids))))
