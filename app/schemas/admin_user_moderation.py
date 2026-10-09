@@ -1,9 +1,8 @@
-
 from dataclasses import Field
 from pickle import TRUE
-from typing import Optional
-from pydantic import BaseModel
 from wsgiref.validate import validator
+
+from pydantic import BaseModel
 
 
 class SuspendUserRequest(BaseModel):
@@ -14,6 +13,7 @@ class SuspendUserRequest(BaseModel):
     @classmethod
     def strip_reason(cls, value: str) -> str:
         return value.strip()
+
 
 class ReactivateUserRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=500)

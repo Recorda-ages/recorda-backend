@@ -21,7 +21,12 @@ from app.schemas.user import (
     UserSearchResult,
     UserUpdate,
 )
-from app.services import admin_user_moderation_service, follow_service, music_preference_service, user_service
+from app.services import (
+    admin_user_moderation_service,
+    follow_service,
+    music_preference_service,
+    user_service,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -160,15 +165,6 @@ def delete_follow(
         raise HTTPException(status_code=404, detail="Você não segue este usuário.")
     return FollowMutationResult(follow_status="nenhuma")
 
-@router.delete("/users/{user_id}/", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(
-    user_id: UUID,
-    db: Session = Depends(get_db)
-) -> None:
-    if not user_service.delete(db, user_id):
-        raise HTTPException(status_code=400, detail="User not found")
-    if user_service.is_admin(db, user_id):
-        raise HTTPException(status_code=403, detail="You cannot delete an admin user.")
 
 @router.post("/users/{user_id}/suspend", status_code=status.HTTP_200_OK)
 def suspend_user(
@@ -179,14 +175,22 @@ def suspend_user(
     try:
         admin_user_moderation_service.suspend_user(db, user_id, current_admin)
     except user_service.UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"User with ID {user_id} not found.") from exc
+        raise HTTPException(
+            status_code=404, detail=f"User with ID {user_id} not found."
+        ) from exc
     except user_service.SelfActionError as exc:
-        raise HTTPException(status_code=400, detail="You cannot suspend yourself.") from exc
+        raise HTTPException(
+            status_code=400, detail="You cannot suspend yourself."
+        ) from exc
     except user_service.AdminActionError as exc:
-        raise HTTPException(status_code=403, detail="You cannot suspend another admin user.") from exc
+        raise HTTPException(
+            status_code=403, detail="You cannot suspend another admin user."
+        ) from exc
     except user_service.UserAlreadySuspendedError as exc:
-        raise HTTPException(status_code=409, detail=f"User with ID {user_id} is already suspended.") from exc
-   
+        raise HTTPException(
+            status_code=409, detail=f"User with ID {user_id} is already suspended."
+        ) from exc
+
 
 @router.post("/users/{user_id}/reactivate", status_code=status.HTTP_200_OK)
 def reactive_user(
@@ -197,7 +201,10 @@ def reactive_user(
     try:
         admin_user_moderation_service.reactivate_user(db, user_id, current_admin)
     except user_service.UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"User with ID {user_id} not found.") from exc
+        raise HTTPException(
+            status_code=404, detail=f"User with ID {user_id} not found."
+        ) from exc
     except user_service.UserNotSuspendedError as exc:
-        raise HTTPException(status_code=409, detail=f"User with ID {user_id} is not suspended.") from exc
-    
+        raise HTTPException(
+            status_code=409, detail=f"User with ID {user_id} is not suspended."
+        ) from exc
