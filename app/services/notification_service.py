@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.follow import Follow
 from app.models.notification import (
     TYPE_COMMENT,
+    TYPE_CONTENT_REMOVED,
     TYPE_FOLLOW_ACCEPTED,
     TYPE_FOLLOW_REQUEST,
     TYPE_LIKE,
@@ -108,6 +109,15 @@ def notify_mention(
     )
 
 
+def notify_content_removed(db: Session, recorda: Recorda) -> Notification:
+    """Avisa o autor sem commit; a remoção administrativa controla a transação."""
+    return repository.create_content_removed(
+        db,
+        recipient_id=recorda.user_id,
+        recorda_id=recorda.recorda_id,
+    )
+
+
 def _create(
     db: Session,
     *,
@@ -154,4 +164,12 @@ def _to_item(row: Row) -> NotificationItem:
         recorda_id=notification.recorda_id,
         comment_id=notification.comment_id,
         follow_id=notification.follow_id,
+        removal_reason=(
+            row.removal_reason if notification.type == TYPE_CONTENT_REMOVED else None
+        ),
+        recorda_song_title=(
+            row.recorda_song_title
+            if notification.type == TYPE_CONTENT_REMOVED
+            else None
+        ),
     )
