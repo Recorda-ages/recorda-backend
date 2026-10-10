@@ -2,10 +2,11 @@
 
 from uuid import UUID
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, select, update
 from sqlalchemy.orm import Session
 
-from app.models.report import Report
+from app.core.time import now_utc
+from app.models.report import STATUS_OPEN, STATUS_RESOLVED, Report
 
 
 def add(db: Session, report: Report) -> Report:
@@ -34,3 +35,18 @@ def exists_for_user(db: Session, *, reporter_id: UUID, reported_user_id: UUID) -
         )
     )
     return bool(db.scalar(statement))
+
+
+def resolve_open_user_reports(db: Session, user_id: UUID) -> int:
+    """Resolve open reports against a profile, without committing the session."""
+    statement = (
+        update(Report)
+        .where(
+            Report.reported_user_id == user_id,
+            Report.status == STATUS_OPEN,
+        )
+        .values(status=STATUS_RESOLVED, resolved_at=now_utc())
+        .execution_options(synchronize_session="fetch")
+    )
+    result = db.execute(statement)
+    return int(result.rowcount or 0)

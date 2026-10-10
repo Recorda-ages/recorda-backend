@@ -7,6 +7,8 @@ from app.api.deps import get_current_admin_user, get_current_user
 from app.api.routes.auth import user_already_exists_error
 from app.db.session import get_db
 from app.models import AppUser
+from app.repositories import report_repository
+from app.schemas.admin_user_moderation import ReactivateUserRequest, SuspendUserRequest
 from app.schemas.follow_mutation import FollowMutationResult
 from app.schemas.music_preference import (
     MusicPreferencesCreate,
@@ -24,6 +26,7 @@ from app.schemas.user import (
 from app.services import (
     admin_user_moderation_service,
     follow_service,
+    moderation_service,
     music_preference_service,
     user_service,
 )
@@ -166,45 +169,34 @@ def delete_follow(
     return FollowMutationResult(follow_status="nenhuma")
 
 
-@router.post("/users/{user_id}/suspend", status_code=status.HTTP_200_OK)
+@router.post("/{user_id}/suspend", status_code=status.HTTP_200_OK)
 def suspend_user(
     user_id: UUID,
+    payload: SuspendUserRequest,
     current_admin: AppUser = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> None:
-    try:
-        admin_user_moderation_service.suspend_user(db, user_id, current_admin)
-    except user_service.UserNotFoundError as exc:
-        raise HTTPException(
-            status_code=404, detail=f"User with ID {user_id} not found."
-        ) from exc
-    except user_service.SelfActionError as exc:
-        raise HTTPException(
-            status_code=400, detail="You cannot suspend yourself."
-        ) from exc
-    except user_service.AdminActionError as exc:
-        raise HTTPException(
-            status_code=403, detail="You cannot suspend another admin user."
-        ) from exc
-    except user_service.UserAlreadySuspendedError as exc:
-        raise HTTPException(
-            status_code=409, detail=f"User with ID {user_id} is already suspended."
-        ) from exc
+    admin_user_moderation_service.suspend_user(
+        db,
+        user_id,
+        payload,
+        current_admin,
+        resolve_reports=report_repository.resolve_open_user_reports,
+        record_action=moderation_service.record_action,
+    )
 
 
-@router.post("/users/{user_id}/reactivate", status_code=status.HTTP_200_OK)
-def reactive_user(
+@router.post("/{user_id}/reactivate", status_code=status.HTTP_200_OK)
+def reactivate_user(
     user_id: UUID,
+    payload: ReactivateUserRequest,
     current_admin: AppUser = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> None:
-    try:
-        admin_user_moderation_service.reactivate_user(db, user_id, current_admin)
-    except user_service.UserNotFoundError as exc:
-        raise HTTPException(
-            status_code=404, detail=f"User with ID {user_id} not found."
-        ) from exc
-    except user_service.UserNotSuspendedError as exc:
-        raise HTTPException(
-            status_code=409, detail=f"User with ID {user_id} is not suspended."
-        ) from exc
+    admin_user_moderation_service.reactivate_user(
+        db,
+        user_id,
+        payload,
+        current_admin,
+        record_action=moderation_service.record_action,
+    )

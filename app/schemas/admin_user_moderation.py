@@ -1,24 +1,20 @@
-from dataclasses import Field
-from pickle import TRUE
-from wsgiref.validate import validator
-
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class SuspendUserRequest(BaseModel):
-    reason: str = Field(..., min_length=1, max_length=500)
-    resolve_open_reports: bool = TRUE
+    reason: str = Field(min_length=1, max_length=500)
+    resolve_open_reports: bool = True
 
-    @validator("reason", pre=True)
+    @field_validator("reason", mode="before")
     @classmethod
     def strip_reason(cls, value: str) -> str:
         return value.strip()
 
 
 class ReactivateUserRequest(BaseModel):
-    reason: str = Field(..., min_length=1, max_length=500)
+    reason: str = Field(min_length=1, max_length=500)
 
-    @validator("reason", pre=True)
+    @field_validator("reason", mode="before")
     @classmethod
     def strip_reason(cls, value: str) -> str:
         return value.strip()
