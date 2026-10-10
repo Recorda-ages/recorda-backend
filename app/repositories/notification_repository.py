@@ -4,8 +4,10 @@ from sqlalchemy import Row, Select, delete, func, or_, select, update
 from sqlalchemy.orm import Session, aliased
 
 from app.models.app_user import AppUser
+from app.models.moderation_action import ACTION_REMOVE_RECORDA, ModerationAction
 from app.models.notification import (
     TYPE_COMMENT,
+    TYPE_CONTENT_REMOVED,
     TYPE_FOLLOW_REQUEST,
     TYPE_LIKE,
     Notification,
@@ -23,7 +25,11 @@ def _visible_for(recipient_id: UUID) -> Select:
         .where(
             Notification.recipient_id == recipient_id,
             or_(Notification.sender_id.is_(None), Sender.deleted_at.is_(None)),
-            or_(Notification.recorda_id.is_(None), Recorda.deleted_at.is_(None)),
+            or_(
+                Notification.recorda_id.is_(None),
+                Recorda.deleted_at.is_(None),
+                Notification.type == TYPE_CONTENT_REMOVED,
+            ),
         )
     )
 
@@ -31,9 +37,27 @@ def _visible_for(recipient_id: UUID) -> Select:
 def list_for_recipient(
     db: Session, recipient_id: UUID, *, limit: int, offset: int
 ) -> list[Row]:
+    # Uma subconsulta escalar evita multiplicar avisos quando há várias ações.
+    removal_reason = (
+        select(ModerationAction.reason)
+        .where(
+            ModerationAction.target_recorda_id == Notification.recorda_id,
+            ModerationAction.action_type == ACTION_REMOVE_RECORDA,
+            Notification.type == TYPE_CONTENT_REMOVED,
+        )
+        .order_by(ModerationAction.created_at.desc(), ModerationAction.action_id.desc())
+        .limit(1)
+        .correlate(Notification)
+        .scalar_subquery()
+    )
     query = (
         _visible_for(recipient_id)
-        .add_columns(Sender.username, Sender.profile_picture_url)
+        .add_columns(
+            Sender.username,
+            Sender.profile_picture_url,
+            removal_reason.label("removal_reason"),
+            Recorda.song_title.label("recorda_song_title"),
+        )
         .order_by(
             Notification.created_at.desc(),
             Notification.notification_id.desc(),
@@ -76,6 +100,21 @@ def add(db: Session, notification: Notification) -> Notification:
     db.commit()
     db.refresh(notification)
 
+    return notification
+
+
+def create_content_removed(
+    db: Session, *, recipient_id: UUID, recorda_id: UUID
+) -> Notification:
+    """Persiste o aviso sem commit; a remoção administrativa controla a transação."""
+    notification = Notification(
+        recipient_id=recipient_id,
+        sender_id=None,
+        recorda_id=recorda_id,
+        type=TYPE_CONTENT_REMOVED,
+    )
+    db.add(notification)
+    db.flush()
     return notification
 
 
