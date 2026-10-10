@@ -7,6 +7,8 @@ from app.api.deps import get_current_admin_user, get_current_user
 from app.api.routes.auth import user_already_exists_error
 from app.db.session import get_db
 from app.models import AppUser
+from app.repositories import report_repository
+from app.schemas.admin_user_moderation import ReactivateUserRequest, SuspendUserRequest
 from app.schemas.follow_mutation import FollowMutationResult
 from app.schemas.music_preference import (
     MusicPreferencesCreate,
@@ -21,7 +23,13 @@ from app.schemas.user import (
     UserSearchResult,
     UserUpdate,
 )
-from app.services import follow_service, music_preference_service, user_service
+from app.services import (
+    admin_user_moderation_service,
+    follow_service,
+    moderation_service,
+    music_preference_service,
+    user_service,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -159,3 +167,36 @@ def delete_follow(
     if not follow_service.delete_follow(db, user_id, current_user):
         raise HTTPException(status_code=404, detail="Você não segue este usuário.")
     return FollowMutationResult(follow_status="nenhuma")
+
+
+@router.post("/{user_id}/suspend", status_code=status.HTTP_200_OK)
+def suspend_user(
+    user_id: UUID,
+    payload: SuspendUserRequest,
+    current_admin: AppUser = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+) -> None:
+    admin_user_moderation_service.suspend_user(
+        db,
+        user_id,
+        payload,
+        current_admin,
+        resolve_reports=report_repository.resolve_open_user_reports,
+        record_action=moderation_service.record_action,
+    )
+
+
+@router.post("/{user_id}/reactivate", status_code=status.HTTP_200_OK)
+def reactivate_user(
+    user_id: UUID,
+    payload: ReactivateUserRequest,
+    current_admin: AppUser = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+) -> None:
+    admin_user_moderation_service.reactivate_user(
+        db,
+        user_id,
+        payload,
+        current_admin,
+        record_action=moderation_service.record_action,
+    )
