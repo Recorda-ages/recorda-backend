@@ -22,7 +22,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 _current_admin = Depends(get_current_admin_user)
 
 
-@router.post("/{user_id}/suspend", status_code=status.HTTP_200_OK)
+@router.post("/users/{user_id}/suspend", status_code=status.HTTP_200_OK)
 def suspend_user(
     user_id: UUID,
     payload: SuspendUserRequest,
@@ -40,7 +40,7 @@ def suspend_user(
     return UserStatusResponse(status_code=200, user_id=user_id, status="SUSPENDED")
 
 
-@router.post("/{user_id}/reactivate", status_code=status.HTTP_200_OK)
+@router.post("/users/{user_id}/reactivate", status_code=status.HTTP_200_OK)
 def reactivate_user(
     user_id: UUID,
     payload: ReactivateUserRequest,
