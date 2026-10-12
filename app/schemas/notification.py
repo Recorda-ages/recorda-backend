@@ -11,6 +11,7 @@ NotificationType = Literal[
     "LIKE",
     "COMMENT",
     "MENTION",
+    "CONTENT_REMOVED",
 ]
 
 
@@ -33,6 +34,8 @@ class NotificationItem(BaseModel):
     recorda_id: UUID | None = None
     comment_id: UUID | None = None
     follow_id: UUID | None = None
+    removal_reason: str | None = None
+    recorda_song_title: str | None = None
 
 
 class NotificationPage(BaseModel):
