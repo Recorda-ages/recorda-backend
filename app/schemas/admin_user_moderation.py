@@ -1,4 +1,12 @@
+from uuid import UUID
+
 from pydantic import BaseModel, Field, field_validator
+
+
+class UserStatusResponse(BaseModel):
+    status_code: int = Field(default=200, const=True)
+    user_id: UUID
+    status: str
 
 
 class SuspendUserRequest(BaseModel):

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    admin,
     auth,
     comment,
     feed,
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
 
 tags_metadata = [
     {"name": "auth", "description": "Autenticação e sessão do usuário."},
+    {"name": "admin", "description": "Funcionalidades administrativas."},
     {
         "name": "users",
         "description": "Gerenciamento de usuários (acesso administrativo).",
@@ -72,6 +74,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(user.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
 app.include_router(music.router, prefix="/api/v1")
 app.include_router(recorda.router, prefix="/api/v1")
 app.include_router(media.router, prefix="/api/v1")
