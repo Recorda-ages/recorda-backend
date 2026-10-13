@@ -1,10 +1,11 @@
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
 
 class UserStatusResponse(BaseModel):
-    status_code: int = Field(default=200, Literal=True)
+    status_code: Literal[200] = 200
     user_id: UUID
     status: str
 

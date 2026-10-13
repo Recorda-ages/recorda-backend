@@ -1,4 +1,8 @@
-from app.models.app_user import ROLE_ADMIN
+import pytest
+
+from app.models import AppUser
+
+from app.models.app_user import ROLE_ADMIN, ROLE_USER, STATUS_SUSPENDED, STATUS_ACTIVE
 from tests.factories import add_user, auth_headers
 
 
@@ -8,7 +12,7 @@ def admin_url(user) -> str:
 
 #
 def test_suspend_rejects_self_unknown_admin_and_already_suspended_user(
-    client, common_user
+    client, db, common_user
 ):
     headers = auth_headers(common_user)
 
@@ -18,7 +22,7 @@ def test_suspend_rejects_self_unknown_admin_and_already_suspended_user(
         headers=headers,
     )
     already_suspended = client.post(admin_url(common_user), headers=headers)
-    admin_user = add_user(common_user.db, "admin_user", role=ROLE_ADMIN)
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
     admin_headers = auth_headers(admin_user)
     assert self_suspend.status_code == 400
     assert unknown_user.status_code == 404
@@ -27,7 +31,7 @@ def test_suspend_rejects_self_unknown_admin_and_already_suspended_user(
 
 
 def test_reactivate_rejects_self_unknown_admin_and_not_suspended_user(
-    client, common_user
+    client, db, common_user
 ):
     headers = auth_headers(common_user)
 
@@ -41,7 +45,7 @@ def test_reactivate_rejects_self_unknown_admin_and_not_suspended_user(
     not_suspended = client.post(
         f"/api/v1/admin/users/{common_user.user_id}/reactivate", headers=headers
     )
-    admin_user = add_user(common_user.db, "admin_user", role=ROLE_ADMIN)
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
     admin_headers = auth_headers(admin_user)
     assert self_reactivate.status_code == 400
     assert unknown_user.status_code == 404

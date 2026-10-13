@@ -28,8 +28,8 @@ def suspend_user(
     payload: SuspendUserRequest,
     current_admin: AppUser = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
-) -> Response:
-    admin_user_moderation_service.suspend_user(
+) -> UserStatusResponse:
+    user = admin_user_moderation_service.suspend_user(
         db,
         user_id,
         payload,
@@ -37,7 +37,7 @@ def suspend_user(
         resolve_reports=report_repository.resolve_open_user_reports,
         record_action=moderation_service.record_action,
     )
-    return UserStatusResponse(status_code=200, user_id=user_id, status="SUSPENDED")
+    return UserStatusResponse(status_code=200, user_id=user_id, status=user.status)
 
 
 @router.post("/users/{user_id}/reactivate", status_code=status.HTTP_200_OK)
@@ -46,12 +46,12 @@ def reactivate_user(
     payload: ReactivateUserRequest,
     current_admin: AppUser = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
-) -> Response:
-    admin_user_moderation_service.reactivate_user(
+) -> UserStatusResponse:
+    user = admin_user_moderation_service.reactivate_user(
         db,
         user_id,
         payload,
         current_admin,
         record_action=moderation_service.record_action,
     )
-    return UserStatusResponse(status_code=200, user_id=user_id, status="REACTIVATED")
+    return UserStatusResponse(status_code=200, user_id=user_id, status=user.status)
