@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MAX_DESCRIPTION_LENGTH = 500
+MAX_REASON_LENGTH = 500
 
 ReportTargetType = Literal["RECORDA", "USER"]
 ReportStatus = Literal["OPEN", "RESOLVED", "DISMISSED"]
@@ -49,3 +50,13 @@ class ReportGroup(BaseModel):
 class ReportGroupPage(BaseModel):
     items: list[ReportGroup]
     total: int
+
+
+class ReportStatusChange(BaseModel):
+    status: ReportStatus
+    reason: str = Field(min_length=1, max_length=MAX_REASON_LENGTH)
+
+
+class ReportStatusChanged(BaseModel):
+    updated_count: int
+    status: ReportStatus

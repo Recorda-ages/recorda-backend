@@ -3,7 +3,7 @@
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import Row, Select, case, exists, func, literal, select
+from sqlalchemy import Row, Select, case, exists, func, literal, select, update
 from sqlalchemy.orm import Session
 
 from app.models.report import TARGET_RECORDA, TARGET_USER, Report
@@ -63,6 +63,38 @@ def list_groups(
 def count_groups(db: Session, *, target_type: str | None, status: str) -> int:
     grouped = _grouped(target_type=target_type, status=status).subquery()
     return db.execute(select(func.count()).select_from(grouped)).scalar_one()
+
+
+def bulk_update_status(
+    db: Session,
+    *,
+    recorda_id: UUID | None,
+    reported_user_id: UUID | None,
+    from_statuses: tuple[str, ...],
+    new_status: str,
+    resolved_at,
+) -> int:
+    """Atualiza status de denúncias de um alvo **sem commit** (commit é do caller).
+
+    Exatamente um de `recorda_id` ou `reported_user_id` deve ser não-nulo.
+    Retorna o número de linhas afetadas.
+    """
+    if (recorda_id is None) == (reported_user_id is None):
+        raise ValueError("Exatamente um de recorda_id ou reported_user_id deve ser informado.")
+
+    stmt = (
+        update(Report)
+        .where(Report.status.in_(from_statuses))
+        .values(status=new_status, resolved_at=resolved_at)
+        .execution_options(synchronize_session="fetch")
+    )
+    if recorda_id is not None:
+        stmt = stmt.where(Report.recorda_id == recorda_id)
+    else:
+        stmt = stmt.where(Report.reported_user_id == reported_user_id)
+
+    result = db.execute(stmt)
+    return result.rowcount
 
 
 def _grouped(*, target_type: str | None, status: str) -> Select:

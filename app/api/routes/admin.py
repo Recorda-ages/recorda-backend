@@ -8,9 +8,18 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin_user
 from app.db.session import get_db
+from app.models import AppUser
+from app.models.moderation_action import ACTION_CHANGE_REPORT_STATUS
+from app.models.report import TARGET_RECORDA, TARGET_USER
 from app.repositories.report_repository import GroupOrder
 from app.schemas.moderation import AdminSummary, AuditLogPage, ModerationActionType
-from app.schemas.report import ReportGroupPage, ReportStatus, ReportTargetType
+from app.schemas.report import (
+    ReportGroupPage,
+    ReportStatus,
+    ReportStatusChange,
+    ReportStatusChanged,
+    ReportTargetType,
+)
 from app.services import admin_report_service, moderation_service
 
 router = APIRouter(
@@ -20,6 +29,7 @@ router = APIRouter(
 )
 
 INVALID_PERIOD_MESSAGE = "A data inicial não pode ser posterior à data final."
+NO_REPORTS_TO_UPDATE_MESSAGE = "Não há denúncias neste status para alterar."
 
 
 @router.get("/reports", response_model=ReportGroupPage)
@@ -40,6 +50,62 @@ def list_report_groups(
         limit=limit,
         offset=offset,
     )
+
+
+@router.patch(
+    "/reports/{target_type}/{target_id}/status",
+    response_model=ReportStatusChanged,
+)
+def change_report_status(
+    target_type: ReportTargetType,
+    target_id: UUID,
+    body: ReportStatusChange,
+    db: Session = Depends(get_db),
+    admin: AppUser = Depends(get_current_admin_user),
+) -> ReportStatusChanged:
+    """Muda o status em lote das denúncias de um alvo (T-E10.US46.BE.01).
+
+    - RESOLVED / DISMISSED: afeta todas as denúncias OPEN do alvo.
+    - OPEN (reabrir): afeta todas as RESOLVED/DISMISSED do alvo.
+      Não restaura conteúdo removido nem reativa conta; para isso existem as
+      ações REMOVE_RECORDA e SUSPEND_USER/REACTIVATE_USER.
+
+    Toda a operação (atualização de status + registro de auditoria) é atômica:
+    se a auditoria falhar, o status não é alterado.
+    """
+    updated_count = admin_report_service.resolve_open_reports(
+        db,
+        target_type=target_type,
+        target_id=target_id,
+        new_status=body.status,
+    )
+
+    if updated_count == 0:
+        raise HTTPException(status_code=409, detail=NO_REPORTS_TO_UPDATE_MESSAGE)
+
+    target_recorda_id = target_id if target_type == TARGET_RECORDA else None
+    target_user_id = target_id if target_type == TARGET_USER else None
+
+    from_status = "OPEN" if body.status != "OPEN" else "RESOLVED/DISMISSED"
+
+    moderation_service.record_action(
+        db,
+        admin=admin,
+        action_type=ACTION_CHANGE_REPORT_STATUS,
+        reason=body.reason,
+        target_recorda_id=target_recorda_id,
+        target_user_id=target_user_id,
+        details={
+            "target_type": target_type,
+            "from": from_status,
+            "to": body.status,
+            "report_count": updated_count,
+        },
+    )
+
+    db.commit()
+
+    return ReportStatusChanged(updated_count=updated_count, status=body.status)
 
 
 @router.get("/audit-log", response_model=AuditLogPage)
