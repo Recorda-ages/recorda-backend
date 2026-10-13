@@ -93,6 +93,15 @@ def list_admins(db: Session) -> list[AdminSummary]:
     ]
 
 
+def list_target_actions(
+    db: Session, *, target_type: str, target_id: UUID
+) -> list[AuditEntry]:
+    rows = moderation_action_repository.list_for_target(
+        db, target_type=target_type, target_id=target_id
+    )
+    return [_to_entry(row) for row in rows]
+
+
 def _to_entry(row: Row) -> AuditEntry:
     action: ModerationAction = row.ModerationAction
     # REMOVE_RECORDA preenche os dois alvos; a Recorda é o alvo direto.

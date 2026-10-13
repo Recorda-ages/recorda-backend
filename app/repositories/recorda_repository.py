@@ -21,6 +21,11 @@ def get_by_id(db: Session, recorda_id: UUID) -> Recorda | None:
     return db.scalars(only_live(stmt, Recorda)).first()
 
 
+def get_by_id_including_deleted(db: Session, recorda_id: UUID) -> Recorda | None:
+    """Administrative lookup, including removed content."""
+    return db.scalar(select(Recorda).where(Recorda.recorda_id == recorda_id))
+
+
 def list_by_user(db: Session, user_id: UUID) -> list[Recorda]:
     stmt = (
         select(Recorda)
