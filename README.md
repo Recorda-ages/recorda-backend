@@ -430,6 +430,7 @@ Toda rota de moderação vive em `/api/v1/admin` (`app/api/routes/admin.py`). A 
 | Método | Caminho | Descrição |
 | ------ | ------- | --------- |
 | GET | `/api/v1/admin/reports` | Fila de moderação: denúncias agrupadas por alvo, com contagem. Filtros `target_type` (`RECORDA`/`USER`), `status` (padrão `OPEN`), `order` (`desc`/`asc` por `last_reported_at`), `limit` (1..50) e `offset` |
+| GET | `/api/v1/admin/reports/{target_type}/{target_id}` | Detalhe de alvo denunciado (`RECORDA`/`USER`, UUID): `target`, todas as `reports` e `actions`, da mais recente à mais antiga. Inclui conteúdo privado, removido e contas suspensas/excluídas, com `deleted_at` visível. Sem denúncias: 404; parâmetros inválidos: 422. |
 
 > **Dívida técnica:** as rotas administrativas legadas de `/api/v1/users` (`GET`/`PUT`/`DELETE /users/{user_id}` e `PATCH /users/{user_id}/role`) continuam em `app/api/routes/user.py`, com a guarda aplicada rota a rota. Elas não são usadas pelo painel mobile e devem migrar para `/api/v1/admin` ou ser removidas.
 

@@ -10,7 +10,12 @@ from app.api.deps import get_current_admin_user
 from app.db.session import get_db
 from app.repositories.report_repository import GroupOrder
 from app.schemas.moderation import AdminSummary, AuditLogPage, ModerationActionType
-from app.schemas.report import ReportGroupPage, ReportStatus, ReportTargetType
+from app.schemas.report import (
+    ReportGroupDetail,
+    ReportGroupPage,
+    ReportStatus,
+    ReportTargetType,
+)
 from app.services import admin_report_service, moderation_service
 
 router = APIRouter(
@@ -20,6 +25,23 @@ router = APIRouter(
 )
 
 INVALID_PERIOD_MESSAGE = "A data inicial não pode ser posterior à data final."
+
+
+@router.get("/reports/{target_type}/{target_id}", response_model=ReportGroupDetail)
+def get_report_detail(
+    target_type: ReportTargetType,
+    target_id: UUID,
+    db: Session = Depends(get_db),
+) -> ReportGroupDetail:
+    """Full reported content, including private, suspended and deleted targets."""
+    try:
+        return admin_report_service.get_detail(
+            db, target_type=target_type, target_id=target_id
+        )
+    except admin_report_service.NoReportsForTargetError as exc:
+        raise HTTPException(
+            status_code=404, detail="Nenhuma denúncia para este alvo."
+        ) from exc
 
 
 @router.get("/reports", response_model=ReportGroupPage)

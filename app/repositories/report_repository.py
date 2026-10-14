@@ -6,9 +6,24 @@ from uuid import UUID
 from sqlalchemy import Row, Select, case, exists, func, literal, select
 from sqlalchemy.orm import Session
 
+from app.models import AppUser
 from app.models.report import TARGET_RECORDA, TARGET_USER, Report
 
 GroupOrder = Literal["desc", "asc"]
+
+
+def list_for_target(db: Session, *, target_type: str, target_id: UUID) -> list[Row]:
+    """All statuses, with reporter names preserved after account deletion."""
+    target_column = (
+        Report.recorda_id if target_type == TARGET_RECORDA else Report.reported_user_id
+    )
+    statement = (
+        select(Report, AppUser.username.label("reporter_username"))
+        .join(AppUser, Report.reporter_id == AppUser.user_id)
+        .where(target_column == target_id)
+        .order_by(Report.created_at.desc(), Report.report_id.desc())
+    )
+    return list(db.execute(statement).all())
 
 
 def add(db: Session, report: Report) -> Report:
