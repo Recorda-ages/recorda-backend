@@ -87,7 +87,7 @@ def bulk_update_status(
     reported_user_id: UUID | None,
     from_statuses: tuple[str, ...],
     new_status: str,
-    resolved_at,
+    resolved_at: datetime | None,
 ) -> int:
     """Atualiza status de denúncias de um alvo **sem commit** (commit é do caller).
 
