@@ -95,7 +95,9 @@ def bulk_update_status(
     Retorna o número de linhas afetadas.
     """
     if (recorda_id is None) == (reported_user_id is None):
-        raise ValueError("Exatamente um de recorda_id ou reported_user_id deve ser informado.")
+        raise ValueError(
+            "Exatamente um de recorda_id ou reported_user_id deve ser informado."
+        )
 
     stmt = (
         update(Report)

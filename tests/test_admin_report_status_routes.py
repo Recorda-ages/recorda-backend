@@ -48,6 +48,7 @@ def test_dismiss_three_open_reports_changes_all_to_dismissed(client, db, admin_u
 
     db.expire_all()
     from app.models import Report
+
     reports = db.query(Report).filter_by(recorda_id=recorda.recorda_id).all()
     assert all(r.status == STATUS_DISMISSED for r in reports)
     assert all(r.resolved_at is not None for r in reports)
@@ -63,6 +64,7 @@ def test_dismiss_creates_single_audit_record_with_report_count(client, db, admin
     _change(client, admin_user, "RECORDA", recorda.recorda_id, "DISMISSED")
 
     from app.models.moderation_action import ModerationAction
+
     actions = db.query(ModerationAction).all()
     assert len(actions) == 1
     action = actions[0]
@@ -88,6 +90,7 @@ def test_resolve_open_reports_on_user_target(client, db, admin_user):
     assert body["status"] == "RESOLVED"
 
     from app.models.moderation_action import ModerationAction
+
     action = db.query(ModerationAction).one()
     assert action.target_user_id == reported_user.user_id
     assert action.target_recorda_id is None
@@ -117,6 +120,7 @@ def test_reopen_clears_resolved_at_and_restores_open_status(client, db, admin_us
 
     db.expire_all()
     from app.models import Report
+
     reports = db.query(Report).filter_by(recorda_id=recorda.recorda_id).all()
     assert all(r.status == STATUS_OPEN for r in reports)
     assert all(r.resolved_at is None for r in reports)
@@ -251,6 +255,7 @@ def test_status_unchanged_when_audit_recording_fails(client, db, admin_user):
     db.rollback()
 
     from app.models import Report
+
     report = db.query(Report).filter_by(recorda_id=recorda.recorda_id).one()
     assert report.status == STATUS_OPEN
     assert report.resolved_at is None

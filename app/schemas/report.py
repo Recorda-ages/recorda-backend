@@ -63,6 +63,8 @@ class ReportStatusChange(BaseModel):
 class ReportStatusChanged(BaseModel):
     updated_count: int
     status: ReportStatus
+
+
 class ReportAuthor(AdminSummary):
     status: Literal["ACTIVE", "SUSPENDED"]
     profile_picture_url: str | None
