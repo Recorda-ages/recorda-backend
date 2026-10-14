@@ -21,7 +21,11 @@ from app.schemas.user import (
     UserSearchResult,
     UserUpdate,
 )
-from app.services import follow_service, music_preference_service, user_service
+from app.services import (
+    follow_service,
+    music_preference_service,
+    user_service,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -93,9 +97,12 @@ def update_user(
 @router.delete(
     "/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[_current_admin]
 )
-def delete_user(user_id: UUID, db: Session = Depends(get_db)) -> None:
-    if not user_service.delete(db, user_id):
-        raise HTTPException(status_code=404, detail="User not found")
+def delete_user(
+    user_id: UUID,
+    current_admin: AppUser = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+) -> None:
+    user_service.delete(db, user_id, current_admin)
 
 
 @router.patch(
