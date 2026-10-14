@@ -14,11 +14,11 @@ from app.models.report import TARGET_RECORDA, TARGET_USER
 from app.repositories.report_repository import GroupOrder
 from app.schemas.moderation import AdminSummary, AuditLogPage, ModerationActionType
 from app.schemas.report import (
+    ReportGroupDetail,
     ReportGroupPage,
     ReportStatus,
     ReportStatusChange,
     ReportStatusChanged,
-    ReportGroupDetail,
     ReportTargetType,
 )
 from app.services import admin_report_service, moderation_service

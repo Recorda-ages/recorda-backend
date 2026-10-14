@@ -2,9 +2,7 @@
 
 from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
 from app.models.report import STATUS_DISMISSED, STATUS_OPEN, STATUS_RESOLVED
 from tests.factories import (
