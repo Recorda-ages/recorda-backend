@@ -1,4 +1,4 @@
-"""Testes de aceite de POST /recordas/{recorda_id}/reports (T-E9.US40.BE.01)."""
+"""Testes de aceite das denúncias de Recorda (T-E9.US40.BE.01) e de perfil (T-E9.US41.BE.01)."""
 
 import uuid
 
@@ -8,8 +8,11 @@ from sqlalchemy import select
 from app.api.routes.report import (
     ACCESS_DENIED_MESSAGE,
     DUPLICATE_REPORT_MESSAGE,
+    DUPLICATE_USER_REPORT_MESSAGE,
     RECORDA_NOT_FOUND_MESSAGE,
     SELF_REPORT_MESSAGE,
+    SELF_USER_REPORT_MESSAGE,
+    USER_NOT_FOUND_MESSAGE,
 )
 from app.core.time import now_utc
 from app.models import Notification, Report
@@ -257,3 +260,139 @@ def test_report_keeps_recorda_visible_and_does_not_notify_author(
     db.refresh(recorda)
     assert recorda.deleted_at is None
     assert db.scalars(select(Notification)).all() == []
+
+
+# =========================================================================== #
+# Denúncia de perfil — POST /users/{user_id}/reports (T-E9.US41.BE.01)
+# =========================================================================== #
+
+
+def _user_report_url(user_id) -> str:
+    return f"/api/v1/users/{user_id}/reports"
+
+
+@pytest.fixture
+def reported_user(db):
+    return add_user(db, "denunciado")
+
+
+def test_reporting_profile_creates_open_report(client, db, common_user, reported_user):
+    response = client.post(
+        _user_report_url(reported_user.user_id),
+        json={"description": "Perfil falso"},
+        headers=auth_headers(common_user),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert set(body) == {"report_id", "status", "created_at"}
+    assert body["status"] == STATUS_OPEN
+
+    [report] = _saved_reports(db)
+    assert str(report.report_id) == body["report_id"]
+    assert report.reporter_id == common_user.user_id
+    assert report.reported_user_id == reported_user.user_id
+    assert report.recorda_id is None
+    assert report.comment_id is None
+    assert report.description == "Perfil falso"
+
+
+def test_private_profile_can_be_reported_without_following(client, db, common_user):
+    private_user = add_user(db, "perfil_privado", is_private=True)
+
+    response = client.post(
+        _user_report_url(private_user.user_id),
+        json={},
+        headers=auth_headers(common_user),
+    )
+
+    assert response.status_code == 201
+    assert len(_saved_reports(db)) == 1
+
+
+def test_reporting_yourself_returns_400(client, db, common_user):
+    response = client.post(
+        _user_report_url(common_user.user_id),
+        json={},
+        headers=auth_headers(common_user),
+    )
+
+    assert response.status_code == 400
+    assert _error_message(response) == SELF_USER_REPORT_MESSAGE
+    assert _saved_reports(db) == []
+
+
+def test_reporting_same_profile_twice_returns_409(
+    client, db, common_user, reported_user
+):
+    url = _user_report_url(reported_user.user_id)
+    headers = auth_headers(common_user)
+
+    first = client.post(url, json={}, headers=headers)
+    second = client.post(url, json={}, headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+    assert _error_message(second) == DUPLICATE_USER_REPORT_MESSAGE
+    assert len(_saved_reports(db)) == 1
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [{"deleted_at": now_utc()}, {"status": STATUS_SUSPENDED}],
+    ids=["excluido", "suspenso"],
+)
+def test_unavailable_profile_returns_404(client, db, common_user, fields):
+    """Suspenso também é 404 para não expor o estado da conta."""
+    unavailable = add_user(db, "indisponivel", **fields)
+
+    response = client.post(
+        _user_report_url(unavailable.user_id),
+        json={},
+        headers=auth_headers(common_user),
+    )
+
+    assert response.status_code == 404
+    assert _error_message(response) == USER_NOT_FOUND_MESSAGE
+    assert _saved_reports(db) == []
+
+
+def test_unknown_profile_returns_404(client, db, common_user):
+    response = client.post(
+        _user_report_url(uuid.uuid4()), json={}, headers=auth_headers(common_user)
+    )
+
+    assert response.status_code == 404
+    assert _error_message(response) == USER_NOT_FOUND_MESSAGE
+    assert _saved_reports(db) == []
+
+
+def test_unauthenticated_profile_report_returns_401(client, db, reported_user):
+    response = client.post(_user_report_url(reported_user.user_id), json={})
+
+    assert response.status_code == 401
+    assert _saved_reports(db) == []
+
+
+def test_profile_report_does_not_notify_reported_user(
+    client, db, common_user, reported_user
+):
+    client.post(
+        _user_report_url(reported_user.user_id),
+        json={},
+        headers=auth_headers(common_user),
+    )
+
+    assert db.scalars(select(Notification)).all() == []
+
+
+def test_profile_report_route_does_not_shadow_admin_user_detail(
+    client, admin_user, reported_user
+):
+    """POST /users/{id}/reports convive com GET /users/{id} (admin)."""
+    response = client.get(
+        f"/api/v1/users/{reported_user.user_id}", headers=auth_headers(admin_user)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["user_id"] == str(reported_user.user_id)

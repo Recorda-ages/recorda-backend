@@ -1,19 +1,22 @@
-"""Regras de negócio das denúncias de Recorda."""
+"""Regras de negócio das denúncias de Recorda e Perfil"""
 
+from collections.abc import Callable
+from functools import partial
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import AppUser, Recorda, Report
+from app.models.app_user import STATUS_ACTIVE
 from app.models.report import STATUS_OPEN
-from app.repositories import report_repository
+from app.repositories import report_repository, user_repository
 from app.schemas.report import ReportCreate
 from app.services import recorda_service
 
 
 class ReportTargetNotFoundError(Exception):
-    """A Recorda não existe, foi excluída ou o autor não está ativo."""
+    """O alvo não existe, foi excluído ou não está ativo."""
 
 
 class ReportAccessDeniedError(Exception):
@@ -21,11 +24,11 @@ class ReportAccessDeniedError(Exception):
 
 
 class SelfReportError(Exception):
-    """O usuário tentou denunciar a própria Recorda."""
+    """O usuário tentou denunciar a si mesmo ou a própria Recorda."""
 
 
 class DuplicateReportError(Exception):
-    """O usuário já denunciou esta Recorda."""
+    """O usuário já denunciou este alvo."""
 
 
 def report_recorda(
@@ -37,9 +40,13 @@ def report_recorda(
     e o autor não é notificado.
     """
     recorda = _get_reportable_recorda(db, recorda_id, reporter)
-    _ensure_not_reported_yet(
-        db, reporter_id=reporter.user_id, recorda_id=recorda.recorda_id
+    already_reported = partial(
+        report_repository.exists_for_recorda,
+        db,
+        reporter_id=reporter.user_id,
+        recorda_id=recorda.recorda_id,
     )
+    _ensure_not_reported_yet(already_reported)
 
     report = Report(
         reporter_id=reporter.user_id,
@@ -47,7 +54,33 @@ def report_recorda(
         description=payload.description,
         status=STATUS_OPEN,
     )
-    return _add_or_raise_duplicate(db, report)
+    return _add_or_raise_duplicate(db, report, already_reported)
+
+
+def report_user(
+    db: Session, user_id: UUID, reporter: AppUser, payload: ReportCreate
+) -> Report:
+    """Abre uma denúncia OPEN contra o perfil.
+
+    Perfil privado pode ser denunciado sem seguir, pois aparece na busca.
+    O denunciado não é notificado.
+    """
+    target = _get_reportable_user(db, user_id, reporter)
+    already_reported = partial(
+        report_repository.exists_for_user,
+        db,
+        reporter_id=reporter.user_id,
+        reported_user_id=target.user_id,
+    )
+    _ensure_not_reported_yet(already_reported)
+
+    report = Report(
+        reporter_id=reporter.user_id,
+        reported_user_id=target.user_id,
+        description=payload.description,
+        status=STATUS_OPEN,
+    )
+    return _add_or_raise_duplicate(db, report, already_reported)
 
 
 def _get_reportable_recorda(
@@ -65,26 +98,35 @@ def _get_reportable_recorda(
     return recorda
 
 
-def _ensure_not_reported_yet(
-    db: Session, *, reporter_id: UUID, recorda_id: UUID
-) -> None:
-    if report_repository.exists_for_recorda(
-        db, reporter_id=reporter_id, recorda_id=recorda_id
-    ):
+def _get_reportable_user(db: Session, user_id: UUID, reporter: AppUser) -> AppUser:
+    # get_by_id já ignora contas excluídas; suspensa também vira 404
+    # para não expor o estado da conta.
+    target = user_repository.get_by_id(db, user_id)
+    if target is None or target.status != STATUS_ACTIVE:
+        raise ReportTargetNotFoundError
+    if target.user_id == reporter.user_id:
+        raise SelfReportError
+    return target
+
+
+AlreadyReported = Callable[[], bool]
+
+
+def _ensure_not_reported_yet(already_reported: AlreadyReported) -> None:
+    if already_reported():
         raise DuplicateReportError
 
 
-def _add_or_raise_duplicate(db: Session, report: Report) -> Report:
-    reporter_id, recorda_id = report.reporter_id, report.recorda_id
+def _add_or_raise_duplicate(
+    db: Session, report: Report, already_reported: AlreadyReported
+) -> Report:
     try:
         return report_repository.add(db, report)
     except IntegrityError as exc:
         db.rollback()
         # Duas requisições simultâneas podem passar juntas pela checagem prévia;
-        # quem decide é o índice único uq_report_reporter_recorda. Outra violação
-        # de integridade não é duplicidade e deve subir.
-        if report_repository.exists_for_recorda(
-            db, reporter_id=reporter_id, recorda_id=recorda_id
-        ):
+        # quem decide é o índice único do alvo. Outra violação de integridade
+        # não é duplicidade e deve subir.
+        if already_reported():
             raise DuplicateReportError from exc
         raise
