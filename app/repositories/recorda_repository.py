@@ -1,12 +1,13 @@
 """Persistence and query access for the Recorda entity."""
 
+from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import Row, select
 from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
-from app.models import Recorda
+from app.models import AppUser, Recorda
 from app.repositories._query import only_live
 
 
@@ -18,6 +19,11 @@ def get_all(db: Session) -> list[Recorda]:
 def get_by_id(db: Session, recorda_id: UUID) -> Recorda | None:
     stmt = select(Recorda).where(Recorda.recorda_id == recorda_id)
     return db.scalars(only_live(stmt, Recorda)).first()
+
+
+def get_by_id_including_deleted(db: Session, recorda_id: UUID) -> Recorda | None:
+    """Administrative lookup, including removed content."""
+    return db.scalar(select(Recorda).where(Recorda.recorda_id == recorda_id))
 
 
 def list_by_user(db: Session, user_id: UUID) -> list[Recorda]:
@@ -45,3 +51,13 @@ def save(db: Session, recorda: Recorda) -> Recorda:
 def soft_delete(db: Session, recorda: Recorda) -> None:
     recorda.deleted_at = now_utc()
     db.commit()
+
+
+def list_with_author_by_ids(db: Session, recorda_ids: Collection[UUID]) -> list[Row]:
+    """Inclui Recordas excluídas: a moderação precisa ver o que foi denunciado."""
+    stmt = (
+        select(Recorda, AppUser.username)
+        .join(AppUser, Recorda.user_id == AppUser.user_id)
+        .where(Recorda.recorda_id.in_(recorda_ids))
+    )
+    return list(db.execute(stmt).all())

@@ -16,6 +16,7 @@ from app.api.routes import (
     music,
     notification,
     recorda,
+    report,
     user,
 )
 from app.core.config import settings
@@ -30,7 +31,12 @@ async def lifespan(app: FastAPI):
 
 tags_metadata = [
     {"name": "auth", "description": "Autenticação e sessão do usuário."},
-    {"name": "admin", "description": "Funcionalidades administrativas."},
+    {
+        "name": "admin",
+        "description": (
+            "Moderação: denúncias, usuários e auditoria. Somente administradores."
+        ),
+    },
     {
         "name": "users",
         "description": "Gerenciamento de usuários (acesso administrativo).",
@@ -47,6 +53,10 @@ tags_metadata = [
     {
         "name": "notifications",
         "description": "Central de Notificações do usuário autenticado.",
+    },
+    {
+        "name": "reports",
+        "description": "Denúncias de conteúdo enviadas pelos usuários.",
     },
 ]
 
@@ -72,9 +82,9 @@ app.add_middleware(
 # Registry for feature routers. Each new module under app/api/routes/
 # should be included here, e.g. from app.api.routes import user; app.include_router(user.router).
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(user.router, prefix="/api/v1")
-app.include_router(admin.router, prefix="/api/v1")
 app.include_router(music.router, prefix="/api/v1")
 app.include_router(recorda.router, prefix="/api/v1")
 app.include_router(media.router, prefix="/api/v1")
@@ -84,6 +94,7 @@ app.include_router(follow.router, prefix="/api/v1")
 app.include_router(general_feed.router, prefix="/api/v1")
 app.include_router(follow_request.router, prefix="/api/v1")
 app.include_router(comment.router, prefix="/api/v1")
+app.include_router(report.router, prefix="/api/v1")
 
 
 @app.get("/api/v1")

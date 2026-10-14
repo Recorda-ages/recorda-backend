@@ -1,5 +1,6 @@
 """Persistence and query access for the AppUser entity."""
 
+from collections.abc import Collection
 from uuid import UUID
 
 from sqlalchemy import select
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
 from app.models import AppUser, Follow
+from app.models.app_user import ROLE_ADMIN
 from app.repositories._query import only_live
 
 
@@ -14,9 +16,20 @@ def get_all(db: Session) -> list[AppUser]:
     return list(db.scalars(only_live(select(AppUser), AppUser)))
 
 
+def list_admins(db: Session) -> list[AppUser]:
+    """Todas as contas ADMIN, inclusive excluídas: o log de auditoria ainda as cita."""
+    stmt = select(AppUser).where(AppUser.role == ROLE_ADMIN).order_by(AppUser.username)
+    return list(db.scalars(stmt))
+
+
 def get_by_id(db: Session, user_id: UUID) -> AppUser | None:
     stmt = select(AppUser).where(AppUser.user_id == user_id)
     return db.scalars(only_live(stmt, AppUser)).first()
+
+
+def get_by_id_including_deleted(db: Session, user_id: UUID) -> AppUser | None:
+    """Administrative lookup, including suspended and deleted accounts."""
+    return db.scalar(select(AppUser).where(AppUser.user_id == user_id))
 
 
 def get_by_username(
@@ -97,3 +110,8 @@ def list_suggestion_candidates(db: Session, current_user_id: UUID) -> list[AppUs
         .where(AppUser.user_id.not_in(already_linked))
     )
     return list(db.scalars(only_live(stmt, AppUser)))
+
+
+def list_by_ids(db: Session, user_ids: Collection[UUID]) -> list[AppUser]:
+    """Inclui contas excluídas: a moderação precisa ver o que foi denunciado."""
+    return list(db.scalars(select(AppUser).where(AppUser.user_id.in_(user_ids))))
