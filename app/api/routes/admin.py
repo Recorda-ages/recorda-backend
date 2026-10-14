@@ -19,8 +19,6 @@ from app.schemas.report import (
     ReportStatusChange,
     ReportStatusChanged,
     ReportGroupDetail,
-    ReportGroupPage,
-    ReportStatus,
     ReportTargetType,
 )
 from app.services import admin_report_service, moderation_service
