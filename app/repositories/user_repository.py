@@ -27,6 +27,11 @@ def get_by_id(db: Session, user_id: UUID) -> AppUser | None:
     return db.scalars(only_live(stmt, AppUser)).first()
 
 
+def get_by_id_including_deleted(db: Session, user_id: UUID) -> AppUser | None:
+    """Administrative lookup, including suspended and deleted accounts."""
+    return db.scalar(select(AppUser).where(AppUser.user_id == user_id))
+
+
 def get_by_username(
     db: Session, username: str, *, include_deleted: bool = False
 ) -> AppUser | None:

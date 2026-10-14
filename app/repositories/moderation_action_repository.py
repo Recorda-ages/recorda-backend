@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, aliased
 from app.models.app_user import AppUser
 from app.models.moderation_action import ModerationAction
 from app.models.recorda import Recorda
+from app.models.report import TARGET_RECORDA
 
 Admin = aliased(AppUser)
 TargetUser = aliased(AppUser)
@@ -70,8 +71,26 @@ def search(
         created_from=created_from,
         created_before=created_before,
     )
-    page = (
-        filtered.join(Admin, ModerationAction.admin_id == Admin.user_id)
+    page = _with_labels(filtered).limit(limit).offset(offset)
+    total = filtered.with_only_columns(func.count(ModerationAction.action_id))
+
+    return list(db.execute(page).all()), db.execute(total).scalar_one()
+
+
+def list_for_target(db: Session, *, target_type: str, target_id: UUID) -> list[Row]:
+    """Complete history for the target, including deleted admins and content."""
+    target_column = (
+        ModerationAction.target_recorda_id
+        if target_type == TARGET_RECORDA
+        else ModerationAction.target_user_id
+    )
+    statement = select(ModerationAction).where(target_column == target_id)
+    return list(db.execute(_with_labels(statement)).all())
+
+
+def _with_labels(statement: Select) -> Select:
+    return (
+        statement.join(Admin, ModerationAction.admin_id == Admin.user_id)
         .outerjoin(TargetUser, ModerationAction.target_user_id == TargetUser.user_id)
         .outerjoin(Recorda, ModerationAction.target_recorda_id == Recorda.recorda_id)
         .add_columns(
@@ -83,9 +102,4 @@ def search(
             ModerationAction.created_at.desc(),
             ModerationAction.action_id.desc(),
         )
-        .limit(limit)
-        .offset(offset)
     )
-    total = filtered.with_only_columns(func.count(ModerationAction.action_id))
-
-    return list(db.execute(page).all()), db.execute(total).scalar_one()

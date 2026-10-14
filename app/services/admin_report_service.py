@@ -17,12 +17,70 @@ from app.models.report import (
 )
 from app.repositories import recorda_repository, report_repository, user_repository
 from app.repositories.report_repository import GroupOrder
-from app.schemas.report import ReportGroup, ReportGroupPage, ReportTargetPreview
+from app.schemas.moderation import AdminSummary
+from app.schemas.recorda import RecordaRead
+from app.schemas.report import (
+    ReportAuthor,
+    ReportDetail,
+    ReportGroup,
+    ReportGroupDetail,
+    ReportGroupPage,
+    ReportRecordaTarget,
+    ReportTargetPreview,
+    ReportUserTarget,
+)
+from app.services import moderation_service
 
 PreviewKey = tuple[str, UUID]
 
 # Statuses that are considered "closed" and can be bulk-resolved or bulk-dismissed.
 _CLOSED_STATUSES = (STATUS_RESOLVED, STATUS_DISMISSED)
+
+
+class NoReportsForTargetError(Exception):
+    """The administrative detail exists only for reported targets."""
+
+
+def get_detail(db: Session, *, target_type: str, target_id: UUID) -> ReportGroupDetail:
+    rows = report_repository.list_for_target(
+        db, target_type=target_type, target_id=target_id
+    )
+    if not rows:
+        raise NoReportsForTargetError
+
+    if target_type == TARGET_RECORDA:
+        recorda = recorda_repository.get_by_id_including_deleted(db, target_id)
+        author = user_repository.get_by_id_including_deleted(db, recorda.user_id)
+        # Reports retain their targets through non-cascading foreign keys.
+        # Administrative reads deliberately bypass viewer visibility rules.
+        target = ReportRecordaTarget(
+            **RecordaRead.model_validate(recorda).model_dump(),
+            deleted_at=recorda.deleted_at,
+            author=ReportAuthor.model_validate(author),
+        )
+    else:
+        user = user_repository.get_by_id_including_deleted(db, target_id)
+        target = ReportUserTarget.model_validate(user)
+    return ReportGroupDetail(
+        target_type=target_type,
+        target=target,
+        reports=[
+            ReportDetail(
+                report_id=row.Report.report_id,
+                reporter=AdminSummary(
+                    user_id=row.Report.reporter_id, username=row.reporter_username
+                ),
+                description=row.Report.description,
+                status=row.Report.status,
+                created_at=row.Report.created_at,
+                resolved_at=row.Report.resolved_at,
+            )
+            for row in rows
+        ],
+        actions=moderation_service.list_target_actions(
+            db, target_type=target_type, target_id=target_id
+        ),
+    )
 
 
 def list_groups(

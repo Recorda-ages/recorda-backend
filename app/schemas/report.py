@@ -4,6 +4,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.moderation import AdminSummary, AuditEntry
+from app.schemas.recorda import RecordaRead
+
 MAX_DESCRIPTION_LENGTH = 500
 MAX_REASON_LENGTH = 500
 
@@ -60,3 +63,35 @@ class ReportStatusChange(BaseModel):
 class ReportStatusChanged(BaseModel):
     updated_count: int
     status: ReportStatus
+class ReportAuthor(AdminSummary):
+    status: Literal["ACTIVE", "SUSPENDED"]
+    profile_picture_url: str | None
+    deleted_at: datetime | None
+
+
+class ReportRecordaTarget(RecordaRead):
+    deleted_at: datetime | None
+    author: ReportAuthor
+
+
+class ReportUserTarget(ReportAuthor):
+    name: str
+    email: str
+    is_private: bool
+    created_at: datetime
+
+
+class ReportDetail(BaseModel):
+    report_id: UUID
+    reporter: AdminSummary
+    description: str | None
+    status: ReportStatus
+    created_at: datetime
+    resolved_at: datetime | None
+
+
+class ReportGroupDetail(BaseModel):
+    target_type: ReportTargetType
+    target: ReportRecordaTarget | ReportUserTarget
+    reports: list[ReportDetail]
+    actions: list[AuditEntry]
