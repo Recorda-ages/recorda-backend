@@ -81,7 +81,7 @@ def change_report_status(
     db: Session = Depends(get_db),
     admin: AppUser = Depends(get_current_admin_user),
 ) -> ReportStatusChanged:
-    """Muda o status em lote das denúncias de um alvo (T-E10.US46.BE.01).
+    """Muda o status em lote das denúncias de um alvo (T-E10.US44.BE.03).
 
     - RESOLVED / DISMISSED: afeta todas as denúncias OPEN do alvo.
     - OPEN (reabrir): afeta todas as RESOLVED/DISMISSED do alvo.
