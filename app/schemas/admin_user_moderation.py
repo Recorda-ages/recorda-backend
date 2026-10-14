@@ -16,8 +16,8 @@ class SuspendUserRequest(BaseModel):
 
     @field_validator("reason", mode="before")
     @classmethod
-    def strip_reason(cls, value: str) -> str:
-        return value.strip()
+    def strip_reason(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
 
 class ReactivateUserRequest(BaseModel):
@@ -25,5 +25,5 @@ class ReactivateUserRequest(BaseModel):
 
     @field_validator("reason", mode="before")
     @classmethod
-    def strip_reason(cls, value: str) -> str:
-        return value.strip()
+    def strip_reason(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value

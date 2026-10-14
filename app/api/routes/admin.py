@@ -19,8 +19,6 @@ from app.services import (
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-_current_admin = Depends(get_current_admin_user)
-
 
 @router.post("/users/{user_id}/suspend", status_code=status.HTTP_200_OK)
 def suspend_user(
