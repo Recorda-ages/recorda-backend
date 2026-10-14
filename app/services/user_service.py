@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core import security
@@ -132,10 +133,18 @@ def update(db: Session, user_id: UUID, payload: UserUpdate) -> AppUser | None:
     return user_repository.save(db, user)
 
 
-def delete(db: Session, user_id: UUID) -> bool:
+def delete(
+    db: Session,
+    user_id: UUID,
+    current_admin: AppUser | None = None,
+) -> bool:
     user = user_repository.get_by_id(db, user_id)
     if user is None:
-        return False
+        raise HTTPException(status_code=404, detail="User not found")
+    if current_admin is not None and user.user_id == current_admin.user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete yourself.")
+    if user.role == "ADMIN":
+        raise HTTPException(status_code=403, detail="You cannot delete an admin user.")
     user_repository.soft_delete(db, user)
     return True
 

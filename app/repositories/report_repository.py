@@ -3,11 +3,18 @@
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import Row, Select, case, exists, func, literal, select
+from sqlalchemy import Row, Select, case, exists, func, literal, select, update
 from sqlalchemy.orm import Session
 
+from app.core.time import now_utc
 from app.models import AppUser
-from app.models.report import TARGET_RECORDA, TARGET_USER, Report
+from app.models.report import (
+    STATUS_OPEN,
+    STATUS_RESOLVED,
+    TARGET_RECORDA,
+    TARGET_USER,
+    Report,
+)
 
 GroupOrder = Literal["desc", "asc"]
 
@@ -105,3 +112,18 @@ def _grouped(*, target_type: str | None, status: str) -> Select:
         query = query.where(Report.reported_user_id.is_not(None))
 
     return query
+
+
+def resolve_open_user_reports(db: Session, user_id: UUID) -> int:
+    """Resolve open reports against a profile, without committing the session."""
+    statement = (
+        update(Report)
+        .where(
+            Report.reported_user_id == user_id,
+            Report.status == STATUS_OPEN,
+        )
+        .values(status=STATUS_RESOLVED, resolved_at=now_utc())
+        .execution_options(synchronize_session="fetch")
+    )
+    result = db.execute(statement)
+    return int(result.rowcount or 0)

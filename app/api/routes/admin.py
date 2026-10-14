@@ -3,12 +3,19 @@
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin_user
 from app.db.session import get_db
+from app.models import AppUser
+from app.repositories import report_repository
 from app.repositories.report_repository import GroupOrder
+from app.schemas.admin_user_moderation import (
+    ReactivateUserRequest,
+    SuspendUserRequest,
+    UserStatusResponse,
+)
 from app.schemas.moderation import AdminSummary, AuditLogPage, ModerationActionType
 from app.schemas.report import (
     ReportGroupDetail,
@@ -16,7 +23,11 @@ from app.schemas.report import (
     ReportStatus,
     ReportTargetType,
 )
-from app.services import admin_report_service, moderation_service
+from app.services import (
+    admin_report_service,
+    admin_user_moderation_service,
+    moderation_service,
+)
 
 router = APIRouter(
     prefix="/admin",
@@ -99,3 +110,38 @@ def list_audit_log(
 def list_admins(db: Session = Depends(get_db)) -> list[AdminSummary]:
     """Contas administrativas, para popular o filtro do log de auditoria."""
     return moderation_service.list_admins(db)
+
+
+@router.post("/users/{user_id}/suspend", status_code=status.HTTP_200_OK)
+def suspend_user(
+    user_id: UUID,
+    payload: SuspendUserRequest,
+    current_admin: AppUser = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+) -> UserStatusResponse:
+    user = admin_user_moderation_service.suspend_user(
+        db,
+        user_id,
+        payload,
+        current_admin,
+        resolve_reports=report_repository.resolve_open_user_reports,
+        record_action=moderation_service.record_action,
+    )
+    return UserStatusResponse(status_code=200, user_id=user_id, status=user.status)
+
+
+@router.post("/users/{user_id}/reactivate", status_code=status.HTTP_200_OK)
+def reactivate_user(
+    user_id: UUID,
+    payload: ReactivateUserRequest,
+    current_admin: AppUser = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+) -> UserStatusResponse:
+    user = admin_user_moderation_service.reactivate_user(
+        db,
+        user_id,
+        payload,
+        current_admin,
+        record_action=moderation_service.record_action,
+    )
+    return UserStatusResponse(status_code=200, user_id=user_id, status=user.status)
