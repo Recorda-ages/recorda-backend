@@ -1,4 +1,4 @@
-from app.models.app_user import ROLE_ADMIN, STATUS_SUSPENDED, STATUS_ACTIVE
+from app.models.app_user import ROLE_ADMIN, STATUS_ACTIVE, STATUS_SUSPENDED
 from app.models.report import STATUS_RESOLVED
 from tests.factories import add_report, add_user, auth_headers
 
@@ -102,15 +102,31 @@ def test_suspend_and_reactivate_require_reason(client, db):
     admin_headers = auth_headers(admin_user)
     target_user = add_user(db, "target_user")
 
-    suspend_response = client.post(
+    suspend_response_empty = client.post(
         suspend_url(target_user), json={"reason": ""}, headers=admin_headers
     )
-    reactivate_response = client.post(
+    suspend_response_full = client.post(
+        suspend_url(target_user),
+        json={
+            "reason": "Test reason abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
+        },
+        headers=admin_headers,
+    )
+    reactivate_response_empty = client.post(
         reactivate_url(target_user), json={"reason": ""}, headers=admin_headers
     )
+    reactivate_response_full = client.post(
+        reactivate_url(target_user),
+        json={
+            "reason": "Test reason abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
+        },
+        headers=admin_headers,
+    )
 
-    assert suspend_response.status_code == 422
-    assert reactivate_response.status_code == 422
+    assert suspend_response_empty.status_code == 422
+    assert suspend_response_full.status_code == 422
+    assert reactivate_response_empty.status_code == 422
+    assert reactivate_response_full.status_code == 422
 
 
 def test_suspend_and_reactivate_return_user_status(client, db):
@@ -153,3 +169,23 @@ def test_resolving_reports_on_suspend(client, db):
     db.refresh(report)
     assert report.status == STATUS_RESOLVED
     assert report.resolved_at is not None
+
+
+def test_admin_suspend_invalidates_existing_user_token(client, db):
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
+    target_user = add_user(db, "target_user")
+    admin_headers = auth_headers(admin_user)
+    target_headers = auth_headers(target_user)
+
+    suspend_response = client.post(
+        suspend_url(target_user),
+        json={"reason": "Suspending user"},
+        headers=admin_headers,
+    )
+    assert suspend_response.status_code == 200
+
+    profile_response = client.get(
+        "/api/v1/users/me/profile",
+        headers=target_headers,
+    )
+    assert profile_response.status_code == 401
