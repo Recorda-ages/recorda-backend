@@ -1,4 +1,4 @@
-"""Denúncias de conteúdo (T-E9.US40.BE.01 e T-E9.US41.BE.01)"""
+"""Regras de negócio das denúncias de Recorda e perfil."""
 
 from typing import Annotated
 from uuid import UUID
@@ -13,7 +13,7 @@ from app.schemas.report import ReportCreate, ReportCreated
 from app.services import report_service
 
 # Sem prefixo: as denúncias ficam penduradas no recurso denunciado
-# (/recordas/{id}/reports e, futuramente, /users/{id}/reports).
+# (/recordas/{id}/reports e /users/{id}/reports).
 router = APIRouter(tags=["reports"])
 
 _current_user = Depends(get_current_user)
