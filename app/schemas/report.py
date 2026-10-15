@@ -59,6 +59,14 @@ class ReportStatusChange(BaseModel):
     status: ReportStatus
     reason: str = Field(min_length=1, max_length=MAX_REASON_LENGTH)
 
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("O motivo da ação é obrigatório.")
+        return stripped
+
 
 class ReportStatusChanged(BaseModel):
     updated_count: int
