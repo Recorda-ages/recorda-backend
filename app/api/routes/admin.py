@@ -2,6 +2,7 @@
 
 from datetime import date
 from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ from app.schemas.admin_user_moderation import (
     SuspendUserRequest,
     UserStatusResponse,
 )
+from app.schemas.admin_user import AdminUserPage
 from app.schemas.moderation import AdminSummary, AuditLogPage, ModerationActionType
 from app.schemas.report import (
     ReportGroupDetail,
@@ -30,6 +32,7 @@ from app.schemas.report import (
 from app.services import (
     admin_report_service,
     admin_user_moderation_service,
+    admin_user_service,
     moderation_service,
 )
 
@@ -42,6 +45,17 @@ router = APIRouter(
 INVALID_PERIOD_MESSAGE = "A data inicial não pode ser posterior à data final."
 NO_REPORTS_TO_UPDATE_MESSAGE = "Não há denúncias neste status para alterar."
 
+@router.get("/users", response_model=AdminUserPage)
+def list_admin_users(
+    q: str = Query(default=""),
+    status: Literal["ACTIVE", "SUSPENDED"] | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> AdminUserPage:
+    return admin_user_service.search_users(
+        db, q=q, status=status, limit=limit, offset=offset
+    )
 
 @router.get("/reports/{target_type}/{target_id}", response_model=ReportGroupDetail)
 def get_report_detail(
