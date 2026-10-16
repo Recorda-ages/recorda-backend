@@ -14,9 +14,9 @@ def author(db):
     return add_user(db, "alice")
 
 
-def test_get_all_returns_all_recordas(db, author):
+def test_list_visible_to_user_returns_own_recordas(db, author):
     add_recorda(db, author)
-    assert len(recorda_service.get_all(db)) == 1
+    assert len(recorda_service.list_visible_to_user(db, author)) == 1
 
 
 def test_get_by_id_returns_recorda_when_exists(db, author):

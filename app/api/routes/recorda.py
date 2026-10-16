@@ -26,9 +26,12 @@ NOT_OWNER_MESSAGE = "Apenas o autor pode alterar esta Recorda"
 ACCESS_DENIED_MESSAGE = "Você não tem permissão para ver esta Recorda"
 
 
-@router.get("", response_model=list[RecordaRead], dependencies=[_current_user])
-def list_recordas(db: Session = Depends(get_db)) -> list[RecordaRead]:
-    return recorda_service.get_all(db)
+@router.get("", response_model=list[RecordaRead])
+def list_recordas(
+    current_user: Annotated[AppUser, _current_user],
+    db: Session = Depends(get_db),
+) -> list[RecordaRead]:
+    return recorda_service.list_visible_to_user(db, current_user)
 
 
 @router.post("", response_model=RecordaRead, status_code=status.HTTP_201_CREATED)

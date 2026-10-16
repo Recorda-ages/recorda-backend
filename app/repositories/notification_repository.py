@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import Row, Select, delete, func, or_, select, update
+from sqlalchemy import Row, Select, and_, delete, func, or_, select, update
 from sqlalchemy.orm import Session, aliased
 
 from app.models.app_user import AppUser
@@ -13,8 +13,10 @@ from app.models.notification import (
     Notification,
 )
 from app.models.recorda import Recorda
+from app.repositories._query import active_user_condition
 
 Sender = aliased(AppUser)
+RecordaAuthor = aliased(AppUser)
 
 
 def _visible_for(recipient_id: UUID) -> Select:
@@ -22,13 +24,19 @@ def _visible_for(recipient_id: UUID) -> Select:
         select(Notification)
         .outerjoin(Sender, Notification.sender_id == Sender.user_id)
         .outerjoin(Recorda, Notification.recorda_id == Recorda.recorda_id)
+        .outerjoin(RecordaAuthor, Recorda.user_id == RecordaAuthor.user_id)
         .where(
             Notification.recipient_id == recipient_id,
-            or_(Notification.sender_id.is_(None), Sender.deleted_at.is_(None)),
+            or_(Notification.sender_id.is_(None), active_user_condition(Sender)),
             or_(
                 Notification.recorda_id.is_(None),
-                Recorda.deleted_at.is_(None),
-                Notification.type == TYPE_CONTENT_REMOVED,
+                and_(
+                    active_user_condition(RecordaAuthor),
+                    or_(
+                        Recorda.deleted_at.is_(None),
+                        Notification.type == TYPE_CONTENT_REMOVED,
+                    ),
+                ),
             ),
         )
     )
