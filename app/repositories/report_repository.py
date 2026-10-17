@@ -8,7 +8,6 @@ from sqlalchemy import (
     Row,
     Select,
     case,
-    coalesce,
     exists,
     func,
     literal,
@@ -39,7 +38,9 @@ def list_for_target(db: Session, *, target_type: str, target_id: UUID) -> list[R
     statement = (
         select(
             Report,
-            coalesce(AppUser.username, "[conta removida]").label("reporter_username"),
+            func.coalesce(AppUser.username, "[conta removida]").label(
+                "reporter_username"
+            ),
         )
         .outerjoin(AppUser, Report.reporter_id == AppUser.user_id)
         .where(target_column == target_id)
@@ -143,7 +144,7 @@ def _grouped(*, target_type: str | None, status: str) -> Select:
                 (Report.recorda_id.is_not(None), literal(TARGET_RECORDA)),
                 else_=literal(TARGET_USER),
             ).label("target_type"),
-            func.coalesce(Report.recorda_id, Report.reported_user_id).label(
+            func.func.coalesce(Report.recorda_id, Report.reported_user_id).label(
                 "target_id"
             ),
             Report.status,
