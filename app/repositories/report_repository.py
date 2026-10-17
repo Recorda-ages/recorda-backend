@@ -4,7 +4,16 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import Row, Select, case, exists, func, literal, select, update
+from sqlalchemy import (
+    Row,
+    Select,
+    case,
+    exists,
+    func,
+    literal,
+    select,
+    update,
+)
 from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
@@ -26,8 +35,13 @@ def list_for_target(db: Session, *, target_type: str, target_id: UUID) -> list[R
         Report.recorda_id if target_type == TARGET_RECORDA else Report.reported_user_id
     )
     statement = (
-        select(Report, AppUser.username.label("reporter_username"))
-        .join(AppUser, Report.reporter_id == AppUser.user_id)
+        select(
+            Report,
+            func.coalesce(AppUser.username, "[conta removida]").label(
+                "reporter_username"
+            ),
+        )
+        .outerjoin(AppUser, Report.reporter_id == AppUser.user_id)
         .where(target_column == target_id)
         .order_by(Report.created_at.desc(), Report.report_id.desc())
     )
