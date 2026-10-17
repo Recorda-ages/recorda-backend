@@ -1,8 +1,8 @@
 """Router administrativo /admin com a guarda de admin aplicada no router (T-E10.BE.01)."""
 
 from datetime import date
-from uuid import UUID
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -12,12 +12,12 @@ from app.db.session import get_db
 from app.models import AppUser
 from app.repositories import report_repository
 from app.repositories.report_repository import GroupOrder
+from app.schemas.admin_user import AdminUserPage
 from app.schemas.admin_user_moderation import (
     ReactivateUserRequest,
     SuspendUserRequest,
     UserStatusResponse,
 )
-from app.schemas.admin_user import AdminUserPage
 from app.schemas.moderation import AdminSummary, AuditLogPage, ModerationActionType
 from app.schemas.report import (
     ReportGroupDetail,
@@ -40,6 +40,7 @@ router = APIRouter(
 
 INVALID_PERIOD_MESSAGE = "A data inicial não pode ser posterior à data final."
 
+
 @router.get("/users", response_model=AdminUserPage)
 def list_admin_users(
     q: str = Query(default=""),
@@ -51,6 +52,15 @@ def list_admin_users(
     return admin_user_service.search_users(
         db, q=q, status=status, limit=limit, offset=offset
     )
+
+
+@router.get("/users/{user_id}", response_model=AdminUserPage)
+def get_admin_user(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+) -> AdminUserPage:
+    return admin_user_service.get_user(db, user_id=user_id)
+
 
 @router.get("/reports/{target_type}/{target_id}", response_model=ReportGroupDetail)
 def get_report_detail(

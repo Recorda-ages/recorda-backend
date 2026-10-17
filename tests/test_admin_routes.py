@@ -11,6 +11,42 @@ def reactivate_url(target) -> str:
     return f"/api/v1/admin/users/{target.user_id}/reactivate"
 
 
+def test_list_admin_users_returns_page_with_report_counts(client, db):
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
+    reported_user = add_user(db, "reported_user")
+    add_report(db, add_user(db, "reporter_one"), reported_user=reported_user)
+    add_report(
+        db,
+        add_user(db, "reporter_two"),
+        reported_user=reported_user,
+        status=STATUS_RESOLVED,
+    )
+
+    response = client.get(
+        "/api/v1/admin/users",
+        params={"q": "reported"},
+        headers=auth_headers(admin_user),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "items": [
+            {
+                "user_id": str(reported_user.user_id),
+                "username": "reported_user",
+                "name": "Reported_User",
+                "email": "reported_user@example.com",
+                "profile_picture_url": None,
+                "role": "USER",
+                "status": STATUS_ACTIVE,
+                "reports_count": 2,
+                "deleted_at": None,
+            }
+        ],
+        "total": 1,
+    }
+
+
 def test_suspend_user(client, db):
     admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
     admin_headers = auth_headers(admin_user)
