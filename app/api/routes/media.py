@@ -83,8 +83,15 @@ def get_media(
     db: Session = Depends(get_db),
     range_header: Annotated[str | None, Header(alias="Range")] = None,
 ) -> Response:
-    info = media_storage_repository.get_info(db, filename)
+    # Antes de get_info e do Range: um 416 sem acesso revelaria o tamanho.
+    try:
+        media_service.ensure_published_media_visible(db, filename, current_user)
+    except media_service.MediaNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Mídia não encontrada"
+        ) from exc
 
+    info = media_storage_repository.get_info(db, filename)
     if info is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Mídia não encontrada"

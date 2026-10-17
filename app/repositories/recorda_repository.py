@@ -3,17 +3,43 @@
 from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import Row, select
+from sqlalchemy import Row, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
 from app.models import AppUser, Recorda
-from app.repositories._query import only_live
+from app.repositories._query import only_active_users, only_live
+from app.repositories.general_feed_repository import _is_visible_to_user_condition
 
 
 def get_all(db: Session) -> list[Recorda]:
     stmt = only_live(select(Recorda), Recorda).order_by(Recorda.created_at.desc())
     return list(db.scalars(stmt))
+
+
+def list_visible_to_user(db: Session, viewer: AppUser) -> list[Recorda]:
+    """Recordas não excluídas de autores ativos que `viewer` pode ver.
+
+    Vale a mesma privacidade do detalhe: a própria conta, contas públicas e
+    contas privadas com follow aceito.
+    """
+    stmt = (
+        select(Recorda)
+        .join(AppUser, Recorda.user_id == AppUser.user_id)
+        .where(
+            or_(
+                AppUser.user_id == viewer.user_id,
+                _is_visible_to_user_condition(viewer.user_id),
+            )
+        )
+        .order_by(Recorda.created_at.desc())
+    )
+    return list(db.scalars(only_active_users(only_live(stmt, Recorda))))
+
+
+def list_by_media_url(db: Session, media_url: str) -> list[Recorda]:
+    """Inclui Recordas excluídas e de autores suspensos: decidem se a mídia foi publicada."""
+    return list(db.scalars(select(Recorda).where(Recorda.media_url == media_url)))
 
 
 def get_by_id(db: Session, recorda_id: UUID) -> Recorda | None:

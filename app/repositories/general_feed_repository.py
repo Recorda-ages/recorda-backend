@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.models.app_user import STATUS_ACTIVE, AppUser
 from app.models.follow import STATUS_ACCEPTED, Follow
 from app.models.recorda import Recorda
+from app.repositories._query import only_active_users
 from app.repositories.feed_repository import _is_liked_subquery, _likes_count_subquery
 
 
@@ -92,7 +93,7 @@ def get_general_feed_query(current_user_id: UUID, author_ids: list[UUID]) -> Sel
     """
     likes_count_subq = _likes_count_subquery()
 
-    return (
+    query = (
         select(
             Recorda,
             AppUser.username,
@@ -112,3 +113,5 @@ def get_general_feed_query(current_user_id: UUID, author_ids: list[UUID]) -> Sel
         # Mesmo desempate do feed Seguindo, para o apply_cursor funcionar igual.
         .order_by(Recorda.created_at.desc(), Recorda.recorda_id.desc())
     )
+    # Os candidatos já são ativos; a consulta final repete a regra (issue #90).
+    return only_active_users(query)
