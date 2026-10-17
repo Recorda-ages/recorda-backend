@@ -13,7 +13,7 @@ from app.models.moderation_action import (
     ACTION_SUSPEND_USER,
     ModerationAction,
 )
-from app.repositories.admin_user_status_repository import get_for_update, set_status
+from app.repositories.admin_user_repository import get_for_update, set_status
 from app.schemas.admin_user_moderation import ReactivateUserRequest, SuspendUserRequest
 
 ResolveReports = Callable[[Session, UUID], int]
