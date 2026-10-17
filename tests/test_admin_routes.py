@@ -225,3 +225,66 @@ def test_admin_suspend_invalidates_existing_user_token(client, db):
         headers=target_headers,
     )
     assert profile_response.status_code == 401
+
+
+def test_list_admin_users_requires_admin(client, db):
+    common_user = add_user(db, "common_user")
+    common_headers = auth_headers(common_user)
+
+    response = client.get("/api/v1/admin/users", headers=common_headers)
+    assert response.status_code == 403
+
+def test_list_admin_users_invalid_status(client, db):
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
+    admin_headers = auth_headers(admin_user)
+
+    status_response = client.get(
+        "/api/v1/admin/users",
+        params={"status": "INVALID_STATUS"},
+        headers=admin_headers,
+    )
+
+    offset_response = client.get(
+        "/api/v1/admin/users",
+        params={"offset": -1},
+        headers=admin_headers,
+    )
+
+    limit_response = client.get(
+        "/api/v1/admin/users",
+        params={"limit": 100},
+        headers=admin_headers,
+    )
+
+    assert status_response.status_code == 422
+    assert offset_response.status_code == 422
+    assert limit_response.status_code == 422
+
+def test_get_user_requires_authentication_or_common_user(client, db):
+    target_user = add_user(db, "target_user")
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
+    admin_headers = auth_headers(admin_user)
+
+    authentication_response = client.get(f"/api/v1/admin/users/{target_user.user_id}")
+
+    common_user = add_user(db, "common_user")
+    common_headers = auth_headers(common_user)
+    common_user_response = client.get(
+        f"/api/v1/admin/users/{target_user.user_id}", headers=common_headers
+    )
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
+    admin_headers = auth_headers(admin_user)
+    admin_user_response = client.get(
+        f"/api/v1/admin/users/{admin_user.user_id}", headers=admin_headers
+    )
+    deleted_user = add_user(db, "deleted_user", deleted_at="2023-01-01T00:00:00Z")
+    deleted_user_response = client.get(
+        f"/api/v1/admin/users/{deleted_user.user_id}", headers=common_headers
+    )
+    
+
+    assert authentication_response.status_code == 401
+    assert common_user_response.status_code == 403
+    assert admin_user_response.status_code == 200
+    assert deleted_user_response.status_code == 404
+
