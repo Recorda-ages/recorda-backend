@@ -32,7 +32,6 @@ from app.schemas.report import (
 from app.services import (
     admin_report_service,
     admin_user_moderation_service,
-    admin_user_service,
     moderation_service,
 )
 
@@ -54,7 +53,7 @@ def list_admin_users(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> AdminUserPage:
-    return admin_user_service.search_users(
+    return admin_user_moderation_service.search_users(
         db, q=q, status=status, limit=limit, offset=offset
     )
 
@@ -64,7 +63,7 @@ def get_admin_user(
     user_id: UUID,
     db: Session = Depends(get_db),
 ) -> AdminUserPage:
-    return admin_user_service.get_user(db, user_id=user_id)
+    return admin_user_moderation_service.get_user(db, user_id=user_id)
 
 
 @router.get("/reports/{target_type}/{target_id}", response_model=ReportGroupDetail)

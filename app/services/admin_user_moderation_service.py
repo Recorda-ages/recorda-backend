@@ -13,7 +13,9 @@ from app.models.moderation_action import (
     ACTION_SUSPEND_USER,
     ModerationAction,
 )
+from app.repositories import admin_user_repository
 from app.repositories.admin_user_repository import get_for_update, set_status
+from app.schemas.admin_user import AdminUserPage
 from app.schemas.admin_user_moderation import ReactivateUserRequest, SuspendUserRequest
 
 ResolveReports = Callable[[Session, UUID], int]
@@ -109,3 +111,31 @@ def reactivate_user(
     except Exception:
         db.rollback()
         raise
+
+
+def search_users(
+    db: Session, *, q: str, status: str | None, limit: int, offset: int
+) -> AdminUserPage:
+    users, total = admin_user_repository.search_users(
+        db, q=q, status=status, limit=limit, offset=offset
+    )
+    report_counts = admin_user_repository.count_reports_by_user(
+        db, [user.user_id for user in users]
+    )
+    items = [
+        admin_user_repository.to_admin_user_row(
+            user, report_counts.get(user.user_id, 0)
+        )
+        for user in users
+    ]
+    return AdminUserPage(items=items, total=total)
+
+def get_user(db: Session, *, user_id: UUID) -> AdminUserPage:
+    user = admin_user_repository.get_for_update(db, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=404, detail=f"User with ID {user_id} not found."
+        )
+    report_count = admin_user_repository.count_reports_by_user(db, [user.user_id]).get(user.user_id, 0)
+    item = admin_user_repository.to_admin_user_row(user, report_count)
+    return AdminUserPage(items=[item], total=1)
