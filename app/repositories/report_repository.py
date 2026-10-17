@@ -4,7 +4,17 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import Row, Select, case, coalesce, exists, func, literal, select, update
+from sqlalchemy import (
+    Row,
+    Select,
+    case,
+    coalesce,
+    exists,
+    func,
+    literal,
+    select,
+    update,
+)
 
 from sqlalchemy.orm import Session
 
