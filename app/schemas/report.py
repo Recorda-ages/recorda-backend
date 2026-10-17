@@ -8,6 +8,7 @@ from app.schemas.moderation import AdminSummary, AuditEntry
 from app.schemas.recorda import RecordaRead
 
 MAX_DESCRIPTION_LENGTH = 500
+MAX_REASON_LENGTH = 500
 
 ReportTargetType = Literal["RECORDA", "USER"]
 ReportStatus = Literal["OPEN", "RESOLVED", "DISMISSED"]
@@ -52,6 +53,24 @@ class ReportGroup(BaseModel):
 class ReportGroupPage(BaseModel):
     items: list[ReportGroup]
     total: int
+
+
+class ReportStatusChange(BaseModel):
+    status: ReportStatus
+    reason: str = Field(min_length=1, max_length=MAX_REASON_LENGTH)
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("O motivo da ação é obrigatório.")
+        return stripped
+
+
+class ReportStatusChanged(BaseModel):
+    updated_count: int
+    status: ReportStatus
 
 
 class ReportAuthor(AdminSummary):

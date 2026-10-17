@@ -3,6 +3,7 @@
 import uuid
 
 import pytest
+from fastapi import HTTPException
 
 from app.core import security
 from app.core.config import settings
@@ -92,8 +93,22 @@ def test_delete_soft_deletes_when_user_exists(db):
     assert user_service.get_by_id(db, alice.user_id) is None
 
 
-def test_delete_returns_false_when_user_missing(db):
-    assert user_service.delete(db, uuid.uuid4()) is False
+def test_delete_raises_not_found_when_user_missing(db):
+    with pytest.raises(HTTPException) as exc:
+        user_service.delete(db, uuid.uuid4())
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "User not found"
+
+
+def test_delete_rejects_self_deletion(db):
+    admin = add_user(db, "admin", role="ADMIN")
+
+    with pytest.raises(HTTPException) as exc:
+        user_service.delete(db, admin.user_id, current_admin=admin)
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "You cannot delete yourself."
 
 
 def test_change_role_returns_none_when_user_missing(db):
