@@ -116,9 +116,30 @@ def reactivate_user(
 def search_users(
     db: Session, *, q: str, status: str | None, limit: int, offset: int
 ) -> AdminUserPage:
+    # if user isn't an admin, they shouldn't be able to access this endpoint
+    if not users.id == ROLE_ADMIN:
+        raise HTTPException(
+            status_code=403, detail="You do not have permission to access this resource."
+        )
     users, total = admin_user_repository.search_users(
         db, q=q, status=status, limit=limit, offset=offset
     )
+    if limit == 0 or limit is None or limit > 50:
+        raise HTTPException(
+            status_code=422,
+            detail={"limit": "Limit must be between 1 and 50."},
+        )
+    if offset < 0 or offset is None:
+        raise HTTPException(
+            status_code=422,
+            detail={"offset": "Offset must be greater than or equal to 0."},
+        )
+    if status is not None and status not in [STATUS_ACTIVE, STATUS_SUSPENDED]:
+        raise HTTPException(
+            status_code=422,
+            detail={"status": "Status must be either 'ACTIVE' or 'SUSPENDED'."},
+        )
+
     report_counts = admin_user_repository.count_reports_by_user(
         db, [user.user_id for user in users]
     )
