@@ -143,7 +143,7 @@ def _grouped(*, target_type: str | None, status: str) -> Select:
                 (Report.recorda_id.is_not(None), literal(TARGET_RECORDA)),
                 else_=literal(TARGET_USER),
             ).label("target_type"),
-            func.func.coalesce(Report.recorda_id, Report.reported_user_id).label(
+            func.coalesce(Report.recorda_id, Report.reported_user_id).label(
                 "target_id"
             ),
             Report.status,
