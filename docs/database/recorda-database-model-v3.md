@@ -9,9 +9,9 @@
 > **Convenções (decisões técnicas fechadas)**
 > - Nomes de tabela/coluna em `snake_case`. Os que colidiam com palavras reservadas viraram `app_user`, `recorda_like`, `recorda_comment` (D66).
 > - Toda PK e FK é `UUID`. No backend, são geradas na aplicação (`uuid.uuid4()`) para compatibilidade com SQLite nos testes, e com `DEFAULT gen_random_uuid()` nas migrations PostgreSQL (D65).
-> - Toda coluna temporal é `TIMESTAMPTZ` (D68). O "dia" do streak é calculado no backend com fuso **fixo `America/Sao_Paulo`** (D41).
+> - Toda coluna temporal é `TIMESTAMPTZ` (D68). O "dia" do streak deverá ser calculado no backend com fuso **fixo `America/Sao_Paulo`** (D41).
 > - Enums são `VARCHAR` + `CHECK` (D67).
-> - **Soft delete** com `deleted_at`. Nunca há `DELETE` físico de conteúdo principal. Toda leitura (feed, perfil, busca, contagens) filtra `deleted_at IS NULL` — filtro simples no backend, sem views (D71). A trilha de auditoria `moderation_action` é exceção: append-only, sem `deleted_at`. A apuração do streak de publicações também é exceção de leitura: considera Recordas com `deleted_at` preenchido (Parte 1, princípio 6), sem alterar o filtro das demais consultas.
+> - **Soft delete** com `deleted_at`. Nunca há `DELETE` físico de conteúdo principal. Toda leitura (feed, perfil, busca, contagens) filtra `deleted_at IS NULL` — filtro simples no backend, sem views (D71). A trilha de auditoria `moderation_action` é exceção: append-only, sem `deleted_at`. A futura apuração do streak de publicações será outra exceção de leitura: deverá considerar Recordas com `deleted_at` preenchido (Parte 1, princípio 6), sem alterar o filtro das demais consultas.
 > - Provedor de música único: **Deezer**. O app **nunca** consulta a API do Deezer para renderizar — os dados da música ficam gravados (snapshot) no banco (D1, D9, D11).
 > - Migrações versionadas via **Alembic** (`alembic/`) (D69).
 
@@ -52,11 +52,11 @@ Implementado nas issues **#79** (`report`) e **#83** (`moderation_action`), com 
 
 **Incremento do Épico 06 — Perfil e Configurações (18 out 2026)**
 
-Alinhado às tasks do Épico 6 no backend e frontend:
+Contrato previsto para as tasks do Épico 6 no backend e frontend; o estado de implementação consta em cada item:
 - **`genre` formalizada:** As colunas `deezer_genre_id` e `picture_url` (ADR 0001 e migration `0002_diagram_schema`) passam a constar explicitamente na tabela do modelo e no diagrama ER, e serão consumidas por `GET /users/me/music-preferences`, previsto na issue **#110** / `T-E6.US31.BE.01`.
-- **Simplificação arquitetural do Streak (US35):** Previsto para a sprint atual na issue **#113** (`T-E6.US35.BE.01`) e issue **#123** (`US35`). O streak passa a ser exclusivo de publicações de Recordas (*"Streak de publicações"*). É calculado dinamicamente no serviço de perfil diretamente sobre a tabela `recorda` (agrupado em `America/Sao_Paulo`), mantendo o dia conquistado mesmo se a Recorda for excluída depois através dos dados retidos pela exclusão lógica (`deleted_at`), **sem ledger separado**. A exposição no perfil segue o `ProfileStreak` do contrato compartilhado **C-2** do Épico 06 (`current_days`, `published_today`); esses valores são derivados na leitura e não são persistidos no banco.
+- **Simplificação arquitetural do Streak (US35):** Prevista para a sprint atual nas issues **#113** (`T-E6.US35.BE.01`) e **#123** (`US35`); a implementação ainda não está presente no backend do branch base deste PR. O contrato prevê um streak exclusivo de publicações de Recordas (*"Streak de publicações"*), calculado sob demanda no serviço de perfil a partir de `recorda.created_at` em `America/Sao_Paulo`, incluindo registros com `deleted_at` preenchido para preservar dias já conquistados, **sem ledger separado ou tabela de cache**. A resposta deverá preencher o `ProfileStreak` conforme o contrato compartilhado **C-2**; a definição e os nomes de seus campos ainda aguardam confirmação pela equipe.
 - **Decisões D42 e D43 supersedidas:** Curtidas e comentários **não** contam mais para o streak. Apenas a criação de Recorda conta.
-- **Tabelas do contrato ativo:** As tabelas `user_streak` e `streak_activity`, que nunca chegaram a ser materializadas (sem model nem migration), saem do contrato ativo, que passa de 14 para **12 tabelas**.
+- **Tabelas do contrato ativo:** As tabelas `user_streak` e `streak_activity`, que nunca chegaram a ser materializadas (sem model nem migration), saem do contrato ativo, que passa de 14 para **12 tabelas**. Essa contagem cobre o contrato de domínio v3; a tabela técnica `media`, criada em `0001_baseline` e mantida para armazenar uploads, fica fora dele.
 
 **Simplificações**
 
@@ -64,7 +64,7 @@ Alinhado às tasks do Épico 6 no backend e frontend:
 - `report` **não** tem coluna de motivo estruturado; só `description` livre e opcional (D51).
 - Sem papel `MODERATOR`, sem tabela `BLOCK` (D54, D37). A decisão D55 (sem `MODERATION_ACTION`) foi **supersedida** no incremento da Sprint 3 — ver a subseção acima e o [ADR 0002](../adr/0002-trilha-de-auditoria-de-moderacao.md).
 - `recorda_mention` **não** tem status de aprovação (D24).
-- `user_streak` e `streak_activity` descontinuadas do contrato ativo do MVP: streak calculado sob demanda diretamente sobre `recorda` (US35).
+- `user_streak` e `streak_activity` descontinuadas do contrato ativo do MVP; a US35 prevê o cálculo do streak sob demanda sobre `recorda`, ainda pendente de implementação.
 
 ---
 
@@ -72,10 +72,10 @@ Alinhado às tasks do Épico 6 no backend e frontend:
 
 1. **Snapshot-first.** A busca de música/artista acontece no cliente, contra o Deezer, no momento da escolha. O que interessa (`deezer_track_id`, título, artista principal, capa, preview) é **copiado** para o banco. Não há refresh: o dado é estático (D9). Se a busca ao Deezer falhar na criação de um Recorda, a criação é **bloqueada** — todo Recorda nasce com música resolvida (D10).
 2. **Privacidade vive no perfil, nunca no post.** `app_user.is_private` decide tudo. Não existe visibilidade por Recorda.
-3. **Soft delete universal para conteúdo.** Excluir conta, Recorda ou comentário = preencher `deleted_at`. A moderação usa o mesmo mecanismo (D56), agora acompanhado do registro em `moderation_action`. Integridade referencial preservada; o backend filtra. **Exceção:** `moderation_action` é append-only — não tem `deleted_at` e é imutável por trigger.
+3. **Soft delete universal para conteúdo.** Excluir conta, Recorda ou comentário = preencher `deleted_at`. A moderação usa o mesmo mecanismo (D56), agora acompanhado do registro em `moderation_action`. Integridade referencial preservada; leituras de conteúdo filtram registros excluídos. **Exceções:** `moderation_action` é append-only — não tem `deleted_at` e é imutável por trigger; a futura apuração do streak inclui Recordas com `deleted_at` preenchido para preservar dias conquistados (princípio 6).
 4. **Recorda é imutável.** Criado, não se edita (sem `updated_at`). Só se exclui (D27). Comentário idem.
 5. **Regras "quantitativas" são da aplicação, não do banco.** Mínimos do onboarding (1 música, ≥3 gêneros, ≥3 artistas), máximos visuais (~5 gêneros, ~10 artistas), limite de marcações (~10) — tudo validado no app (D16, D17, D22).
-6. **Streak de publicações sem ledger separado (US35).** O streak mede apenas dias consecutivos com pelo menos uma Recorda publicada (D42/D43 supersedidas). É calculado dinamicamente no serviço de perfil a partir de `recorda.created_at` no fuso fixo `America/Sao_Paulo` (D41). A exclusão lógica (`deleted_at`) retém o registro e preserva o dia já conquistado, eliminando a necessidade de um ledger separado (`streak_activity`) ou placar em cache (`user_streak`) no MVP. Conta o dia da publicação, não a data da memória; várias Recordas no mesmo dia contam como um dia. A sequência segue válida enquanto a última publicação for de hoje ou de ontem; um dia inteiro sem publicação a interrompe, e a publicação seguinte inicia nova sequência de 1 dia (T-E6.US35.BE.01). Recordas removidas pela moderação (D56) continuam contando — decisão provisória.
+6. **Contrato do streak de publicações sem ledger separado (US35).** Quando implementado, deverá contar dias consecutivos com pelo menos uma Recorda publicada (D42/D43 supersedidas), usando `recorda.created_at` no fuso fixo `America/Sao_Paulo` (D41). A consulta deverá incluir registros com `deleted_at` preenchido, preservando o dia já conquistado sem tabela de ledger (`streak_activity`) ou cache (`user_streak`). Conta-se o dia da publicação, não a data da memória; várias Recordas no mesmo dia contam como um dia. A sequência permanece válida se a última publicação foi hoje ou ontem; um dia inteiro sem publicação a interrompe, e a próxima publicação inicia uma nova sequência de 1 dia (T-E6.US35.BE.01). O tratamento de Recordas removidas pela moderação (D56) é uma decisão provisória a confirmar; as issues #113 e #123 não especificam esse caso.
 7. **O que não está neste documento está fora do escopo do MVP** (Parte 7).
 
 ---
@@ -229,13 +229,13 @@ A entidade central: uma memória musical. Amarra um usuário, uma mídia e o **s
 - Visibilidade derivada de `app_user.is_private`, nunca armazenada aqui.
 - Filtro de perfil por artista = `song_artist_name ILIKE '%texto%'` (D3). Por música = `deezer_track_id`. Por data = `created_at`.
 
-**Deleção.** Soft delete: excluir = setar `deleted_at`; `recorda_like`, `recorda_comment`, `recorda_mention` e `notification` permanecem. A moderação também seta `deleted_at` para remover conteúdo (D56), registrando a ação em `moderation_action` na mesma transação. Toda leitura filtra `deleted_at IS NULL` e checa a conta do autor ativa (D34, D71), exceto a apuração do streak (Parte 1, princípio 6).
+**Deleção.** Soft delete: excluir = setar `deleted_at`; `recorda_like`, `recorda_comment`, `recorda_mention` e `notification` permanecem. A moderação também seta `deleted_at` para remover conteúdo (D56), registrando a ação em `moderation_action` na mesma transação. Leituras de conteúdo filtram `deleted_at IS NULL` e checam a conta do autor ativa (D34, D71), exceto a futura apuração do streak (Parte 1, princípio 6).
 
 ---
 
 ### 7. `recorda_mention`
 
-> **Status:** prevista no contrato ativo; ainda sem model nem migration (issue #17).
+> **Status:** prevista no contrato ativo, mas ainda sem model nem migration neste backend (issue **#17**).
 
 Marcação de amigos em um Recorda.
 
@@ -302,7 +302,7 @@ Comentário de texto em um Recorda.
 
 ### 10. `user_streak` *(Descontinuada no Épico 06 — ver US35 e issue #113)*
 
-> **Status:** Supersedida pelo cálculo dinâmico sobre a tabela `recorda` (T-E6.US35.BE.01). Mantida nesta seção apenas como registro histórico do modelo v3.0 conceitual inicial.
+> **Status:** Descontinuada no contrato do MVP; a US35 prevê cálculo dinâmico sobre a tabela `recorda` (T-E6.US35.BE.01), ainda pendente de implementação. Mantida nesta seção apenas como registro histórico do modelo v3.0 conceitual inicial.
 
 Placar de streak — cache derivado 1:1 com `app_user`. No modelo v3 original, previa:
 
@@ -313,7 +313,7 @@ Placar de streak — cache derivado 1:1 com `app_user`. No modelo v3 original, p
 | longest_streak | INT | — | Não | default 0 |
 | last_active_date | DATE | — | Sim | dia ativo mais recente (nulo = nunca ativo) |
 
-**Regras (Supersedidas no Épico 06).** Com a consolidação da US35 no Épico 06, o cálculo do streak de publicações é feito sob demanda no serviço de perfil diretamente sobre a tabela `recorda` (sem ledger separado e sem necessidade de tabela cache materializada no banco do MVP).
+**Regras (Supersedidas no Épico 06).** Quando a US35 (#113) for implementada, o streak deverá ser calculado sob demanda no serviço de perfil a partir de `recorda.created_at`, sem ledger separado nem tabela de cache no MVP.
 
 ---
 
@@ -440,7 +440,7 @@ Trilha de auditoria das ações administrativas de moderação: quem agiu, qual 
 | app_user | curte | recorda | N : M | `recorda_like` |
 | app_user | comenta | recorda | 1 : N | `recorda_comment` |
 | app_user | marcado em | recorda | N : M | `recorda_mention` |
-| app_user | streak de publicações | recorda | 1 : N | apurado dinamicamente sobre `created_at` (US35) |
+| app_user | streak de publicações | recorda | 1 : N | apuração dinâmica sobre `created_at` prevista na US35 |
 | app_user | recebe / dispara | notification | 1 : N | — |
 | app_user | abre / é alvo | report | 1 : N | — |
 | recorda | é alvo de | report | 1 : N | — |
@@ -594,7 +594,7 @@ erDiagram
 
 Enxutos — nas FKs e nos campos de ordenação/busca:
 
-- `recorda (user_id, created_at DESC)` — linha do tempo do perfil, feed e apuração do streak de publicações (US35; a consulta de streak inclui recordas com soft-delete para preservar dias conquistados)
+- `recorda (user_id, created_at DESC)` — linha do tempo do perfil, feed e futura apuração do streak (US35; quando implementada, a consulta deverá incluir Recordas com soft-delete para preservar dias conquistados)
 - `recorda (deezer_track_id)` — filtro "meus Recordas com essa música"
 - `recorda` — índice **GIN `pg_trgm`** em `song_artist_name` e em `song_title` — filtro por artista (`ILIKE`) e busca de conteúdo (D3, D75) *(definidos nas migrações Alembic)*
 - `follow (follower_id, status)` e `follow (following_id, status)` — feed e listas de seguidores
@@ -644,13 +644,13 @@ Itens avaliados e **conscientemente adiados**. Nenhum bloqueia o lançamento; qu
 
 ## Parte 8 — Fluxos essenciais (verificação do modelo)
 
-> Notação: **L** = leitura, **E** = escrita. Toda leitura de conteúdo assume o filtro `deleted_at IS NULL` e a checagem de acesso (perfil público **ou** `follow` `ACCEPTED`).
+> Notação: **L** = leitura, **E** = escrita. Como regra geral, leituras de conteúdo filtram `deleted_at IS NULL` e respeitam o acesso (perfil público **ou** `follow` `ACCEPTED`); a futura apuração do streak é a exceção descrita na Parte 1, princípio 6.
 
 **A · Onboarding.** Cliente busca música/artistas no Deezer.
 E: `app_user` (insert com `username`, `email`, `name`, `password_hash` e posterior update com `fav_song_*`), `user_favorite_genre` (≥3), `user_favorite_artist` (≥3, snapshot).
 
-**B · Criar Recorda com amigos marcados.** Cliente resolve a música no Deezer (se falhar, **bloqueia** — D10).
-E: `recorda` (snapshot completo), `recorda_mention` (1 por amigo), `notification` (`MENTION` por amigo). *(O streak de publicações é apurado dinamicamente na leitura do perfil a partir de `recorda.created_at` em `America/Sao_Paulo`, sem ledger separado — US35)*.
+**B · Criar Recorda com amigos marcados (fluxo previsto; marcações dependem da issue #17).** Cliente resolve a música no Deezer (se falhar, **bloqueia** — D10).
+E: `recorda` (snapshot completo); quando o modelo previsto na issue #17 estiver implementado, `recorda_mention` (1 por amigo) e `notification` (`MENTION` por amigo). *(A apuração do streak também está prevista nas issues #113/#123 e será feita na leitura do perfil a partir de `recorda.created_at`, em `America/Sao_Paulo`, sem ledger separado.)*
 
 **C · Seguir.** Público → E: `follow` (`ACCEPTED`), `notification` (`NEW_FOLLOWER`). Privado → E: `follow` (`PENDING`), `notification` (`FOLLOW_REQUEST`); na aprovação → E: `follow` (`ACCEPTED` + `accepted_at`), `notification` (`FOLLOW_ACCEPTED`).
 
