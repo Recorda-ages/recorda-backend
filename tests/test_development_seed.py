@@ -529,9 +529,8 @@ def test_seeded_demo_user_can_consume_the_profile(
     assert profile["username"] == "gabriel"
     assert profile["profile_picture_url"]
     assert profile["favorite_song"]["deezer_track_id"] == "3135556"
-    assert len(profile["favorite_genres"]) == 3
-    assert len(profile["favorite_artists"]) == 3
-    assert len(profile["recordas"]) == 2
+    assert profile["counts"] == {"recordas": 2, "followers": 5, "following": 4}
+    assert "favorite_genres" not in profile
 
 
 def test_seed_restores_a_suspended_demo_user_and_its_access(
