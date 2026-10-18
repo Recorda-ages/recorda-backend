@@ -1,11 +1,12 @@
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, select
+from sqlalchemy import ColumnElement, Select, func, select
 from sqlalchemy import delete as delete_stmt
 from sqlalchemy.orm import Session
 
-from app.models.app_user import STATUS_ACTIVE, AppUser
+from app.models.app_user import AppUser  # STATUS_ACTIVE sai: vai ficar sem uso
 from app.models.follow import STATUS_ACCEPTED, Follow
+from app.repositories._query import active_user_condition
 
 LIKE_ESCAPE = "\\"
 
@@ -14,6 +15,18 @@ def _escape_like(term: str) -> str:
     for char in (LIKE_ESCAPE, "%", "_"):
         term = term.replace(char, LIKE_ESCAPE + char)
     return term
+
+
+def _accepted_active_member(owner_side: ColumnElement, owner_id: UUID) -> tuple:
+    """Vínculo aceito com membro ativo e não excluído.
+
+    Usado pelas listas e pelos contadores, para que os números batam.
+    """
+    return (
+        owner_side == owner_id,
+        Follow.status == STATUS_ACCEPTED,
+        active_user_condition(),
+    )
 
 
 def _list_query(
@@ -27,12 +40,7 @@ def _list_query(
     stmt = (
         select(AppUser)
         .join(Follow, member_side == AppUser.user_id)
-        .where(
-            owner_side == owner_id,
-            Follow.status == STATUS_ACCEPTED,
-            AppUser.deleted_at.is_(None),
-            AppUser.status == STATUS_ACTIVE,
-        )
+        .where(*_accepted_active_member(owner_side, owner_id))
         # username é único, então ordenar por ele já é determinístico.
         .order_by(AppUser.username)
     )
@@ -97,6 +105,42 @@ def list_following(
         q=q,
     )
     return _page(db, stmt, limit, offset)
+
+
+def _count_members(
+    db: Session,
+    *,
+    owner_side: ColumnElement,
+    member_side: ColumnElement,
+    owner_id: UUID,
+) -> int:
+    stmt = (
+        select(func.count())
+        .select_from(Follow)
+        .join(AppUser, member_side == AppUser.user_id)
+        .where(*_accepted_active_member(owner_side, owner_id))
+    )
+    return db.scalar(stmt) or 0
+
+
+def count_followers(db: Session, owner_id: UUID) -> int:
+    """Quantos seguem o dono, pela mesma regra de `list_followers`."""
+    return _count_members(
+        db,
+        owner_side=Follow.following_id,
+        member_side=Follow.follower_id,
+        owner_id=owner_id,
+    )
+
+
+def count_following(db: Session, owner_id: UUID) -> int:
+    """Quantos o dono segue, pela mesma regra de `list_following`."""
+    return _count_members(
+        db,
+        owner_side=Follow.follower_id,
+        member_side=Follow.following_id,
+        owner_id=owner_id,
+    )
 
 
 def is_accepted_follower(db: Session, follower_id: UUID, following_id: UUID) -> bool:
