@@ -93,3 +93,24 @@ def test_soft_delete_keeps_row(db, author):
     recorda_repository.soft_delete(db, recorda)
     assert recorda.deleted_at is not None
     assert db.get(Recorda, recorda.recorda_id) is recorda
+
+
+def test_count_by_user_counts_only_live_recordas(db, author):
+    add_recorda(db, author)
+    add_recorda(db, author, song_title="The Trooper")
+    # Exclusão pelo autor e remoção pela moderação usam o mesmo deleted_at.
+    add_recorda(db, author, deleted_at=now_utc())
+
+    assert recorda_repository.count_by_user(db, author.user_id) == 2
+
+
+def test_count_by_user_ignores_other_authors(db, author):
+    other = add_user(db, "bob")
+    add_recorda(db, author)
+    add_recorda(db, other)
+
+    assert recorda_repository.count_by_user(db, author.user_id) == 1
+
+
+def test_count_by_user_returns_zero_without_recordas(db, author):
+    assert recorda_repository.count_by_user(db, author.user_id) == 0

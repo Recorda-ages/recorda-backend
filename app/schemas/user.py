@@ -3,9 +3,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.profile import FollowStatus
+from app.schemas.profile import ProfileFavoriteSong as ProfileFavoriteSong
 from app.schemas.recorda import RecordaRead
-
-FollowStatus = Literal["seguindo", "solicitado", "nenhuma"]
 
 
 class UserBase(BaseModel):
@@ -57,14 +57,6 @@ class SuggestedUser(BaseModel):
     affinity: float
     common_genres: list[str]
     common_artists: list[str]
-
-
-class ProfileFavoriteSong(BaseModel):
-    deezer_track_id: str
-    title: str
-    artist_name: str
-    cover_url: str
-    preview_url: str | None
 
 
 class ProfileGenre(BaseModel):
