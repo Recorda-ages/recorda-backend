@@ -1,10 +1,12 @@
 """Montagem do cabeçalho do perfil (contrato ProfileRead, C-2 do Épico 06)."""
 
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.core.music_preview import public_preview_url
+from app.core.time import now_utc, to_local
 from app.models import AppUser
 from app.repositories import follow_repository, recorda_repository
 from app.schemas.profile import (
@@ -12,6 +14,7 @@ from app.schemas.profile import (
     ProfileFavoriteSong,
     ProfileRead,
     ProfileRelationship,
+    ProfileStreak,
 )
 
 
@@ -32,6 +35,41 @@ def count_following(db: Session, user_id: UUID) -> int:
     return follow_repository.count_following(db, user_id)
 
 
+def calculate_streak(days: set[date], today: date) -> ProfileStreak:
+    """Dias seguidos com ao menos uma Recorda publicada, terminando hoje ou ontem.
+
+    Hoje ainda não terminou: sem publicação hoje, a sequência de ontem segue valendo.
+    """
+    published_today = today in days
+    day = today if published_today else today - timedelta(days=1)
+
+    current_days = 0
+    while day in days:
+        current_days += 1
+        day -= timedelta(days=1)
+
+    return ProfileStreak(current_days=current_days, published_today=published_today)
+
+
+def build_streak(db: Session, user_id: UUID) -> ProfileStreak:
+    """Inclui Recordas excluídas: o dia conquistado não se perde (US35)."""
+    days = {
+        _to_publication_day(created_at)
+        for created_at in recorda_repository.list_publication_times(db, user_id)
+    }
+    return calculate_streak(days, to_local(now_utc()).date())
+
+
+def _to_publication_day(value: datetime) -> date:
+    """Dia de calendário em America/Sao_Paulo.
+
+    O SQLite dos testes devolve datetime sem fuso; o valor gravado é UTC.
+    """
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return to_local(value).date()
+
+
 def build_profile(db: Session, owner: AppUser, viewer: AppUser) -> ProfileRead:
     """Cabeçalho do perfil de `owner` visto por `viewer`.
 
@@ -49,7 +87,7 @@ def build_profile(db: Session, owner: AppUser, viewer: AppUser) -> ProfileRead:
         is_private=owner.is_private,
         counts=_build_counts(db, owner.user_id),
         favorite_song=_build_favorite_song(owner),
-        streak=None,
+        streak=build_streak(db, owner.user_id),
         relationship=ProfileRelationship(
             is_self=True, follow_status="nenhuma", follow_id=None
         ),
