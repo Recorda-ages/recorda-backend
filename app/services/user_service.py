@@ -133,6 +133,10 @@ def update(db: Session, user_id: UUID, payload: UserUpdate) -> AppUser | None:
     return user_repository.save(db, user)
 
 
+def delete_own_account(db: Session, user: AppUser) -> None:
+    user_repository.soft_delete(db, user)
+
+
 def delete(
     db: Session,
     user_id: UUID,
