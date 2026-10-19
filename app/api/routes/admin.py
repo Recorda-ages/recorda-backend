@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.models import AppUser
 from app.repositories import report_repository
 from app.repositories.report_repository import GroupOrder
-from app.schemas.admin_user import AdminUserPage
+from app.schemas.admin_user import AdminUserDetail, AdminUserPage
 from app.schemas.admin_user_moderation import (
     ReactivateUserRequest,
     SuspendUserRequest,
@@ -53,11 +53,11 @@ def list_admin_users(
     )
 
 
-@router.get("/users/{user_id}", response_model=AdminUserPage)
+@router.get("/users/{user_id}", response_model=AdminUserDetail)
 def get_admin_user(
     user_id: UUID,
     db: Session = Depends(get_db),
-) -> AdminUserPage:
+) -> AdminUserDetail:
     return admin_user_moderation_service.get_user(db, user_id=user_id)
 
 

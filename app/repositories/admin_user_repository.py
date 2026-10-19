@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import AppUser
@@ -24,10 +24,31 @@ def set_status(db: Session, user: AppUser, status: str) -> AppUser:
 
 def filtered_users(q: str, status: str | None):
     stmt = select(AppUser).where(AppUser.deleted_at.is_(None))
+    q = q.strip()
+
     if q:
-        stmt = stmt.where(AppUser.username.ilike(f"%{q}%"))
+        try:
+            user_id = UUID(q)
+        except ValueError:
+            escaped_q = q.replace("%", "\\%").replace("_", "\\_").replace("\\", "\\\\")
+            pattern = f"%{escaped_q}%"
+
+            if "@" in q:
+                stmt = stmt.where(AppUser.email.ilike(pattern, escape="\\"))
+            else:
+                stmt = stmt.where(
+                    or_(
+                        AppUser.name.ilike(pattern, escape="\\"),
+                        AppUser.username.ilike(pattern, escape="\\"),
+                        AppUser.email.ilike(pattern, escape="\\"),
+                    )
+                )
+        else:
+            stmt = stmt.where(AppUser.user_id == user_id)
+
     if status:
         stmt = stmt.where(AppUser.status == status)
+
     return stmt
 
 
