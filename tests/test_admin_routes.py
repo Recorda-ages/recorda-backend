@@ -234,31 +234,66 @@ def test_list_admin_users_requires_admin(client, db):
     response = client.get("/api/v1/admin/users", headers=common_headers)
     assert response.status_code == 403
 
+
 def test_list_admin_users_invalid_status(client, db):
     admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
     admin_headers = auth_headers(admin_user)
 
-    status_response = client.get(
+    statusinvalid_response = client.get(
         "/api/v1/admin/users",
         params={"status": "INVALID_STATUS"},
         headers=admin_headers,
     )
-
+    statusempty_response = client.get(
+        "/api/v1/admin/users",
+        params={"status": ""},
+        headers=admin_headers,
+    )
     offset_response = client.get(
         "/api/v1/admin/users",
         params={"offset": -1},
         headers=admin_headers,
     )
 
-    limit_response = client.get(
+    limit_invalid_response = client.get(
         "/api/v1/admin/users",
         params={"limit": 100},
         headers=admin_headers,
     )
+    limit_negative_response = client.get(
+        "/api/v1/admin/users",
+        params={"limit": -1},
+        headers=admin_headers,
+    )
+    limit_min_response = client.get(
+        "/api/v1/admin/users",
+        params={"limit": 1},
+        headers=admin_headers,
+    )
+    limit_max_response = client.get(
+        "/api/v1/admin/users",
+        params={"limit": 50},
+        headers=admin_headers,
+    )
 
-    assert status_response.status_code == 422
+    assert statusinvalid_response.status_code == 422
+    assert statusempty_response.status_code == 422
     assert offset_response.status_code == 422
-    assert limit_response.status_code == 422
+    assert limit_min_response.status_code == 200
+    assert limit_max_response.status_code == 200
+    assert limit_negative_response.status_code == 422
+    assert limit_invalid_response.status_code == 422
+
+def test_list_users_ïnvalid_query(client, db):
+    simbols = "!@#$%^&*()_+{}|:\"<>?[]\\;',./`~"
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
+    admin_headers = auth_headers(admin_user)
+    simbols_response = client.get(
+        "/api/v1/admin/users",
+        params={"q": simbols},
+        headers=admin_headers,
+    )
+    assert simbols_response.status_code == 422
 
 def test_get_user_requires_authentication_or_common_user(client, db):
     target_user = add_user(db, "target_user")
@@ -281,10 +316,8 @@ def test_get_user_requires_authentication_or_common_user(client, db):
     deleted_user_response = client.get(
         f"/api/v1/admin/users/{deleted_user.user_id}", headers=common_headers
     )
-    
 
     assert authentication_response.status_code == 401
     assert common_user_response.status_code == 403
     assert admin_user_response.status_code == 200
     assert deleted_user_response.status_code == 404
-
