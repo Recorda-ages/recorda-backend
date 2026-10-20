@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models import AppUser
 from app.models.report import Report
+from app.repositories._query import only_live
 
 
 def get_for_update(db: Session, user_id: UUID) -> AppUser | None:
@@ -61,6 +62,10 @@ def search_users(
         filtered.order_by(AppUser.username, AppUser.user_id).limit(limit).offset(offset)
     )
     return list(db.scalars(page)), total
+
+def get_user(db: Session, user_id: UUID) -> AppUser | None:
+    stmt = select(AppUser).where(AppUser.user_id == user_id)
+    return db.scalars(only_live(stmt, AppUser)).first()
 
 
 def count_reports_by_user(db: Session, user_ids: list[UUID]) -> dict[UUID, int]:

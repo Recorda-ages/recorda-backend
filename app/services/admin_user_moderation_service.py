@@ -148,14 +148,14 @@ def search_users(
 
 
 def get_user(db: Session, *, user_id: UUID) -> AdminUserDetail:
-    user = admin_user_repository.get_for_update(db, user_id)
+    user = admin_user_repository.get_user(db, user_id)
     if user is None:
         raise HTTPException(
             status_code=404, detail=f"User with ID {user_id} not found."
         )
     created_at = user.created_at
     is_private = user.is_private
-    recordas_count = recorda.recordas_count
+    recordas_count = user.recordas_count
     reports_received = reports_received
     actions = admin_user_repository.to_admin_user_detail(user, reports_received, created_at, is_private, recordas_count) 
     
