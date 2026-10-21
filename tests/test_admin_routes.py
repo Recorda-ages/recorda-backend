@@ -1,6 +1,12 @@
 from app.models.app_user import ROLE_ADMIN, STATUS_ACTIVE, STATUS_SUSPENDED
 from app.models.report import STATUS_RESOLVED
-from tests.factories import add_report, add_user, auth_headers
+from tests.factories import (
+    add_moderation_action,
+    add_recorda,
+    add_report,
+    add_user,
+    auth_headers,
+)
 
 
 def suspend_url(target) -> str:
@@ -321,3 +327,28 @@ def test_get_user_requires_authentication_or_common_user(client, db):
     assert common_user_response.status_code == 403
     assert admin_user_response.status_code == 200
     assert deleted_user_response.status_code == 404
+
+
+def test_get_admin_user_returns_detail_counts_reports_and_actions(client, db):
+    admin = add_user(db, "detail_admin", role=ROLE_ADMIN)
+    target = add_user(db, "detail_target")
+    reporter = add_user(db, "detail_reporter")
+    add_recorda(db, target)
+    add_report(db, reporter, reported_user=target)
+    add_moderation_action(db, admin, target_user=target)
+
+    response = client.get(
+        f"/api/v1/admin/users/{target.user_id}",
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200, response.text
+    detail = response.json()
+    assert detail["user_id"] == str(target.user_id)
+    assert detail["recordas_count"] == 1
+    assert detail["reports_count"] == 1
+    assert detail["reports_received"][0]["target_id"] == str(target.user_id)
+    assert detail["reports_received"][0]["report_count"] == 1
+    assert len(detail["actions"]) == 1
+    assert detail["actions"][0]["admin_username"] == admin.username
+    assert detail["actions"][0]["target_user_id"] == str(target.user_id)

@@ -15,7 +15,12 @@ from app.models.moderation_action import (
 )
 from app.repositories import admin_user_repository
 from app.repositories.admin_user_repository import get_for_update, set_status
-from app.schemas.admin_user import AdminUserDetail, AdminUserPage
+from app.schemas.admin_user import (
+    AdminUserAction,
+    AdminUserDetail,
+    AdminUserPage,
+    AdminUserReportGroup,
+)
 from app.schemas.admin_user_moderation import ReactivateUserRequest, SuspendUserRequest
 
 ResolveReports = Callable[[Session, UUID], int]
@@ -153,10 +158,43 @@ def get_user(db: Session, *, user_id: UUID) -> AdminUserDetail:
         raise HTTPException(
             status_code=404, detail=f"User with ID {user_id} not found."
         )
-    created_at = user.created_at
-    is_private = user.is_private
-    recordas_count = user.recordas_count
-    reports_received = reports_received
-    actions = admin_user_repository.to_admin_user_detail(user, reports_received, created_at, is_private, recordas_count) 
-    
-    return AdminUserDetail(reports_received=actions["reports_received"], actions=actions["actions"], **actions["user_row"])
+
+    row = admin_user_repository.to_admin_user_row(
+        user,
+        admin_user_repository.count_reports_by_user(db, [user_id]).get(user_id, 0),
+    )
+    reports_received = [
+        AdminUserReportGroup(
+            target_type="USER",
+            target_id=user_id,
+            status=report.status,
+            report_count=report.report_count,
+            first_reported_at=report.first_reported_at,
+            last_reported_at=report.last_reported_at,
+        )
+        for report in admin_user_repository.list_report_groups_for_user(db, user_id)
+    ]
+    actions = [
+        AdminUserAction(
+            action_id=action.action_id,
+            action_type=action.action_type,
+            admin_id=action.admin_id,
+            admin_username=admin_username,
+            target_user_id=action.target_user_id,
+            target_recorda_id=action.target_recorda_id,
+            reason=action.reason,
+            details=action.details,
+            created_at=action.created_at,
+        )
+        for action, admin_username, _, _ in admin_user_repository.list_actions_for_user(
+            db, user_id
+        )
+    ]
+    return AdminUserDetail(
+        **row,
+        created_at=user.created_at,
+        is_private=user.is_private,
+        recordas_count=admin_user_repository.count_recordas_by_user(db, user_id),
+        reports_received=reports_received,
+        actions=actions,
+    )

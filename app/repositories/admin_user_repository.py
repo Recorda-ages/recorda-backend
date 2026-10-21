@@ -3,8 +3,9 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import AppUser
+from app.models import AppUser, Recorda
 from app.models.report import Report
+from app.repositories import moderation_action_repository
 from app.repositories._query import only_live
 
 
@@ -78,6 +79,39 @@ def count_reports_by_user(db: Session, user_ids: list[UUID]) -> dict[UUID, int]:
             .where(Report.reported_user_id.in_(user_ids))
             .group_by(Report.reported_user_id)
         ).all()
+    )
+
+
+def count_recordas_by_user(db: Session, user_id: UUID) -> int:
+    statement = (
+        select(func.count(Recorda.recorda_id))
+        .where(Recorda.user_id == user_id, Recorda.deleted_at.is_(None))
+    )
+    return db.scalar(statement) or 0
+
+
+def list_report_groups_for_user(db: Session, user_id: UUID):
+    return list(
+        db.execute(
+            select(
+                Report.status,
+                func.count(Report.report_id).label("report_count"),
+                func.min(Report.created_at).label("first_reported_at"),
+                func.max(Report.created_at).label("last_reported_at"),
+            )
+            .where(
+                Report.reported_user_id == user_id,
+                Report.comment_id.is_(None),
+            )
+            .group_by(Report.status)
+            .order_by(Report.status)
+        ).all()
+    )
+
+
+def list_actions_for_user(db: Session, user_id: UUID):
+    return moderation_action_repository.list_for_target(
+        db, target_type="USER", target_id=user_id
     )
 
 
