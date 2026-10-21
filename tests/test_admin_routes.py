@@ -290,7 +290,7 @@ def test_list_admin_users_invalid_status(client, db):
     assert limit_negative_response.status_code == 422
     assert limit_invalid_response.status_code == 422
 
-def test_list_users_ïnvalid_query(client, db):
+def test_list_users_invalid_query(client, db):
     simbols = "!@#$%^&*()_+{}|:\"<>?[]\\;',./`~"
     admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
     admin_headers = auth_headers(admin_user)
