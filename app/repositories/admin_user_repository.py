@@ -64,6 +64,7 @@ def search_users(
     )
     return list(db.scalars(page)), total
 
+
 def get_user(db: Session, user_id: UUID) -> AppUser | None:
     stmt = select(AppUser).where(AppUser.user_id == user_id)
     return db.scalars(only_live(stmt, AppUser)).first()
@@ -83,9 +84,8 @@ def count_reports_by_user(db: Session, user_ids: list[UUID]) -> dict[UUID, int]:
 
 
 def count_recordas_by_user(db: Session, user_id: UUID) -> int:
-    statement = (
-        select(func.count(Recorda.recorda_id))
-        .where(Recorda.user_id == user_id, Recorda.deleted_at.is_(None))
+    statement = select(func.count(Recorda.recorda_id)).where(
+        Recorda.user_id == user_id, Recorda.deleted_at.is_(None)
     )
     return db.scalar(statement) or 0
 
