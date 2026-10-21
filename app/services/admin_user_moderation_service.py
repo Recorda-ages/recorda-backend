@@ -124,22 +124,6 @@ def search_users(
     users, total = admin_user_repository.search_users(
         db, q=q, status=status, limit=limit, offset=offset
     )
-    if limit == 0 or limit is None or limit > 50:
-        raise HTTPException(
-            status_code=422,
-            detail={"limit": "Limit must be between 1 and 50."},
-        )
-    if offset < 0 or offset is None:
-        raise HTTPException(
-            status_code=422,
-            detail={"offset": "Offset must be greater than or equal to 0."},
-        )
-    if status is not None and status not in [STATUS_ACTIVE, STATUS_SUSPENDED]:
-        raise HTTPException(
-            status_code=422,
-            detail={"status": "Status must be either 'ACTIVE' or 'SUSPENDED'."},
-        )
-
     report_counts = admin_user_repository.count_reports_by_user(
         db, [user.user_id for user in users]
     )
