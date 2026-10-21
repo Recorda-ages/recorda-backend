@@ -24,6 +24,7 @@ from app.schemas.user import (
     UserCreate,
     UserProfileRead,
     UserSearchResult,
+    UserSettingsUpdate,
     UserUpdate,
 )
 from app.services import affinity_service
@@ -100,7 +101,7 @@ def get_own_profile(db: Session, user: AppUser) -> UserProfileRead:
     )
 
 
-def create(db: Session, payload: UserCreate) -> AppUser:
+def create(db: Session, payload: UserCreate, *, language: str | None = None) -> AppUser:
     ensure_unique_credentials(db, payload.username, payload.email)
     user = AppUser(
         name=payload.name,
@@ -109,6 +110,8 @@ def create(db: Session, payload: UserCreate) -> AppUser:
         password_hash=security.hash_password(payload.password),
         role=ROLE_USER,
     )
+    if language is not None:
+        user.language = language
     return user_repository.create(db, user)
 
 
@@ -244,3 +247,11 @@ def suggest_by_affinity(
     # Username desempata para a ordem ser estável entre requisições iguais.
     suggestions.sort(key=lambda suggestion: (-suggestion.affinity, suggestion.username))
     return suggestions[:limit]
+
+
+def update_settings(db: Session, user: AppUser, payload: UserSettingsUpdate) -> AppUser:
+    if payload.is_private is not None:
+        user.is_private = payload.is_private
+    if payload.language is not None:
+        user.language = payload.language
+    return user_repository.save(db, user)
