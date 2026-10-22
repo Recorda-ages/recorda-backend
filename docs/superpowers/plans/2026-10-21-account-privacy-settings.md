@@ -38,7 +38,7 @@
 - [x] Extract the shared acceptance helper and make the service own its transaction; implement settings schemas, repository queries, service and routes.
 - [x] Run settings and existing acceptance/notification tests; resolve failures.
 - [x] Test old Recordas across privacy toggles through detail, general feed, grid, visible listing and followers/following routes. The user approved adding the minimal missing grid route.
-- [x] Run full pytest coverage, Ruff check and Ruff format check: 748 passed, 7 PostgreSQL-dependent skips, 98.46% coverage; no Ruff errors.
-- [x] Review the diff, fix the concurrent follow/privacy race, and capture real API and coverage evidence using the authorized isolated preview database. PostgreSQL concurrency test added but not run locally (no database available).
+- [x] Run full pytest coverage, Ruff check and Ruff format check. Initial run: 748 passed, 7 PostgreSQL-dependent skips. On 22/10, disposable PostgreSQL 16.15 validation: 755 passed, zero skips, 98.46% coverage.
+- [x] Review the diff, fix the concurrent follow/privacy race, and capture real API and coverage evidence using the authorized isolated preview database. The real PostgreSQL concurrency test passed on 22/10.
 - [x] Present screenshots and demonstrate the three manual scenarios in visible Swagger at the user's request. The user authorized including the results in the PR.
-- [ ] Commit, rebase onto updated dev, push, open the full PR with evidence, and monitor CI. Never merge.
+- [x] Commit, rebase onto updated dev, push, open PR #135 with evidence, and verify successful CI. No merge.

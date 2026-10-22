@@ -26,14 +26,16 @@ Executado em Python 3.13.16:
 .venv/Scripts/python.exe -m ruff format --check .
 ```
 
-- 748 testes passaram; cobertura global 98,46%.
+- Em 22/10/2026, com PostgreSQL descartável disponível: **755 testes passaram, zero skips; cobertura global 98,46%**. Os sete testes específicos usam PostgreSQL real; os demais fixtures continuam usando SQLite.
 - 24 testes da tarefa executados com autenticação e SQLAlchemy reais em SQLite, incluindo isolamento dos pedidos, notificações, rollback, no-op, contas inativas, leitura desatualizada e privacidade retroativa em conteúdo existente.
 - Schemas de configurações, serviço de configurações e serviço de aceite: 100% de cobertura de linhas na suíte completa.
 - Ruff: nenhum erro de lint ou formatação.
-- 7 testes que exigem PostgreSQL foram ignorados por ausência de `TEST_DATABASE_URL`, incluindo o novo teste de concorrência com duas sessões e bloqueio real. O Docker instalado estava sem daemon ativo. A concorrência no PostgreSQL permanece sem execução local.
+- Os sete testes que haviam sido ignorados na execução inicial passaram no PostgreSQL 16.15 local descartável, incluindo a concorrência com duas sessões e bloqueio real. [Resultados e reprodução](evidence/111/postgres-validation.md).
 - Há um aviso existente de depreciação de `httpx` no TestClient do Starlette.
 
 ## Evidências reais
+
+Os registros visuais abaixo são da execução inicial de 21/10. A validação PostgreSQL e a suíte completa sem skips de 22/10 estão nos [logs atualizados](evidence/111/postgres-validation.md).
 
 ![Swagger: conta pública e dois pedidos aceitos](evidence/111/swagger-public-acceptance.jpg)
 
@@ -44,6 +46,7 @@ Executado em Python 3.13.16:
 - [Saída do terminal de cobertura](evidence/111/coverage-terminal-output.txt)
 - [Entrada da prévia isolada](evidence/111/preview-entry.py.txt)
 - [Três cenários executados no Swagger com o usuário acompanhando](evidence/111/guided-demo.md)
+- [Sete testes PostgreSQL e suíte completa sem skips](evidence/111/postgres-validation.md)
 
 As capturas usam a API real via Uvicorn e um SQLite temporário autorizado, com `demo_owner` e dois solicitantes de exemplo. Não há mocks nos endpoints, nem alteração de configuração de produção. O banco da prévia usa `Base.metadata.create_all`, como a fixture SQLite dos testes; não demonstra migrations ou bloqueios do PostgreSQL. URLs de mídia dos fixtures não foram acessadas nem são necessárias para estes endpoints.
 

@@ -30,4 +30,4 @@ Em 21/10/2026 (America/Sao_Paulo), o Codex executou os três cenários no Swagge
 
 [Respostas completas observadas no Swagger](guided-demo-output.txt) · [Roteiro para reprodução](manual-tests.md).
 
-Limites: esta demonstração não testa bloqueios do PostgreSQL ou o feed por afinidade musical. O feed e o rollback foram cobertos na suíte automatizada; o teste específico de concorrência em PostgreSQL aguarda um banco descartável disponível.
+Limites: esta demonstração no Swagger não testa bloqueios do PostgreSQL ou o feed por afinidade musical. O feed e o rollback foram cobertos na suíte automatizada. Em 22/10, os sete testes específicos de PostgreSQL, incluindo concorrência, passaram em banco descartável; consulte a [validação complementar](postgres-validation.md).
