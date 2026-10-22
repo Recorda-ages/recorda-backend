@@ -9,13 +9,12 @@ from alembic import command
 from app.core.config import settings
 from app.models import Notification
 from app.services import notification_service
-from tests.conftest import TEST_DATABASE_URL, requires_postgres
 from tests.factories import add_notification, add_recorda, add_user
 
-pytestmark = requires_postgres
+pytestmark = pytest.mark.postgres
 
 
-def test_upgrade_and_downgrade_preserve_social_notifications(pg_db):
+def test_upgrade_and_downgrade_preserve_social_notifications(pg_db, pg_database_url):
     author = add_user(pg_db, "author")
     recorda = add_recorda(pg_db, author)
     social = add_notification(pg_db, author, "MENTION", recorda_id=recorda.recorda_id)
@@ -39,7 +38,7 @@ def test_upgrade_and_downgrade_preserve_social_notifications(pg_db):
     pg_db.rollback()
     config = Config("alembic.ini")
     previous_url = settings.database_url
-    settings.database_url = TEST_DATABASE_URL
+    settings.database_url = pg_database_url
     try:
         command.downgrade(config, "0008_moderation_action")
         notifications = list(pg_db.scalars(select(Notification)))

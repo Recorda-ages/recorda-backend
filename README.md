@@ -525,3 +525,37 @@ recorda-backend/
 | `docker compose logs -f` | Acompanha os logs |
 | `docker compose logs -f api` | Acompanha somente os logs da API |
 | `docker compose build --no-cache` | Reconstrói as imagens sem utilizar cache |
+
+### Testes automatizados de banco de dados
+
+Instale as dependências com `pip install -e ".[dev,test]"` e mantenha o
+Docker em execução. Para rodar a suíte completa, incluindo PostgreSQL:
+
+```bash
+ENVIRONMENT=test DEBUG=false pytest
+```
+
+Os testes marcados com `postgres` iniciam automaticamente um container
+`postgres:16-alpine` por execução. A fixture `pg_db` recria o schema `public`
+e aplica `alembic upgrade head` antes de cada teste, limpando o schema ao
+final. Isso isola inclusive testes com `commit` e alterações de migrations.
+O container é encerrado ao terminar a sessão. A primeira execução precisa
+baixar as imagens do PostgreSQL e do auxiliar de limpeza do Testcontainers.
+Falhas no Docker ou nas migrations são erros de teste, sem skip automático.
+
+```bash
+# Apenas integração com PostgreSQL (sem cobrar cobertura global nesta seleção)
+pytest -m postgres --no-cov
+
+# Apenas a suíte que não depende do Docker
+pytest -m 'not postgres'
+```
+
+Para usar um PostgreSQL externo, configure `TEST_DATABASE_URL` com o driver
+`postgresql+psycopg` e `TEST_DATABASE_ALLOW_DESTRUCTIVE=1`. **O schema public
+será apagado antes e depois de cada teste.** Use exclusivamente um banco
+descartável cujo nome comece com `test_` ou termine em `_test`, diferente do
+banco da aplicação; a guarda recusa destinos fora dessas condições.
+
+O CI executa a suíte completa com Docker e exige pelo menos 80% de cobertura
+sobre `app`, publicando o relatório `coverage-unit.xml` como artefato.

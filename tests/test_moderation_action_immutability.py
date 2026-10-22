@@ -2,8 +2,8 @@
 
 O trigger `trg_moderation_action_immutable` é criado pela migration
 `0008_moderation_action` e só existe no PostgreSQL. O SQLite da suíte não tem
-equivalente, então estes testes são skipados quando `TEST_DATABASE_URL` não
-está definida (é o caso do CI atual).
+equivalente. A fixture sobe um PostgreSQL temporário via Testcontainers ou
+usa um banco descartável indicado por `TEST_DATABASE_URL`.
 """
 
 import uuid
@@ -15,11 +15,10 @@ from sqlalchemy.orm import Session
 
 from app.models import ModerationAction
 from app.models.moderation_action import ACTION_SUSPEND_USER
-from tests.conftest import requires_postgres
 
 IMMUTABLE_MESSAGE = "moderation_action é imutável"
 
-pytestmark = requires_postgres
+pytestmark = pytest.mark.postgres
 
 
 @pytest.fixture
