@@ -274,8 +274,8 @@ respectivas contas de demonstração e administrativa.
 Depois do login, o frontend pode consumir os fixtures diretamente pelos endpoints:
 
 - `GET /api/v1/feed/following` para o feed;
-- `GET /api/v1/users/me/profile` para foto, música, preferências e Recordas do
-  perfil autenticado.
+- `GET /api/v1/users/me/profile` para o cabeçalho do perfil autenticado (foto,
+música favorita, privacidade e contadores).
 
 Para recriar o banco do zero e rodar o seed novamente:
 
