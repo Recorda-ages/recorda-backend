@@ -20,6 +20,7 @@ from app.schemas.recorda import (
     RecordaDetail,
     RecordaUpdate,
 )
+from app.services import follow_service
 
 
 class NotRecordaOwnerError(Exception):
@@ -28,6 +29,11 @@ class NotRecordaOwnerError(Exception):
 
 def list_visible_to_user(db: Session, viewer: AppUser) -> list[Recorda]:
     return recorda_repository.list_visible_to_user(db, viewer)
+
+
+def list_for_profile(db: Session, owner_id: UUID, viewer: AppUser) -> list[Recorda]:
+    follow_service.authorize_profile_access(db, owner_id, viewer)
+    return recorda_repository.list_by_user(db, owner_id)
 
 
 def get_by_id(db: Session, recorda_id: UUID) -> Recorda | None:

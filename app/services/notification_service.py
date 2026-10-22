@@ -50,13 +50,14 @@ def notify_follow_request(db: Session, follow: Follow) -> Notification | None:
 
 
 def notify_follow_accepted(db: Session, follow: Follow) -> Notification | None:
-    """Avisa quem pediu para seguir que o pedido foi aprovado."""
+    """Avisa quem pediu sem commit; o aceite controla a transação."""
     return _create(
         db,
         recipient_id=follow.follower_id,
         sender_id=follow.following_id,
         type_=TYPE_FOLLOW_ACCEPTED,
         follow_id=follow.follow_id,
+        commit=False,
     )
 
 
@@ -127,6 +128,7 @@ def _create(
     recorda_id: UUID | None = None,
     comment_id: UUID | None = None,
     follow_id: UUID | None = None,
+    commit: bool = True,
 ) -> Notification | None:
     if sender_id is not None and sender_id == recipient_id:
         return None
@@ -141,6 +143,7 @@ def _create(
             comment_id=comment_id,
             follow_id=follow_id,
         ),
+        commit=commit,
     )
 
 

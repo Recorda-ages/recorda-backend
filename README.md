@@ -420,6 +420,11 @@ Se a porta do frontend mudar, atualize `CORS_ORIGINS` no `.env` antes de iniciar
 | DELETE | `/api/v1/users/{user_id}` | Soft delete: preenche `deleted_at` (admin) |
 | PATCH | `/api/v1/users/{user_id}/role` | Altera o papel (`USER` / `ADMIN`) (admin) |
 | POST | `/api/v1/users/me/music-preferences` | Salva gêneros, artistas e música favorita do onboarding |
+| GET | `/api/v1/users/me/settings` | Retorna privacidade e idioma da conta autenticada |
+| PATCH | `/api/v1/users/me/settings` | Altera privacidade; ao tornar pública, aceita pedidos pendentes atomicamente e retorna `accepted_requests` |
+| GET | `/api/v1/users/{user_id}/recordas` | Grid do perfil, respeitando privacidade e exclusão lógica |
+
+Detalhes do contrato, validações e evidências: [configurações e privacidade (#111)](docs/issue-111.md).
 
 Os identificadores são UUID (`user_id`, `recorda_id`). Nenhuma rota apaga linhas fisicamente: exclusões preenchem `deleted_at`, e as consultas ignoram registros excluídos.
 
