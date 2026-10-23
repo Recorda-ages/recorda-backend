@@ -1,9 +1,8 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
-
 from app.schemas.recorda import RecordaRead
+from pydantic import BaseModel, ConfigDict
 
 FollowStatus = Literal["seguindo", "solicitado", "nenhuma"]
 
@@ -98,4 +97,4 @@ class UserSettingsRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     is_private: bool
-    language: str
+    language: Literal["pt-BR", "en", "es"]
