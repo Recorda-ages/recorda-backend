@@ -10,11 +10,28 @@ from tests.factories import (
     auth_headers,
 )
 
+PREFERENCES_URL = "/api/v1/users/me/music-preferences"
 URL = "/api/v1/users/suggestions"
 
 
 def usernames(response) -> list[str]:
     return [item["username"] for item in response.json()]
+
+
+def preferences_body(genres):
+    return {
+        "genres": genres,
+        "artists": [
+            {"deezer_id": 27, "name": "Daft Punk"},
+            {"deezer_id": 13, "name": "Eminem"},
+            {"deezer_id": 145, "name": "Coldplay"},
+        ],
+        "favorite_track": {
+            "deezer_id": 3135556,
+            "title": "Harder, Better, Faster, Stronger",
+            "artist_name": "Daft Punk",
+        },
+    }
 
 
 class TestSuggestionsRoute:
@@ -136,6 +153,44 @@ class TestSuggestionsRoute:
         me = add_user(db, "eu")
 
         assert client.get(URL, headers=auth_headers(me)).status_code == 200
+
+    def test_suggestions_use_preferences_updated_in_previous_request(self, client, db):
+        me = add_user(db, "eu")
+        jazz_fan = add_user(db, "jazz_fan")
+        add_favorite_genres(db, jazz_fan, "Jazz")
+        headers = auth_headers(me)
+
+        initial_genres = [
+            {"deezer_id": 132, "name": "Pop"},
+            {"deezer_id": 152, "name": "Rock"},
+            {"deezer_id": 116, "name": "Rap/Hip Hop"},
+        ]
+        updated_genres = [
+            {"deezer_id": 129, "name": "Jazz"},
+            {"deezer_id": 132, "name": "Pop"},
+            {"deezer_id": 152, "name": "Rock"},
+        ]
+
+        initial_post = client.post(
+            PREFERENCES_URL,
+            json=preferences_body(initial_genres),
+            headers=headers,
+        )
+        assert initial_post.status_code == 200
+        assert usernames(client.get(URL, headers=headers)) == []
+
+        update_post = client.post(
+            PREFERENCES_URL,
+            json=preferences_body(updated_genres),
+            headers=headers,
+        )
+        assert update_post.status_code == 200
+
+        response = client.get(URL, headers=headers)
+
+        assert response.status_code == 200
+        assert usernames(response) == ["jazz_fan"]
+        assert response.json()[0]["common_genres"] == ["Jazz"]
 
 
 class TestBulkFavouriteLoaders:

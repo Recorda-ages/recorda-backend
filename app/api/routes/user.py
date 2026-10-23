@@ -90,12 +90,12 @@ def list_music_preferences(
     current_user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MusicPreferencesRead:
-    if not current_user.onboarding_completed is True:
+    if current_user.onboarding_completed is not True:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Complete the onboarding to accesse your profile",
+            detail="Complete o onboarding musical para acessar o perfil.",
         )
-    
+
     return music_preference_service.read_music_preference(db, current_user)
 
 

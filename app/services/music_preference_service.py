@@ -1,4 +1,5 @@
 """Business logic for the onboarding music preferences."""
+
 import logging
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from app.schemas.music_preference import (
 )
 
 logger = logging.getLogger(__name__)
+
 
 def replace_for_user(
     db: Session, user: AppUser, payload: MusicPreferencesCreate
@@ -108,7 +110,7 @@ def read_music_preference(db: Session, user: AppUser) -> MusicPreferencesRead:
                 picture_url=artist.artist_image_url,
             )
         )
-    
+
     preview_url = public_preview_url(
         user.fav_song_deezer_track_id,
         user.fav_song_preview_url,
@@ -119,7 +121,7 @@ def read_music_preference(db: Session, user: AppUser) -> MusicPreferencesRead:
         title=user.fav_song_title,
         artist_name=user.fav_song_artist_name,
         cover_url=user.fav_song_cover_url or "",
-        preview_url=preview_url
+        preview_url=preview_url,
     )
 
     return MusicPreferencesRead(

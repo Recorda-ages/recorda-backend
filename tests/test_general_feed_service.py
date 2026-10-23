@@ -13,7 +13,13 @@ from app.models.follow import STATUS_PENDING
 from app.repositories import general_feed_repository
 from app.services import general_feed_service
 from app.services.general_feed_service import InvalidCursorError, get_general_feed
-from tests.factories import add_follow, add_recorda, add_user
+from tests.factories import (
+    add_favorite_genres,
+    add_follow,
+    add_recorda,
+    add_user,
+    auth_headers,
+)
 
 ROCK_GENRE_ID = GENRE_SEED[0][0]
 JAZZ_GENRE_ID = GENRE_SEED[1][0]
@@ -40,6 +46,68 @@ def _make_row(day: int = 1):
         likes_count=0,
         is_liked=False,
     )
+
+
+def preferences_body(genres):
+    return {
+        "genres": genres,
+        "artists": [
+            {"deezer_id": 27, "name": "Daft Punk"},
+            {"deezer_id": 13, "name": "Eminem"},
+            {"deezer_id": 145, "name": "Coldplay"},
+        ],
+        "favorite_track": {
+            "deezer_id": 3135556,
+            "title": "Harder, Better, Faster, Stronger",
+            "artist_name": "Daft Punk",
+        },
+    }
+
+
+def test_general_feed_uses_preferences_updated_in_previous_request(client, db):
+    viewer = add_user(db, "viewer")
+    jazz_author = add_user(db, "jazz_author")
+    add_favorite_genres(db, jazz_author, "Jazz")
+    recorda = add_recorda(db, jazz_author)
+    headers = auth_headers(viewer)
+
+    initial_genres = [
+        {"deezer_id": 132, "name": "Pop"},
+        {"deezer_id": 152, "name": "Rock"},
+        {"deezer_id": 116, "name": "Rap/Hip Hop"},
+    ]
+    updated_genres = [
+        {"deezer_id": 129, "name": "Jazz"},
+        {"deezer_id": 132, "name": "Pop"},
+        {"deezer_id": 152, "name": "Rock"},
+    ]
+
+    initial_post = client.post(
+        "/api/v1/users/me/music-preferences",
+        json=preferences_body(initial_genres),
+        headers=headers,
+    )
+    assert initial_post.status_code == 200
+
+    initial_feed = client.get("/api/v1/feed/general", headers=headers)
+    assert initial_feed.status_code == 200
+    assert str(recorda.recorda_id) not in {
+        item["recorda_id"] for item in initial_feed.json()["items"]
+    }
+
+    update_post = client.post(
+        "/api/v1/users/me/music-preferences",
+        json=preferences_body(updated_genres),
+        headers=headers,
+    )
+    assert update_post.status_code == 200
+
+    updated_feed = client.get("/api/v1/feed/general", headers=headers)
+
+    assert updated_feed.status_code == 200
+    assert str(recorda.recorda_id) in {
+        item["recorda_id"] for item in updated_feed.json()["items"]
+    }
 
 
 class TestGetGeneralFeedFlow:
