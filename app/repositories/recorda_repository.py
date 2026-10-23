@@ -4,7 +4,7 @@ from collections.abc import Collection
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Row, func, or_, select
+from sqlalchemy import Row, Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
@@ -60,6 +60,18 @@ def list_by_user(db: Session, user_id: UUID) -> list[Recorda]:
         .order_by(Recorda.created_at.desc())
     )
     return list(db.scalars(only_live(stmt, Recorda)))
+
+
+def get_profile_grid_query(user_id: UUID) -> Select:
+    """Query base para a grade de perfil: só Recordas vivas do usuário, ordenadas por created_at DESC, recorda_id DESC."""
+    return (
+        select(Recorda)
+        .where(
+            Recorda.user_id == user_id,
+            Recorda.deleted_at.is_(None),
+        )
+        .order_by(Recorda.created_at.desc(), Recorda.recorda_id.desc())
+    )
 
 
 def count_by_user(db: Session, user_id: UUID) -> int:
