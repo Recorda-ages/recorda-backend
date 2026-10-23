@@ -114,3 +114,13 @@ def test_count_by_user_ignores_other_authors(db, author):
 
 def test_count_by_user_returns_zero_without_recordas(db, author):
     assert recorda_repository.count_by_user(db, author.user_id) == 0
+
+
+def test_list_publication_times_includes_deleted_and_skips_other_users(db, author):
+    live = add_recorda(db, author)
+    deleted = add_recorda(db, author, deleted_at=now_utc())
+    add_recorda(db, add_user(db, "other"))
+
+    times = recorda_repository.list_publication_times(db, author.user_id)
+
+    assert sorted(times) == sorted([live.created_at, deleted.created_at])

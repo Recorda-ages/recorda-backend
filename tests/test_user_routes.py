@@ -76,7 +76,7 @@ def test_own_profile_returns_profile_header(client, db):
         "follow_id": None,
     }
     assert body["can_view_content"] is True
-    assert body["streak"] is None
+    assert body["streak"] == {"current_days": 1, "published_today": True}
 
 
 def test_own_profile_no_longer_embeds_lists_or_private_fields(client, db):
