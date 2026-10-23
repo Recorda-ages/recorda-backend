@@ -10,7 +10,7 @@ from app.models.app_user import STATUS_ACTIVE, AppUser
 from app.models.follow import STATUS_ACCEPTED, STATUS_PENDING, Follow
 from app.repositories import follow_repository, user_repository
 from app.schemas.follow import FollowUser
-from app.services import notification_service
+from app.services import notification_service, profile_service
 
 
 class FollowTargetNotFoundError(Exception):
@@ -80,12 +80,13 @@ class PrivateAccountError(Exception):
 
 def _authorize(db: Session, owner_id: UUID, viewer: AppUser) -> None:
     """Deixa passar o dono, contas públicas e seguidores aceitos. Só isso."""
-    owner = user_repository.get_by_id(db, owner_id)
-    if owner is None or owner.status != STATUS_ACTIVE:
+    try:
+        owner = profile_service.get_active_owner(db, owner_id)
+    except profile_service.UserNotFoundError:
         raise UserNotFoundError
-    if owner.user_id == viewer.user_id or not owner.is_private:
-        return
-    if not follow_repository.is_accepted_follower(db, viewer.user_id, owner.user_id):
+    try:
+        profile_service.authorize_content_access(db, owner, viewer)
+    except profile_service.PrivateAccountError:
         raise PrivateAccountError
 
 

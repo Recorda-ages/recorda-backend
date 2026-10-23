@@ -12,6 +12,7 @@ from app.schemas.music_preference import (
     MusicPreferencesCreate,
     MusicPreferencesRead,
 )
+from app.schemas.recorda import RecordaGridPage
 from app.schemas.user import (
     SuggestedUser,
     UserChangeRole,
@@ -21,7 +22,14 @@ from app.schemas.user import (
     UserSearchResult,
     UserUpdate,
 )
-from app.services import follow_service, music_preference_service, user_service
+from app.services import (
+    follow_service,
+    music_preference_service,
+    profile_grid_service,
+    user_service,
+)
+from app.services.feed_service import InvalidCursorError
+from app.services.profile_service import PrivateAccountError, UserNotFoundError
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -70,6 +78,40 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserRead:
         return user_service.create(db, payload)
     except user_service.UserAlreadyExistsError as exc:
         raise user_already_exists_error(exc) from exc
+
+
+@router.get("/{user_id}/recordas", response_model=RecordaGridPage)
+def get_profile_grid(
+    user_id: UUID,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=24, ge=1, le=60),
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RecordaGridPage:
+    """Grade paginada de Recordas do perfil, respeitando privacidade."""
+    try:
+        return profile_grid_service.get_profile_grid(
+            db=db,
+            owner_id=user_id,
+            viewer=current_user,
+            cursor=cursor,
+            limit=limit,
+        )
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    except PrivateAccountError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta conta é privada.",
+        ) from exc
+    except InvalidCursorError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cursor inválido.",
+        ) from exc
 
 
 @router.get("/{user_id}", response_model=UserRead, dependencies=[_current_admin])
