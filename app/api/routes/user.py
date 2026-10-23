@@ -19,6 +19,8 @@ from app.schemas.user import (
     UserCreate,
     UserRead,
     UserSearchResult,
+    UserSettingsRead,
+    UserSettingsUpdate,
     UserUpdate,
 )
 from app.services import (
@@ -62,6 +64,15 @@ def get_own_profile(
             status_code=status.HTTP_409_CONFLICT,
             detail="Complete o onboarding musical para acessar o perfil.",
         ) from exc
+
+
+@router.patch("/me/settings", response_model=UserSettingsRead)
+def update_own_settings(
+    payload: UserSettingsUpdate,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AppUser:
+    return user_service.update_settings(db, current_user, payload)
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

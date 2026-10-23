@@ -97,6 +97,7 @@ def test_login_valid_common_user_returns_token_and_user_data(client, db, monkeyp
         "username": "alice",
         "role": "USER",
         "onboarding_completed": False,
+        "language": "pt-BR",
     }
 
 
@@ -168,6 +169,7 @@ def test_login_token_works_immediately_on_auth_me(client, db, monkeypatch):
         "username": "alice",
         "role": "USER",
         "onboarding_completed": False,
+        "language": "pt-BR",
     }
 
 
@@ -254,6 +256,7 @@ def test_register_creates_user_and_returns_session(client, db, monkeypatch):
         "username": "alice",
         "role": "USER",
         "onboarding_completed": False,
+        "language": "pt-BR",
     }
     assert stored.email == "alice@example.com"
     assert security.verify_password("password123", stored.password_hash) is True

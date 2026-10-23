@@ -1,4 +1,5 @@
 import re
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -27,6 +28,8 @@ class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=255)
     email: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., min_length=MINIMUM_PASSWORD_LENGTH)
+
+    language: Literal["pt-BR", "en", "es"] | None = None
 
     @field_validator("name")
     @classmethod
@@ -77,6 +80,7 @@ class UserBasicResponse(BaseModel):
     username: str
     role: str
     onboarding_completed: bool
+    language: str
 
 
 class LoginResponse(BaseModel):

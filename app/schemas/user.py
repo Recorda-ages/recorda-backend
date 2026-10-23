@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.schemas.profile import FollowStatus
 from app.schemas.profile import ProfileFavoriteSong as ProfileFavoriteSong
+from app.schemas.recorda import RecordaRead
 
 
 class UserBase(BaseModel):
@@ -58,9 +59,35 @@ class SuggestedUser(BaseModel):
     common_artists: list[str]
 
 
+class ProfileGenre(BaseModel):
+    genre_id: UUID
+    name: str
+
+
+class ProfileArtist(BaseModel):
+    deezer_artist_id: str
+    name: str
+    image_url: str | None
+
+
 class UserProfileRead(BaseModel):
     user_id: UUID
     username: str
     name: str
     profile_picture_url: str | None
     favorite_song: ProfileFavoriteSong
+    favorite_genres: list[ProfileGenre]
+    favorite_artists: list[ProfileArtist]
+    recordas: list[RecordaRead]
+
+
+class UserSettingsUpdate(BaseModel):
+    is_private: bool | None = None
+    language: Literal["pt-BR", "en", "es"] | None = None
+
+
+class UserSettingsRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    is_private: bool
+    language: Literal["pt-BR", "en", "es"]

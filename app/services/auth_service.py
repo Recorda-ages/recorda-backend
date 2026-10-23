@@ -48,6 +48,7 @@ def register(db: Session, payload: RegisterRequest) -> LoginResponse:
             username=payload.username,
             password=payload.password,
         ),
+        language=payload.language,
     )
     return _issue_login_response(user)
 
