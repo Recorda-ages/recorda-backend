@@ -390,8 +390,6 @@ class TestNoRouteConflict:
     def test_suggestions_still_works(self, client, db):
         viewer = add_user(db, "viewer")
 
-        response = client.get(
-            "/api/v1/users/suggestions", headers=auth_headers(viewer)
-        )
+        response = client.get("/api/v1/users/suggestions", headers=auth_headers(viewer))
 
         assert response.status_code == 200
