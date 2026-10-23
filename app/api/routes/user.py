@@ -12,11 +12,11 @@ from app.schemas.music_preference import (
     MusicPreferencesCreate,
     MusicPreferencesRead,
 )
+from app.schemas.profile import ProfileRead
 from app.schemas.user import (
     SuggestedUser,
     UserChangeRole,
     UserCreate,
-    UserProfileRead,
     UserRead,
     UserSearchResult,
     UserSettingsRead,
@@ -26,6 +26,7 @@ from app.schemas.user import (
 from app.services import (
     follow_service,
     music_preference_service,
+    profile_service,
     user_service,
 )
 
@@ -51,14 +52,14 @@ def suggest_users(
     return user_service.suggest_by_affinity(db, current_user.user_id)
 
 
-@router.get("/me/profile", response_model=UserProfileRead)
+@router.get("/me/profile", response_model=ProfileRead)
 def get_own_profile(
     current_user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> UserProfileRead:
+) -> ProfileRead:
     try:
-        return user_service.get_own_profile(db, current_user)
-    except user_service.IncompleteProfileError as exc:
+        return profile_service.build_profile(db, current_user, current_user)
+    except profile_service.IncompleteProfileError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Complete o onboarding musical para acessar o perfil.",

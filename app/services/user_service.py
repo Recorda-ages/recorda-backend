@@ -2,9 +2,6 @@
 
 from uuid import UUID
 
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-
 from app.core import security
 from app.core.music_preview import public_preview_url
 from app.models import AppUser
@@ -15,10 +12,8 @@ from app.repositories import (
     user_favorite_repository,
     user_repository,
 )
+from app.schemas.profile import ProfileArtist, ProfileFavoriteSong, ProfileGenre
 from app.schemas.user import (
-    ProfileArtist,
-    ProfileFavoriteSong,
-    ProfileGenre,
     SuggestedUser,
     UserChangeRole,
     UserCreate,
@@ -28,6 +23,8 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.services import affinity_service
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
 USERNAME_TAKEN_MESSAGE = "Este usuário já está cadastrado."
 EMAIL_TAKEN_MESSAGE = "Este email já está cadastrado."
@@ -48,7 +45,7 @@ class UserAlreadyExistsError(Exception):
 
 
 class IncompleteProfileError(Exception):
-    """Raised when a user has not completed the music onboarding yet."""
+    """O usuário ainda não concluiu o onboarding musical."""
 
 
 def get_all(db: Session) -> list[AppUser]:

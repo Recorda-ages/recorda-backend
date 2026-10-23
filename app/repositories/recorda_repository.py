@@ -1,9 +1,10 @@
 """Persistence and query access for the Recorda entity."""
 
 from collections.abc import Collection
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Row, or_, select
+from sqlalchemy import Row, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
@@ -59,6 +60,25 @@ def list_by_user(db: Session, user_id: UUID) -> list[Recorda]:
         .order_by(Recorda.created_at.desc())
     )
     return list(db.scalars(only_live(stmt, Recorda)))
+
+
+def count_by_user(db: Session, user_id: UUID) -> int:
+    """Recordas vivas do usuário (contador do perfil).
+
+    Não serve para o streak, que também considera Recordas excluídas.
+    """
+    stmt = select(func.count()).select_from(Recorda).where(Recorda.user_id == user_id)
+    return db.scalar(only_live(stmt, Recorda)) or 0
+
+
+def list_publication_times(db: Session, user_id: UUID) -> list[datetime]:
+    """Datas de publicação do usuário, incluindo Recordas excluídas (streak, US35)."""
+    stmt = (
+        select(Recorda.created_at)
+        .where(Recorda.user_id == user_id)
+        .order_by(Recorda.created_at.desc())
+    )
+    return list(db.scalars(stmt))
 
 
 def create(db: Session, recorda: Recorda) -> Recorda:
