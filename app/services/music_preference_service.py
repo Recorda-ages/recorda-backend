@@ -1,7 +1,9 @@
 """Business logic for the onboarding music preferences."""
+import logging
 
 from sqlalchemy.orm import Session
 
+from app.core.music_preview import public_preview_url
 from app.models import AppUser, Genre, UserFavoriteArtist, UserFavoriteGenre
 from app.repositories import genre_repository, user_favorite_repository
 from app.schemas.music_preference import (
@@ -11,6 +13,7 @@ from app.schemas.music_preference import (
     MusicPreferencesRead,
 )
 
+logger = logging.getLogger(__name__)
 
 def replace_for_user(
     db: Session, user: AppUser, payload: MusicPreferencesCreate
@@ -79,3 +82,49 @@ def _set_favorite_track(user: AppUser, track: FavoriteTrack) -> None:
     user.fav_song_artist_name = track.artist_name
     user.fav_song_cover_url = track.cover_url
     user.fav_song_preview_url = track.preview_url
+
+
+def read_music_preference(db: Session, user: AppUser) -> MusicPreferencesRead:
+    genres = []
+    for genre in user_favorite_repository.get_genres(db, user.user_id):
+        if genre.deezer_genre_id is None:
+            logger.warning("Gênero favorito sem Deezer ID: %s", genre.genre_id)
+            continue
+
+        genres.append(
+            MusicItem(
+                deezer_id=int(genre.deezer_genre_id),
+                name=genre.name,
+                picture_url=genre.picture_url,
+            )
+        )
+
+    artists = []
+    for artist in user_favorite_repository.get_artists(db, user.user_id):
+        artists.append(
+            MusicItem(
+                deezer_id=int(artist.deezer_artist_id),
+                name=artist.artist_name,
+                picture_url=artist.artist_image_url,
+            )
+        )
+    
+    preview_url = public_preview_url(
+        user.fav_song_deezer_track_id,
+        user.fav_song_preview_url,
+    )
+
+    favorite_track = FavoriteTrack(
+        deezer_id=int(user.fav_song_deezer_track_id),
+        title=user.fav_song_title,
+        artist_name=user.fav_song_artist_name,
+        cover_url=user.fav_song_cover_url or "",
+        preview_url=preview_url
+    )
+
+    return MusicPreferencesRead(
+        genres=genres,
+        artists=artists,
+        favorite_track=favorite_track,
+        onboarding_completed=user.onboarding_completed,
+    )

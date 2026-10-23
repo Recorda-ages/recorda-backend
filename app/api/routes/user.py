@@ -85,6 +85,20 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserRead:
         raise user_already_exists_error(exc) from exc
 
 
+@router.get("/me/music-preferences", response_model=MusicPreferencesRead)
+def list_music_preferences(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MusicPreferencesRead:
+    if not current_user.onboarding_completed is True:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Complete the onboarding to accesse your profile",
+        )
+    
+    return music_preference_service.read_music_preference(db, current_user)
+
+
 @router.get("/{user_id}", response_model=UserRead, dependencies=[_current_admin])
 def get_user(user_id: UUID, db: Session = Depends(get_db)) -> UserRead:
     user = user_service.get_by_id(db, user_id)
