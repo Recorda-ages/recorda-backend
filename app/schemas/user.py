@@ -1,11 +1,11 @@
 from typing import Literal
 from uuid import UUID
 
-from app.schemas.profile import FollowStatus, ProfileArtist, ProfileGenre
-from app.schemas.profile import ProfileFavoriteSong as ProfileFavoriteSong
-from app.schemas.recorda import RecordaRead
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.profile import FollowStatus
+from app.schemas.profile import ProfileFavoriteSong as ProfileFavoriteSong
+from app.schemas.recorda import RecordaRead
 
 class UserBase(BaseModel):
     name: str

@@ -2,6 +2,9 @@
 
 from uuid import UUID
 
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
 from app.core import security
 from app.core.music_preview import public_preview_url
 from app.models import AppUser
@@ -12,8 +15,10 @@ from app.repositories import (
     user_favorite_repository,
     user_repository,
 )
-from app.schemas.profile import ProfileArtist, ProfileFavoriteSong, ProfileGenre
+from app.schemas.profile import ProfileFavoriteSong
 from app.schemas.user import (
+    ProfileArtist,
+    ProfileGenre,
     SuggestedUser,
     UserChangeRole,
     UserCreate,
