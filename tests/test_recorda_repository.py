@@ -3,11 +3,10 @@
 import uuid
 
 import pytest
-from sqlalchemy.exc import IntegrityError
-
 from app.core.time import now_utc
 from app.models import Recorda
 from app.repositories import recorda_repository
+from sqlalchemy.exc import IntegrityError
 from tests.factories import add_recorda, add_user
 
 

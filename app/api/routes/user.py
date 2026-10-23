@@ -64,6 +64,14 @@ def get_own_profile(
         ) from exc
 
 
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_own_account(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    user_service.delete_own_account(db, current_user)
+
+
 @router.get("", response_model=list[UserRead], dependencies=[_current_admin])
 def list_users(db: Session = Depends(get_db)) -> list[UserRead]:
     return user_service.get_all(db)
