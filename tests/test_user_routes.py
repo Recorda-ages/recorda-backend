@@ -8,7 +8,7 @@ from app.core import security
 from app.core.config import settings
 from app.models import AppUser
 from app.models.app_user import ROLE_ADMIN, ROLE_USER, STATUS_SUSPENDED
-from tests.factories import add_user, auth_headers
+from tests.factories import add_follow, add_recorda, add_user, auth_headers
 
 PREFIX = "/api/v1/users"
 MISSING_ID = uuid.uuid4()
@@ -44,6 +44,49 @@ def test_own_profile_rejects_incomplete_onboarding(client, db):
     assert response.json()["error"]["message"] == (
         "Complete o onboarding musical para acessar o perfil."
     )
+
+
+FAVORITE_SONG = {
+    "fav_song_deezer_track_id": "3135556",
+    "fav_song_title": "Harder, Better, Faster, Stronger",
+    "fav_song_artist_name": "Daft Punk",
+    "fav_song_cover_url": "https://e.deezer.com/cover.jpg",
+    "fav_song_preview_url": "https://cdns-preview.deezer.com/p.mp3",
+}
+
+
+def test_own_profile_returns_profile_header(client, db):
+    user = add_user(db, "gabi", **FAVORITE_SONG)
+    add_recorda(db, user)
+    add_follow(db, add_user(db, "fan"), user)
+
+    response = client.get(f"{PREFIX}/me/profile", headers=auth_headers(user))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["username"] == "gabi"
+    assert body["name"] == user.name
+    assert body["profile_picture_url"] is None
+    assert body["is_private"] is False
+    assert body["counts"] == {"recordas": 1, "followers": 1, "following": 0}
+    assert body["favorite_song"]["deezer_track_id"] == "3135556"
+    assert body["relationship"] == {
+        "is_self": True,
+        "follow_status": "nenhuma",
+        "follow_id": None,
+    }
+    assert body["can_view_content"] is True
+    assert body["streak"] == {"current_days": 1, "published_today": True}
+
+
+def test_own_profile_no_longer_embeds_lists_or_private_fields(client, db):
+    user = add_user(db, "gabi", **FAVORITE_SONG)
+
+    body = client.get(f"{PREFIX}/me/profile", headers=auth_headers(user)).json()
+
+    removed = {"favorite_genres", "favorite_artists", "recordas"}
+    private = {"email", "role", "status"}
+    assert not (removed | private) & body.keys()
 
 
 def test_own_profile_rejects_token_issued_before_suspension(client, db):

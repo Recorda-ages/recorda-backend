@@ -2,26 +2,18 @@
 
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core import security
-from app.core.music_preview import public_preview_url
 from app.models import AppUser
 from app.models.app_user import ROLE_USER
 from app.models.follow import STATUS_ACCEPTED, STATUS_PENDING
-from app.repositories import (
-    recorda_repository,
-    user_favorite_repository,
-    user_repository,
-)
+from app.repositories import user_favorite_repository, user_repository
 from app.schemas.user import (
-    ProfileArtist,
-    ProfileFavoriteSong,
-    ProfileGenre,
     SuggestedUser,
     UserChangeRole,
     UserCreate,
-    UserProfileRead,
     UserSearchResult,
     UserUpdate,
 )
@@ -45,58 +37,12 @@ class UserAlreadyExistsError(Exception):
         self.fields = fields
 
 
-class IncompleteProfileError(Exception):
-    """Raised when a user has not completed the music onboarding yet."""
-
-
 def get_all(db: Session) -> list[AppUser]:
     return user_repository.get_all(db)
 
 
 def get_by_id(db: Session, user_id: UUID) -> AppUser | None:
     return user_repository.get_by_id(db, user_id)
-
-
-def get_own_profile(db: Session, user: AppUser) -> UserProfileRead:
-    """Return the complete profile contract consumed by the profile screen."""
-    if (
-        user.fav_song_deezer_track_id is None
-        or user.fav_song_title is None
-        or user.fav_song_artist_name is None
-        or user.fav_song_cover_url is None
-    ):
-        raise IncompleteProfileError
-
-    genres = user_favorite_repository.get_genres(db, user.user_id)
-    artists = user_favorite_repository.get_artists(db, user.user_id)
-    recordas = recorda_repository.list_by_user(db, user.user_id)
-    return UserProfileRead(
-        user_id=user.user_id,
-        username=user.username,
-        name=user.name,
-        profile_picture_url=user.profile_picture_url,
-        favorite_song=ProfileFavoriteSong(
-            deezer_track_id=user.fav_song_deezer_track_id,
-            title=user.fav_song_title,
-            artist_name=user.fav_song_artist_name,
-            cover_url=user.fav_song_cover_url,
-            preview_url=public_preview_url(
-                user.fav_song_deezer_track_id, user.fav_song_preview_url
-            ),
-        ),
-        favorite_genres=[
-            ProfileGenre(genre_id=genre.genre_id, name=genre.name) for genre in genres
-        ],
-        favorite_artists=[
-            ProfileArtist(
-                deezer_artist_id=artist.deezer_artist_id,
-                name=artist.artist_name,
-                image_url=artist.artist_image_url,
-            )
-            for artist in artists
-        ],
-        recordas=recordas,
-    )
 
 
 def create(db: Session, payload: UserCreate) -> AppUser:
@@ -132,10 +78,22 @@ def update(db: Session, user_id: UUID, payload: UserUpdate) -> AppUser | None:
     return user_repository.save(db, user)
 
 
-def delete(db: Session, user_id: UUID) -> bool:
+def delete_own_account(db: Session, user: AppUser) -> None:
+    user_repository.soft_delete(db, user)
+
+
+def delete(
+    db: Session,
+    user_id: UUID,
+    current_admin: AppUser | None = None,
+) -> bool:
     user = user_repository.get_by_id(db, user_id)
     if user is None:
-        return False
+        raise HTTPException(status_code=404, detail="User not found")
+    if current_admin is not None and user.user_id == current_admin.user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete yourself.")
+    if user.role == "ADMIN":
+        raise HTTPException(status_code=403, detail="You cannot delete an admin user.")
     user_repository.soft_delete(db, user)
     return True
 

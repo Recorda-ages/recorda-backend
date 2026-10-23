@@ -30,13 +30,13 @@ async def lifespan(app: FastAPI):
 
 
 tags_metadata = [
+    {"name": "auth", "description": "Autenticação e sessão do usuário."},
     {
         "name": "admin",
         "description": (
             "Moderação: denúncias, usuários e auditoria. Somente administradores."
         ),
     },
-    {"name": "auth", "description": "Autenticação e sessão do usuário."},
     {
         "name": "users",
         "description": "Gerenciamento de usuários (acesso administrativo).",

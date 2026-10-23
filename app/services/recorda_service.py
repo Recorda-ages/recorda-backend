@@ -26,8 +26,8 @@ class NotRecordaOwnerError(Exception):
     """Raised when a user tries to change a Recorda they did not publish."""
 
 
-def get_all(db: Session) -> list[Recorda]:
-    return recorda_repository.get_all(db)
+def list_visible_to_user(db: Session, viewer: AppUser) -> list[Recorda]:
+    return recorda_repository.list_visible_to_user(db, viewer)
 
 
 def get_by_id(db: Session, recorda_id: UUID) -> Recorda | None:

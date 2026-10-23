@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
 from app.models import AppUser, RecordaComment
-from app.repositories._query import only_live
+from app.repositories._query import only_active_users, only_live
 
 
 def get_by_id(db: Session, comment_id: UUID) -> RecordaComment | None:
@@ -25,7 +25,7 @@ def list_for_recorda(db: Session, recorda_id: UUID):
         )
         .order_by(RecordaComment.created_at, RecordaComment.comment_id)
     )
-    return db.execute(stmt).all()
+    return db.execute(only_active_users(stmt)).all()
 
 
 def soft_delete(db: Session, comment: RecordaComment) -> None:

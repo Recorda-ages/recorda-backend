@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.time import now_utc
 from app.models import AppUser, Follow
 from app.models.app_user import ROLE_ADMIN
-from app.repositories._query import only_live
+from app.repositories._query import only_active_users, only_live
 
 
 def get_all(db: Session) -> list[AppUser]:
@@ -25,6 +25,11 @@ def list_admins(db: Session) -> list[AppUser]:
 def get_by_id(db: Session, user_id: UUID) -> AppUser | None:
     stmt = select(AppUser).where(AppUser.user_id == user_id)
     return db.scalars(only_live(stmt, AppUser)).first()
+
+
+def get_by_id_including_deleted(db: Session, user_id: UUID) -> AppUser | None:
+    """Administrative lookup, including suspended and deleted accounts."""
+    return db.scalar(select(AppUser).where(AppUser.user_id == user_id))
 
 
 def get_by_username(
@@ -80,7 +85,7 @@ def search_by_username(
         .order_by(AppUser.username)
         .limit(limit)
     )
-    stmt = only_live(stmt, AppUser)
+    stmt = only_active_users(stmt)
     return list(db.execute(stmt).all())
 
 
@@ -91,7 +96,7 @@ def list_suggestion_candidates(db: Session, current_user_id: UUID) -> list[AppUs
     usuário e fora quem já tem qualquer vínculo de follow partindo dele —
     uma linha ACCEPTED cobre "já seguido" e uma PENDING cobre "solicitação
     pendente". Apagados também ficam de fora, como manda o D34 do modelo de
-    dados, que cita sugestões explicitamente.
+    dados, que cita sugestões explicitamente, e suspensos (issue #90).
 
     Não aplica limite: o corte acontece depois do ranqueamento por afinidade,
     que é feito em memória.
@@ -104,7 +109,7 @@ def list_suggestion_candidates(db: Session, current_user_id: UUID) -> list[AppUs
         .where(AppUser.user_id != current_user_id)
         .where(AppUser.user_id.not_in(already_linked))
     )
-    return list(db.scalars(only_live(stmt, AppUser)))
+    return list(db.scalars(only_active_users(stmt)))
 
 
 def list_by_ids(db: Session, user_ids: Collection[UUID]) -> list[AppUser]:

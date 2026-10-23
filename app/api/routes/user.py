@@ -12,12 +12,12 @@ from app.schemas.music_preference import (
     MusicPreferencesCreate,
     MusicPreferencesRead,
 )
+from app.schemas.profile import ProfileRead
 from app.schemas.recorda import RecordaGridPage
 from app.schemas.user import (
     SuggestedUser,
     UserChangeRole,
     UserCreate,
-    UserProfileRead,
     UserRead,
     UserSearchResult,
     UserUpdate,
@@ -26,6 +26,7 @@ from app.services import (
     follow_service,
     music_preference_service,
     profile_grid_service,
+    profile_service,
     user_service,
 )
 from app.services.feed_service import InvalidCursorError
@@ -53,18 +54,26 @@ def suggest_users(
     return user_service.suggest_by_affinity(db, current_user.user_id)
 
 
-@router.get("/me/profile", response_model=UserProfileRead)
+@router.get("/me/profile", response_model=ProfileRead)
 def get_own_profile(
     current_user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> UserProfileRead:
+) -> ProfileRead:
     try:
-        return user_service.get_own_profile(db, current_user)
-    except user_service.IncompleteProfileError as exc:
+        return profile_service.build_profile(db, current_user, current_user)
+    except profile_service.IncompleteProfileError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Complete o onboarding musical para acessar o perfil.",
         ) from exc
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_own_account(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    user_service.delete_own_account(db, current_user)
 
 
 @router.get("", response_model=list[UserRead], dependencies=[_current_admin])
@@ -135,9 +144,12 @@ def update_user(
 @router.delete(
     "/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[_current_admin]
 )
-def delete_user(user_id: UUID, db: Session = Depends(get_db)) -> None:
-    if not user_service.delete(db, user_id):
-        raise HTTPException(status_code=404, detail="User not found")
+def delete_user(
+    user_id: UUID,
+    current_admin: AppUser = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+) -> None:
+    user_service.delete(db, user_id, current_admin)
 
 
 @router.patch(
