@@ -29,7 +29,6 @@ from app.schemas.user import (
 )
 from app.services import affinity_service
 
-
 USERNAME_TAKEN_MESSAGE = "Este usuário já está cadastrado."
 EMAIL_TAKEN_MESSAGE = "Este email já está cadastrado."
 USER_ALREADY_EXISTS_MESSAGE = "Usuário ou email já cadastrado"
