@@ -3,6 +3,7 @@
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
+
 from app.core.time import now_utc
 from app.models.follow import STATUS_PENDING
 from app.services import profile_service

@@ -3,6 +3,8 @@
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
+from sqlalchemy.orm import Session
+
 from app.core.music_preview import public_preview_url
 from app.core.time import now_utc, to_local
 from app.models import AppUser
@@ -14,7 +16,6 @@ from app.schemas.profile import (
     ProfileRelationship,
     ProfileStreak,
 )
-from sqlalchemy.orm import Session
 
 
 class IncompleteProfileError(Exception):
