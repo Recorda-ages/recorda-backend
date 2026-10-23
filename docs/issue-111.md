@@ -14,7 +14,7 @@ Tornar a conta privada preserva seguidores aceitos. Novos follows passam a pedid
 
 O aceite individual e o automático compartilham `_accept`, sem commit interno. O POST de follow e o PATCH de privacidade coordenam o bloqueio da mesma conta no PostgreSQL e recarregam o estado antes da decisão. Isso impede um pedido novo de ficar pendente após a conta se tornar pública.
 
-Enviar o valor atual, `{}` ou `{"is_private": null}` retorna 200 sem alterar a conta e com `accepted_requests: 0`. O endpoint não altera idioma; essa escrita pertence à US33. Não há migration ou dependência nova.
+Enviar o valor atual, `{}` ou `{"is_private": null}` retorna 200 sem alterar a conta e com `accepted_requests: 0`. Após o rebase de 23/10, o mesmo PATCH preserva a escrita de idioma da US33 já integrada em `dev` pela #112: aceita `language` em `pt-BR`, `en` ou `es`, de forma atômica com a privacidade. Não há migration ou dependência nova.
 
 ## Validação
 
@@ -27,6 +27,7 @@ Executado em Python 3.13.16:
 ```
 
 - Em 22/10/2026, com PostgreSQL descartável disponível: **755 testes passaram, zero skips; cobertura global 98,46%**. Os sete testes específicos usam PostgreSQL real; os demais fixtures continuam usando SQLite.
+- Em 23/10/2026, após atualizar a base e configurar PostgreSQL no CI: **811 testes passaram, zero skips; cobertura global 98,32%** na validação local. [Configuração e log completo](evidence/111/ci-postgres.md).
 - 24 testes da tarefa executados com autenticação e SQLAlchemy reais em SQLite, incluindo isolamento dos pedidos, notificações, rollback, no-op, contas inativas, leitura desatualizada e privacidade retroativa em conteúdo existente.
 - Schemas de configurações, serviço de configurações e serviço de aceite: 100% de cobertura de linhas na suíte completa.
 - Ruff: nenhum erro de lint ou formatação.
@@ -47,6 +48,7 @@ Os registros visuais abaixo são da execução inicial de 21/10. A validação P
 - [Entrada da prévia isolada](evidence/111/preview-entry.py.txt)
 - [Três cenários executados no Swagger com o usuário acompanhando](evidence/111/guided-demo.md)
 - [Sete testes PostgreSQL e suíte completa sem skips](evidence/111/postgres-validation.md)
+- [PostgreSQL no CI e validação após atualizar a base](evidence/111/ci-postgres.md)
 
 As capturas usam a API real via Uvicorn e um SQLite temporário autorizado, com `demo_owner` e dois solicitantes de exemplo. Não há mocks nos endpoints, nem alteração de configuração de produção. O banco da prévia usa `Base.metadata.create_all`, como a fixture SQLite dos testes; não demonstra migrations ou bloqueios do PostgreSQL. URLs de mídia dos fixtures não foram acessadas nem são necessárias para estes endpoints.
 

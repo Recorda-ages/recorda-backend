@@ -53,4 +53,4 @@ docker stop recorda-111-pg-repro
 Remove-Item Env:TEST_DATABASE_URL, Env:TEST_DATABASE_ALLOW_DESTRUCTIVE, Env:DATABASE_URL, Env:ENVIRONMENT
 ```
 
-O workflow atual do GitHub Actions continua sem serviço PostgreSQL e pode exibir os sete skips no CI. A execução local acima fecha essa pendência de validação sem alterar a infraestrutura do pipeline. As capturas do Swagger e do terminal de 21/10 foram preservadas como histórico; os resultados atualizados estão nos logs de 22/10.
+Na execução de 22/10, o workflow ainda não tinha serviço PostgreSQL. Em 23/10, o serviço e as variáveis de teste foram adicionados ao CI; consulte a [validação após a atualização da base](ci-postgres.md). As capturas do Swagger e do terminal de 21/10 foram preservadas como histórico; os resultados locais de 22/10 estão nos logs acima.

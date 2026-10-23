@@ -12,7 +12,7 @@
 
 ## Global constraints
 
-- GET returns `is_private` and the stored `language`; PATCH only changes privacy.
+- GET returns `is_private` and the stored `language`; PATCH changes privacy. After rebasing onto dev on 23/10, it also preserves the language update contract introduced by #112.
 - Making an account private preserves accepted followers.
 - Making it public accepts pending incoming requests and updates notifications in one transaction.
 - Repeated values are a no-op with HTTP 200.
