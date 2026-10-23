@@ -82,12 +82,12 @@ def _authorize(db: Session, owner_id: UUID, viewer: AppUser) -> None:
     """Deixa passar o dono, contas públicas e seguidores aceitos. Só isso."""
     try:
         owner = profile_service.get_active_owner(db, owner_id)
-    except profile_service.UserNotFoundError:
-        raise UserNotFoundError
+    except profile_service.UserNotFoundError as exc:
+        raise UserNotFoundError from exc
     try:
         profile_service.authorize_content_access(db, owner, viewer)
-    except profile_service.PrivateAccountError:
-        raise PrivateAccountError
+    except profile_service.PrivateAccountError as exc:
+        raise PrivateAccountError from exc
 
 
 def _normalize(q: str | None) -> str | None:

@@ -18,7 +18,6 @@ from app.schemas.profile import (
     ProfileStreak,
 )
 
-
 # ---------------------------------------------------------------------------
 # Erros de privacidade (reutilizados pela grade e outros serviços)
 # ---------------------------------------------------------------------------

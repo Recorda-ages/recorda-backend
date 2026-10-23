@@ -3,8 +3,6 @@
 import uuid
 from datetime import timedelta
 
-import pytest
-
 from app.core.time import now_utc
 from app.models.app_user import STATUS_SUSPENDED
 from app.models.follow import STATUS_PENDING

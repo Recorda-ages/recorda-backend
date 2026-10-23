@@ -8,10 +8,8 @@ from app.models.app_user import AppUser
 from app.repositories import recorda_repository
 from app.repositories.feed_repository import apply_cursor
 from app.schemas.recorda import RecordaGridItem, RecordaGridPage
-from app.services.feed_service import InvalidCursorError, _decode_cursor, _encode_cursor
+from app.services.feed_service import _decode_cursor, _encode_cursor
 from app.services.profile_service import (
-    PrivateAccountError,
-    UserNotFoundError,
     authorize_content_access,
     get_active_owner,
 )
