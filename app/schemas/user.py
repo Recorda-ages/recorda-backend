@@ -7,6 +7,7 @@ from app.schemas.profile import FollowStatus
 from app.schemas.profile import ProfileFavoriteSong as ProfileFavoriteSong
 from app.schemas.recorda import RecordaRead
 
+
 class UserBase(BaseModel):
     name: str
     email: str
@@ -56,6 +57,17 @@ class SuggestedUser(BaseModel):
     affinity: float
     common_genres: list[str]
     common_artists: list[str]
+
+
+class ProfileGenre(BaseModel):
+    genre_id: UUID
+    name: str
+
+
+class ProfileArtist(BaseModel):
+    deezer_artist_id: str
+    name: str
+    image_url: str | None
 
 
 class UserProfileRead(BaseModel):

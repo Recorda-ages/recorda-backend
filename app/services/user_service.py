@@ -28,8 +28,7 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.services import affinity_service
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
+
 
 USERNAME_TAKEN_MESSAGE = "Este usuário já está cadastrado."
 EMAIL_TAKEN_MESSAGE = "Este email já está cadastrado."
