@@ -13,11 +13,10 @@ from app.models.notification import TYPE_FOLLOW_ACCEPTED, TYPE_NEW_FOLLOWER
 from app.repositories import follow_repository, user_repository
 from app.schemas.settings import UserSettingsUpdate
 from app.services import follow_service, settings_service
-from tests.conftest import requires_postgres
 from tests.factories import add_user
 
 
-@requires_postgres
+@pytest.mark.postgres
 def test_inflight_follow_is_accepted_when_account_becomes_public(pg_db, monkeypatch):
     owner = add_user(pg_db, "owner", is_private=True)
     sender = add_user(pg_db, "sender")
