@@ -1,4 +1,6 @@
 MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024
+# O front já reduz a imagem antes do envio; aqui é só defesa.
+MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
 
 
 def detect_content_type(header: bytes) -> str | None:
@@ -17,5 +19,5 @@ def detect_content_type(header: bytes) -> str | None:
     return None
 
 
-def is_size_allowed(size_bytes: int) -> bool:
-    return 0 < size_bytes <= MAX_UPLOAD_SIZE_BYTES
+def is_size_allowed(size_bytes: int, max_bytes: int = MAX_UPLOAD_SIZE_BYTES) -> bool:
+    return 0 < size_bytes <= max_bytes

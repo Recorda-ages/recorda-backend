@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin_user, get_current_user
@@ -14,6 +14,7 @@ from app.schemas.music_preference import (
 )
 from app.schemas.profile import ProfileRead
 from app.schemas.user import (
+    AvatarRead,
     SuggestedUser,
     UserChangeRole,
     UserCreate,
@@ -25,6 +26,7 @@ from app.schemas.user import (
 )
 from app.services import (
     follow_service,
+    media_service,
     music_preference_service,
     profile_service,
     user_service,
@@ -73,6 +75,41 @@ def update_own_settings(
     db: Session = Depends(get_db),
 ) -> AppUser:
     return user_service.update_settings(db, current_user, payload)
+
+
+@router.put("/me/avatar", response_model=AvatarRead)
+async def update_own_avatar(
+    file: UploadFile,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AppUser:
+    content = await file.read()
+
+    try:
+        return user_service.update_avatar(db, current_user, content)
+    except media_service.UnsupportedMediaTypeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Envie uma imagem JPG, PNG ou WEBP.",
+        ) from exc
+    except media_service.MediaTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="Arquivo excede o tamanho máximo permitido",
+        ) from exc
+    except media_service.MediaStorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Falha ao armazenar a mídia. Tente novamente.",
+        ) from exc
+
+
+@router.delete("/me/avatar", status_code=status.HTTP_204_NO_CONTENT)
+def remove_own_avatar(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    user_service.remove_avatar(db, current_user)
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

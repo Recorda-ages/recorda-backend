@@ -2,7 +2,11 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.core.media_validation import detect_content_type, is_size_allowed
+from app.core.media_validation import (
+    MAX_AVATAR_SIZE_BYTES,
+    detect_content_type,
+    is_size_allowed,
+)
 from app.core.mp4_faststart import move_moov_to_front
 from app.models import AppUser
 from app.models.app_user import ROLE_ADMIN
@@ -18,6 +22,8 @@ _EXTENSIONS = {
     "image/webp": "webp",
     "video/mp4": "mp4",
 }
+
+_AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 class UnsupportedMediaTypeError(Exception):
@@ -48,12 +54,7 @@ def upload_media(db: Session, content: bytes) -> MediaUploadResponse:
     if content_type == "video/mp4":
         content = move_moov_to_front(content)
 
-    filename = f"{uuid.uuid4()}.{_EXTENSIONS[content_type]}"
-
-    try:
-        media_storage_repository.save(db, filename, content, content_type)
-    except Exception as exc:
-        raise MediaStorageError() from exc
+    filename = _store(db, content, content_type)
 
     return MediaUploadResponse(
         url=f"{MEDIA_URL_PREFIX}{filename}",
@@ -61,6 +62,30 @@ def upload_media(db: Session, content: bytes) -> MediaUploadResponse:
         content_type=content_type,
         size_bytes=len(content),
     )
+
+
+def upload_avatar(db: Session, content: bytes) -> str:
+    """Salva a imagem de avatar e devolve a URL no formato das mídias de Recorda."""
+    content_type = detect_content_type(content[:16])
+
+    if content_type not in _AVATAR_TYPES:
+        raise UnsupportedMediaTypeError()
+
+    if not is_size_allowed(len(content), MAX_AVATAR_SIZE_BYTES):
+        raise MediaTooLargeError()
+
+    return f"{MEDIA_URL_PREFIX}{_store(db, content, content_type, prefix='avatar-')}"
+
+
+def _store(db: Session, content: bytes, content_type: str, prefix: str = "") -> str:
+    filename = f"{prefix}{uuid.uuid4()}.{_EXTENSIONS[content_type]}"
+
+    try:
+        media_storage_repository.save(db, filename, content, content_type)
+    except Exception as exc:
+        raise MediaStorageError() from exc
+
+    return filename
 
 
 def ensure_published_media_visible(db: Session, filename: str, viewer: AppUser) -> None:
