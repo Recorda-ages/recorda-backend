@@ -215,7 +215,9 @@ def test_old_recordas_follow_privacy_immediately_across_all_readers(client, db):
                 result = client.get(f"{profile}/{path}", headers=headers)
                 assert result.status_code == expected
                 if path == "recordas" and allowed:
-                    assert [r["recorda_id"] for r in result.json()] == [recorda_id]
+                    assert [r["recorda_id"] for r in result.json()["items"]] == [
+                        recorda_id
+                    ]
             feed = client.get("/api/v1/feed/general", headers=headers)
             assert feed.status_code == 200
             assert (
@@ -253,7 +255,7 @@ def test_grid_excludes_deleted_recordas_and_orders_newest_first(client, db):
         f"/api/v1/users/{owner.user_id}/recordas", headers=auth_headers(owner)
     )
     assert response.status_code == 200
-    assert [r["recorda_id"] for r in response.json()] == [
+    assert [r["recorda_id"] for r in response.json()["items"]] == [
         str(newer.recorda_id),
         str(older.recorda_id),
     ]
