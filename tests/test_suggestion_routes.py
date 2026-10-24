@@ -3,11 +3,14 @@
 from app.models.follow import STATUS_PENDING
 from app.repositories import user_favorite_repository
 from tests.factories import (
+    MUSIC_PREFERENCES_INITIAL_GENRES,
+    MUSIC_PREFERENCES_UPDATED_GENRES,
     add_favorite_artists,
     add_favorite_genres,
     add_follow,
     add_user,
     auth_headers,
+    music_preferences_body,
 )
 
 PREFERENCES_URL = "/api/v1/users/me/music-preferences"
@@ -16,22 +19,6 @@ URL = "/api/v1/users/suggestions"
 
 def usernames(response) -> list[str]:
     return [item["username"] for item in response.json()]
-
-
-def preferences_body(genres):
-    return {
-        "genres": genres,
-        "artists": [
-            {"deezer_id": 27, "name": "Daft Punk"},
-            {"deezer_id": 13, "name": "Eminem"},
-            {"deezer_id": 145, "name": "Coldplay"},
-        ],
-        "favorite_track": {
-            "deezer_id": 3135556,
-            "title": "Harder, Better, Faster, Stronger",
-            "artist_name": "Daft Punk",
-        },
-    }
 
 
 class TestSuggestionsRoute:
@@ -160,20 +147,9 @@ class TestSuggestionsRoute:
         add_favorite_genres(db, jazz_fan, "Jazz")
         headers = auth_headers(me)
 
-        initial_genres = [
-            {"deezer_id": 132, "name": "Pop"},
-            {"deezer_id": 152, "name": "Rock"},
-            {"deezer_id": 116, "name": "Rap/Hip Hop"},
-        ]
-        updated_genres = [
-            {"deezer_id": 129, "name": "Jazz"},
-            {"deezer_id": 132, "name": "Pop"},
-            {"deezer_id": 152, "name": "Rock"},
-        ]
-
         initial_post = client.post(
             PREFERENCES_URL,
-            json=preferences_body(initial_genres),
+            json=music_preferences_body(MUSIC_PREFERENCES_INITIAL_GENRES),
             headers=headers,
         )
         assert initial_post.status_code == 200
@@ -181,7 +157,7 @@ class TestSuggestionsRoute:
 
         update_post = client.post(
             PREFERENCES_URL,
-            json=preferences_body(updated_genres),
+            json=music_preferences_body(MUSIC_PREFERENCES_UPDATED_GENRES),
             headers=headers,
         )
         assert update_post.status_code == 200

@@ -90,13 +90,13 @@ def list_music_preferences(
     current_user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MusicPreferencesRead:
-    if current_user.onboarding_completed is not True:
+    try:
+        return music_preference_service.read_music_preference(db, current_user)
+    except music_preference_service.IncompleteMusicPreferencesError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Complete o onboarding musical para acessar o perfil.",
-        )
-
-    return music_preference_service.read_music_preference(db, current_user)
+        ) from exc
 
 
 @router.get("/{user_id}", response_model=UserRead, dependencies=[_current_admin])

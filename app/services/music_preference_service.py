@@ -17,6 +17,10 @@ from app.schemas.music_preference import (
 logger = logging.getLogger(__name__)
 
 
+class IncompleteMusicPreferencesError(Exception):
+    """The user has not saved all required favorite-track fields."""
+
+
 def replace_for_user(
     db: Session, user: AppUser, payload: MusicPreferencesCreate
 ) -> MusicPreferencesRead:
@@ -87,6 +91,14 @@ def _set_favorite_track(user: AppUser, track: FavoriteTrack) -> None:
 
 
 def read_music_preference(db: Session, user: AppUser) -> MusicPreferencesRead:
+    if (
+        not user.fav_song_deezer_track_id
+        or not user.fav_song_title
+        or not user.fav_song_artist_name
+        or user.fav_song_cover_url is None
+    ):
+        raise IncompleteMusicPreferencesError
+
     genres = []
     for genre in user_favorite_repository.get_genres(db, user.user_id):
         if genre.deezer_genre_id is None:

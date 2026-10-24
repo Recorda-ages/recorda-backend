@@ -8,8 +8,6 @@ from app.db.seed_data import GENRE_SEED
 from app.models import Follow, Genre, UserFavoriteArtist, UserFavoriteGenre
 from tests.factories import add_follow, add_recorda, add_user, auth_headers
 
-RECORDA_URL = "/api/v1/recordas"
-
 URL = "/api/v1/users/me/music-preferences"
 
 GENRES = [
@@ -133,6 +131,7 @@ def test_accepts_track_without_cover_or_preview(client, db):
     get_resp = client.get(URL, headers=headers)
 
     assert get_resp.status_code == 200
+    assert get_resp.json()["favorite_track"]["cover_url"] == ""
     assert get_resp.json()["favorite_track"]["preview_url"] is None
 
 
@@ -199,8 +198,26 @@ def test_preferences_are_scoped_to_the_authenticated_user_and_receive_only_their
         {"deezer_id": 129, "name": "Jazz"},
         {"deezer_id": 106, "name": "Electro"},
     ]
+    alice_artists = [
+        {"deezer_id": 1001, "name": "Alice Artist One"},
+        {"deezer_id": 1002, "name": "Alice Artist Two"},
+        {"deezer_id": 1003, "name": "Alice Artist Three"},
+    ]
+    alice_track = {
+        "deezer_id": 991337,
+        "title": "Alice Favorite Song",
+        "artist_name": "Alice Artist One",
+    }
 
-    post_alice = client.post(URL, json=body(genres=new_genres), headers=alice_headers)
+    post_alice = client.post(
+        URL,
+        json=body(
+            genres=new_genres,
+            artists=alice_artists,
+            favorite_track=alice_track,
+        ),
+        headers=alice_headers,
+    )
     post_bob = client.post(URL, json=body(), headers=bob_headers)
 
     assert post_alice.status_code == 200
@@ -223,6 +240,20 @@ def test_preferences_are_scoped_to_the_authenticated_user_and_receive_only_their
 
     assert {g["name"] for g in alice_result["genres"]} == {"R&B", "Jazz", "Electro"}
     assert {g["name"] for g in bob_result["genres"]} == {"Pop", "Rock", "Rap/Hip Hop"}
+    assert {a["name"] for a in alice_result["artists"]} == {
+        "Alice Artist One",
+        "Alice Artist Two",
+        "Alice Artist Three",
+    }
+    assert {a["name"] for a in bob_result["artists"]} == {
+        "Daft Punk",
+        "Eminem",
+        "Coldplay",
+    }
+    assert alice_result["favorite_track"]["deezer_id"] == 991337
+    assert bob_result["favorite_track"]["deezer_id"] == 3135556
+    assert alice_result["favorite_track"]["title"] == "Alice Favorite Song"
+    assert bob_result["favorite_track"]["title"] == "Harder, Better, Faster, Stronger"
 
 
 def test_requires_authentication(client, db):
@@ -289,7 +320,7 @@ def test_list_preferences_and_completes_onboarding(client, db):
     assert all(a.selected_at is not None for a in artists.values())
 
 
-def test_second_call_replaces_previous_list_of_preferences(client, db):
+def test_second_call_replaces_all_preference_values(client, db):
     user, headers = authenticate(db)
     client.post(URL, json=body(), headers=headers)
 
@@ -298,14 +329,51 @@ def test_second_call_replaces_previous_list_of_preferences(client, db):
         {"deezer_id": 129, "name": "Jazz"},
         {"deezer_id": 106, "name": "Electro"},
     ]
-    post_resp = client.post(URL, json=body(genres=new_genres), headers=headers)
+    new_artists = [
+        {"deezer_id": 1001, "name": "Alice Artist One"},
+        {"deezer_id": 1002, "name": "Alice Artist Two"},
+        {"deezer_id": 1003, "name": "Alice Artist Three"},
+    ]
+    new_favorite_track = {
+        "deezer_id": 991337,
+        "title": "New Favorite Song",
+        "artist_name": "Alice Artist One",
+        "cover_url": "https://example.com/new-cover.jpg",
+        "preview_url": "https://example.com/new-preview.mp3",
+    }
+    post_resp = client.post(
+        URL,
+        json=body(
+            genres=new_genres,
+            artists=new_artists,
+            favorite_track=new_favorite_track,
+        ),
+        headers=headers,
+    )
     assert post_resp.status_code == 200
 
     get_resp = client.get(URL, headers=headers)
     assert get_resp.status_code == 200
-    assert {g["name"] for g in get_resp.json()["genres"]} == {"R&B", "Jazz", "Electro"}
+    result = get_resp.json()
+    assert {g["name"] for g in result["genres"]} == {"R&B", "Jazz", "Electro"}
+    assert {a["name"] for a in result["artists"]} == {
+        "Alice Artist One",
+        "Alice Artist Two",
+        "Alice Artist Three",
+    }
+    assert result["favorite_track"]["deezer_id"] == 991337
+    assert result["favorite_track"]["title"] == "New Favorite Song"
+    assert result["favorite_track"]["artist_name"] == "Alice Artist One"
+    assert result["favorite_track"]["cover_url"] == "https://example.com/new-cover.jpg"
+    assert result["favorite_track"]["preview_url"] == (
+        "/api/v1/music/tracks/991337/preview"
+    )
     assert favorite_genre_names(db, user) == {"R&B", "Jazz", "Electro"}
-    assert len(favorite_artists(db, user)) == 3
+    assert {artist.deezer_artist_id for artist in favorite_artists(db, user)} == {
+        "1001",
+        "1002",
+        "1003",
+    }
 
 
 def test_list_deezerid_missing(client, db, caplog):
@@ -313,6 +381,7 @@ def test_list_deezerid_missing(client, db, caplog):
     user.fav_song_deezer_track_id = "3135556"
     user.fav_song_title = "Song of Silence"
     user.fav_song_artist_name = "Disturbed"
+    user.fav_song_cover_url = ""
 
     genre = Genre(name="Gênero sem Deezer ID")
     db.add(genre)
@@ -331,6 +400,7 @@ def test_list_deezerid_missing(client, db, caplog):
         item["name"] for item in resp.json()["genres"]
     }
     assert "Gênero favorito sem Deezer ID" in caplog.text
+    assert str(genre.genre_id) in caplog.text
 
 
 def test_list_requires_authentication(client, db):
@@ -340,7 +410,7 @@ def test_list_requires_authentication(client, db):
     assert db.query(UserFavoriteGenre).count() == 0
 
 
-def test_list_onboarding_imcomplete(client, db):
+def test_list_returns_conflict_when_onboarding_is_incomplete(client, db):
     _, headers = authenticate(db)
     resp = client.get(URL, headers=headers)
 
@@ -350,7 +420,20 @@ def test_list_onboarding_imcomplete(client, db):
     )
 
 
-def test_list_dont_change_recorda_and_follow(client, db):
+def test_list_returns_conflict_for_a_partial_favorite_track(client, db):
+    user, headers = authenticate(db)
+    user.fav_song_deezer_track_id = "3135556"
+    db.commit()
+
+    resp = client.get(URL, headers=headers)
+
+    assert resp.status_code == 409
+    assert resp.json()["error"]["message"] == (
+        "Complete o onboarding musical para acessar o perfil."
+    )
+
+
+def test_updating_preferences_does_not_change_recordas_or_follows(client, db):
     user, headers = authenticate(db)
 
     followed_user = add_user(db, "seguido")
@@ -359,8 +442,7 @@ def test_list_dont_change_recorda_and_follow(client, db):
     recorda_id = recorda.recorda_id
     original_description = recorda.description
 
-    follow = add_follow(db, user, followed_user)
-    follow_id = follow.following_id
+    add_follow(db, user, followed_user)
 
     post_resp = client.post(URL, json=body(), headers=headers)
     assert post_resp.status_code == 200
@@ -371,7 +453,7 @@ def test_list_dont_change_recorda_and_follow(client, db):
 
     assert (
         db.query(Follow)
-        .filter_by(follower_id=user.user_id, following_id=follow_id)
+        .filter_by(follower_id=user.user_id, following_id=followed_user.user_id)
         .one_or_none()
         is not None
     )

@@ -14,11 +14,14 @@ from app.repositories import general_feed_repository
 from app.services import general_feed_service
 from app.services.general_feed_service import InvalidCursorError, get_general_feed
 from tests.factories import (
+    MUSIC_PREFERENCES_INITIAL_GENRES,
+    MUSIC_PREFERENCES_UPDATED_GENRES,
     add_favorite_genres,
     add_follow,
     add_recorda,
     add_user,
     auth_headers,
+    music_preferences_body,
 )
 
 ROCK_GENRE_ID = GENRE_SEED[0][0]
@@ -48,22 +51,6 @@ def _make_row(day: int = 1):
     )
 
 
-def preferences_body(genres):
-    return {
-        "genres": genres,
-        "artists": [
-            {"deezer_id": 27, "name": "Daft Punk"},
-            {"deezer_id": 13, "name": "Eminem"},
-            {"deezer_id": 145, "name": "Coldplay"},
-        ],
-        "favorite_track": {
-            "deezer_id": 3135556,
-            "title": "Harder, Better, Faster, Stronger",
-            "artist_name": "Daft Punk",
-        },
-    }
-
-
 def test_general_feed_uses_preferences_updated_in_previous_request(client, db):
     viewer = add_user(db, "viewer")
     jazz_author = add_user(db, "jazz_author")
@@ -71,20 +58,9 @@ def test_general_feed_uses_preferences_updated_in_previous_request(client, db):
     recorda = add_recorda(db, jazz_author)
     headers = auth_headers(viewer)
 
-    initial_genres = [
-        {"deezer_id": 132, "name": "Pop"},
-        {"deezer_id": 152, "name": "Rock"},
-        {"deezer_id": 116, "name": "Rap/Hip Hop"},
-    ]
-    updated_genres = [
-        {"deezer_id": 129, "name": "Jazz"},
-        {"deezer_id": 132, "name": "Pop"},
-        {"deezer_id": 152, "name": "Rock"},
-    ]
-
     initial_post = client.post(
         "/api/v1/users/me/music-preferences",
-        json=preferences_body(initial_genres),
+        json=music_preferences_body(MUSIC_PREFERENCES_INITIAL_GENRES),
         headers=headers,
     )
     assert initial_post.status_code == 200
@@ -97,7 +73,7 @@ def test_general_feed_uses_preferences_updated_in_previous_request(client, db):
 
     update_post = client.post(
         "/api/v1/users/me/music-preferences",
-        json=preferences_body(updated_genres),
+        json=music_preferences_body(MUSIC_PREFERENCES_UPDATED_GENRES),
         headers=headers,
     )
     assert update_post.status_code == 200
