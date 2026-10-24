@@ -3,13 +3,17 @@
 from app.models.follow import STATUS_PENDING
 from app.repositories import user_favorite_repository
 from tests.factories import (
+    MUSIC_PREFERENCES_INITIAL_GENRES,
+    MUSIC_PREFERENCES_UPDATED_GENRES,
     add_favorite_artists,
     add_favorite_genres,
     add_follow,
     add_user,
     auth_headers,
+    music_preferences_body,
 )
 
+PREFERENCES_URL = "/api/v1/users/me/music-preferences"
 URL = "/api/v1/users/suggestions"
 
 
@@ -136,6 +140,33 @@ class TestSuggestionsRoute:
         me = add_user(db, "eu")
 
         assert client.get(URL, headers=auth_headers(me)).status_code == 200
+
+    def test_suggestions_use_preferences_updated_in_previous_request(self, client, db):
+        me = add_user(db, "eu")
+        jazz_fan = add_user(db, "jazz_fan")
+        add_favorite_genres(db, jazz_fan, "Jazz")
+        headers = auth_headers(me)
+
+        initial_post = client.post(
+            PREFERENCES_URL,
+            json=music_preferences_body(MUSIC_PREFERENCES_INITIAL_GENRES),
+            headers=headers,
+        )
+        assert initial_post.status_code == 200
+        assert usernames(client.get(URL, headers=headers)) == []
+
+        update_post = client.post(
+            PREFERENCES_URL,
+            json=music_preferences_body(MUSIC_PREFERENCES_UPDATED_GENRES),
+            headers=headers,
+        )
+        assert update_post.status_code == 200
+
+        response = client.get(URL, headers=headers)
+
+        assert response.status_code == 200
+        assert usernames(response) == ["jazz_fan"]
+        assert response.json()[0]["common_genres"] == ["Jazz"]
 
 
 class TestBulkFavouriteLoaders:
