@@ -27,7 +27,7 @@ from app.schemas.user import (
     UserSettingsUpdate,
     UserUpdate,
 )
-from app.services import affinity_service
+from app.services import affinity_service, media_service
 
 USERNAME_TAKEN_MESSAGE = "Este usuário já está cadastrado."
 EMAIL_TAKEN_MESSAGE = "Este email já está cadastrado."
@@ -255,3 +255,14 @@ def update_settings(db: Session, user: AppUser, payload: UserSettingsUpdate) -> 
     if payload.language is not None:
         user.language = payload.language
     return user_repository.save(db, user)
+
+
+def update_avatar(db: Session, user: AppUser, content: bytes) -> AppUser:
+    user.profile_picture_url = media_service.upload_avatar(db, content)
+    return user_repository.save(db, user)
+
+
+def remove_avatar(db: Session, user: AppUser) -> None:
+    """Idempotente. O arquivo antigo fica: a tabela media não tem dono."""
+    user.profile_picture_url = None
+    user_repository.save(db, user)
