@@ -6,8 +6,6 @@ from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
-from app.models import AppUser, Recorda
-from app.models.recorda import PHOTO
 from app.models.report import (
     STATUS_DISMISSED,
     STATUS_OPEN,
@@ -30,8 +28,7 @@ from app.schemas.report import (
     ReportUserTarget,
 )
 from app.services import moderation_service
-
-PreviewKey = tuple[str, UUID]
+from app.services.report_preview_service import PreviewKey, load_target_previews
 
 # Statuses that are considered "closed" and can be bulk-resolved or bulk-dismissed.
 _CLOSED_STATUSES = (STATUS_RESOLVED, STATUS_DISMISSED)
@@ -155,40 +152,7 @@ def _load_previews(
 ) -> dict[PreviewKey, ReportTargetPreview]:
     recorda_ids = {row.target_id for row in rows if row.target_type == TARGET_RECORDA}
     user_ids = {row.target_id for row in rows if row.target_type == TARGET_USER}
-    previews: dict[PreviewKey, ReportTargetPreview] = {}
-
-    if recorda_ids:
-        for recorda, author_username in recorda_repository.list_with_author_by_ids(
-            db, recorda_ids
-        ):
-            previews[(TARGET_RECORDA, recorda.recorda_id)] = _recorda_preview(
-                recorda, author_username
-            )
-
-    if user_ids:
-        for user in user_repository.list_by_ids(db, user_ids):
-            previews[(TARGET_USER, user.user_id)] = _user_preview(user)
-
-    return previews
-
-
-def _recorda_preview(recorda: Recorda, author_username: str) -> ReportTargetPreview:
-    image_url = (
-        recorda.media_url if recorda.media_type == PHOTO else recorda.song_cover_url
-    )
-    return ReportTargetPreview(
-        title=recorda.song_title,
-        subtitle=f"@{author_username}",
-        image_url=image_url,
-    )
-
-
-def _user_preview(user: AppUser) -> ReportTargetPreview:
-    return ReportTargetPreview(
-        title=user.name,
-        subtitle=f"@{user.username}",
-        image_url=user.profile_picture_url,
-    )
+    return load_target_previews(db, user_ids=user_ids, recorda_ids=recorda_ids)
 
 
 def _to_group(row: Row, previews: dict[PreviewKey, ReportTargetPreview]) -> ReportGroup:

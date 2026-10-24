@@ -1,6 +1,7 @@
 """Router administrativo /admin com a guarda de admin aplicada no router (T-E10.BE.01)."""
 
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -13,6 +14,7 @@ from app.models.moderation_action import ACTION_CHANGE_REPORT_STATUS
 from app.models.report import TARGET_RECORDA, TARGET_USER
 from app.repositories import report_repository
 from app.repositories.report_repository import GroupOrder
+from app.schemas.admin_user import AdminUserDetail, AdminUserPage
 from app.schemas.admin_user_moderation import (
     ReactivateUserRequest,
     SuspendUserRequest,
@@ -41,6 +43,27 @@ router = APIRouter(
 
 INVALID_PERIOD_MESSAGE = "A data inicial não pode ser posterior à data final."
 NO_REPORTS_TO_UPDATE_MESSAGE = "Não há denúncias neste status para alterar."
+
+
+@router.get("/users", response_model=AdminUserPage)
+def list_admin_users(
+    q: str = Query(default=""),
+    status: Literal["ACTIVE", "SUSPENDED"] | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> AdminUserPage:
+    return admin_user_moderation_service.search_users(
+        db, q=q, status=status, limit=limit, offset=offset
+    )
+
+
+@router.get("/users/{user_id}", response_model=AdminUserDetail)
+def get_admin_user(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+) -> AdminUserDetail:
+    return admin_user_moderation_service.get_user(db, user_id=user_id)
 
 
 @router.get("/reports/{target_type}/{target_id}", response_model=ReportGroupDetail)

@@ -1,6 +1,13 @@
+from app.core.time import now_utc
 from app.models.app_user import ROLE_ADMIN, STATUS_ACTIVE, STATUS_SUSPENDED
 from app.models.report import STATUS_RESOLVED
-from tests.factories import add_report, add_user, auth_headers
+from tests.factories import (
+    add_moderation_action,
+    add_recorda,
+    add_report,
+    add_user,
+    auth_headers,
+)
 
 
 def suspend_url(target) -> str:
@@ -9,6 +16,42 @@ def suspend_url(target) -> str:
 
 def reactivate_url(target) -> str:
     return f"/api/v1/admin/users/{target.user_id}/reactivate"
+
+
+def test_list_admin_users_returns_page_with_report_counts(client, db):
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
+    reported_user = add_user(db, "reported_user")
+    add_report(db, add_user(db, "reporter_one"), reported_user=reported_user)
+    add_report(
+        db,
+        add_user(db, "reporter_two"),
+        reported_user=reported_user,
+        status=STATUS_RESOLVED,
+    )
+
+    response = client.get(
+        "/api/v1/admin/users",
+        params={"q": "reported"},
+        headers=auth_headers(admin_user),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "items": [
+            {
+                "user_id": str(reported_user.user_id),
+                "username": "reported_user",
+                "name": "Reported_User",
+                "email": "reported_user@example.com",
+                "profile_picture_url": None,
+                "role": "USER",
+                "status": STATUS_ACTIVE,
+                "reports_count": 2,
+                "deleted_at": None,
+            }
+        ],
+        "total": 1,
+    }
 
 
 def test_suspend_user(client, db):
@@ -189,3 +232,159 @@ def test_admin_suspend_invalidates_existing_user_token(client, db):
         headers=target_headers,
     )
     assert profile_response.status_code == 401
+
+
+def test_list_admin_users_requires_admin(client, db):
+    common_user = add_user(db, "common_user")
+    common_headers = auth_headers(common_user)
+
+    response = client.get("/api/v1/admin/users", headers=common_headers)
+    assert response.status_code == 403
+
+
+def test_list_admin_users_invalid_status(client, db):
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
+    admin_headers = auth_headers(admin_user)
+
+    statusinvalid_response = client.get(
+        "/api/v1/admin/users",
+        params={"status": "INVALID_STATUS"},
+        headers=admin_headers,
+    )
+    statusempty_response = client.get(
+        "/api/v1/admin/users",
+        params={"status": ""},
+        headers=admin_headers,
+    )
+    status_none_response = client.get(
+        "/api/v1/admin/users",
+        params={"status": None},
+        headers=admin_headers,
+    )
+    offset_negative_response = client.get(
+        "/api/v1/admin/users",
+        params={"offset": -1},
+        headers=admin_headers,
+    )
+
+    offset_zero_response = client.get(
+        "/api/v1/admin/users",
+        params={"offset": 0},
+        headers=admin_headers,
+    )
+
+    offset_none_response = client.get(
+        "/api/v1/admin/users",
+        params={"offset": None},
+        headers=admin_headers,
+    )
+
+    limit_invalid_response = client.get(
+        "/api/v1/admin/users",
+        params={"limit": 100},
+        headers=admin_headers,
+    )
+
+    limit_none_response = client.get(
+        "/api/v1/admin/users",
+        params={"limit": None},
+        headers=admin_headers,
+    )
+
+    limit_negative_response = client.get(
+        "/api/v1/admin/users",
+        params={"limit": -1},
+        headers=admin_headers,
+    )
+    limit_min_response = client.get(
+        "/api/v1/admin/users",
+        params={"limit": 1},
+        headers=admin_headers,
+    )
+    limit_max_response = client.get(
+        "/api/v1/admin/users",
+        params={"limit": 50},
+        headers=admin_headers,
+    )
+
+    assert statusinvalid_response.status_code == 422
+    assert statusempty_response.status_code == 422
+    assert status_none_response.status_code == 422
+    assert offset_negative_response.status_code == 422
+    assert offset_zero_response.status_code == 200
+    assert offset_none_response.status_code == 422
+    assert limit_invalid_response.status_code == 422
+    assert limit_negative_response.status_code == 422
+    assert limit_none_response.status_code == 422
+    assert limit_min_response.status_code == 200
+    assert limit_max_response.status_code == 200
+
+
+def test_list_users_invalid_query(client, db):
+    simbols = "!@#$%^&*()_+{}|:\"<>?[]\\;',./`~"
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
+    admin_headers = auth_headers(admin_user)
+    simbols_response = client.get(
+        "/api/v1/admin/users",
+        params={"q": simbols},
+        headers=admin_headers,
+    )
+    assert simbols_response.status_code == 200
+
+
+def test_get_user_requires_authentication_or_common_user(client, db):
+    target_user = add_user(db, "target_user")
+    admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
+    admin_headers = auth_headers(admin_user)
+    deleted_user = add_user(db, "deleted_user", deleted_at=now_utc())
+
+    authentication_response = client.get(f"/api/v1/admin/users/{target_user.user_id}")
+
+    common_user = add_user(db, "common_user")
+    common_headers = auth_headers(common_user)
+    common_user_response = client.get(
+        f"/api/v1/admin/users/{target_user.user_id}", headers=common_headers
+    )
+    admin_user_response = client.get(
+        f"/api/v1/admin/users/{admin_user.user_id}", headers=admin_headers
+    )
+
+    deleted_user_response = client.get(
+        f"/api/v1/admin/users/{deleted_user.user_id}", headers=admin_headers
+    )
+
+    assert authentication_response.status_code == 401
+    assert common_user_response.status_code == 403
+    assert admin_user_response.status_code == 200
+    assert deleted_user_response.status_code == 404
+
+
+def test_get_admin_user_returns_detail_counts_reports_and_actions(client, db):
+    admin = add_user(db, "detail_admin", role=ROLE_ADMIN)
+    target = add_user(db, "detail_target")
+    reporter = add_user(db, "detail_reporter")
+    add_recorda(db, target)
+    add_report(db, reporter, reported_user=target)
+    add_moderation_action(db, admin, target_user=target)
+
+    response = client.get(
+        f"/api/v1/admin/users/{target.user_id}",
+        headers=auth_headers(admin),
+    )
+
+    unkown_user_response = client.get(
+        "/api/v1/admin/users/00000000-0000-0000-0000-000000000000",
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200, response.text
+    detail = response.json()
+    assert detail["user_id"] == str(target.user_id)
+    assert detail["recordas_count"] == 1
+    assert detail["reports_count"] == 1
+    assert detail["reports_received"][0]["target_id"] == str(target.user_id)
+    assert detail["reports_received"][0]["report_count"] == 1
+    assert len(detail["actions"]) == 1
+    assert detail["actions"][0]["admin_username"] == admin.username
+    assert detail["actions"][0]["target_user_id"] == str(target.user_id)
+    assert unkown_user_response.status_code == 404
