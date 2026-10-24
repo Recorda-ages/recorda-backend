@@ -1,3 +1,5 @@
+"""Business logic and orchestration for the AppUser entity."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -13,7 +15,7 @@ from app.schemas.music_preference import (
     MusicPreferencesRead,
 )
 from app.schemas.profile import ProfileRead
-from app.schemas.recorda import RecordaRead
+from app.schemas.recorda import RecordaGridPage
 from app.schemas.settings import UserSettings, UserSettingsResult, UserSettingsUpdate
 from app.schemas.user import (
     AccountRead,
@@ -30,11 +32,13 @@ from app.services import (
     auth_service,
     follow_service,
     music_preference_service,
+    profile_grid_service,
     profile_service,
-    recorda_service,
     settings_service,
     user_service,
 )
+from app.services.feed_service import InvalidCursorError
+from app.services.profile_service import PrivateAccountError, UserNotFoundError
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -132,6 +136,40 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserRead:
         return user_service.create(db, payload)
     except user_service.UserAlreadyExistsError as exc:
         raise user_already_exists_error(exc) from exc
+
+
+@router.get("/{user_id}/recordas", response_model=RecordaGridPage)
+def get_profile_grid(
+    user_id: UUID,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=24, ge=1, le=60),
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RecordaGridPage:
+    """Grade paginada de Recordas do perfil, respeitando privacidade."""
+    try:
+        return profile_grid_service.get_profile_grid(
+            db=db,
+            owner_id=user_id,
+            viewer=current_user,
+            cursor=cursor,
+            limit=limit,
+        )
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    except PrivateAccountError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta conta é privada.",
+        ) from exc
+    except InvalidCursorError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cursor inválido.",
+        ) from exc
 
 
 @router.get("/me/music-preferences", response_model=MusicPreferencesRead)
@@ -238,18 +276,3 @@ def delete_follow(
     if not follow_service.delete_follow(db, user_id, current_user):
         raise HTTPException(status_code=404, detail="Você não segue este usuário.")
     return FollowMutationResult(follow_status="nenhuma")
-
-
-@router.get("/{user_id}/recordas", response_model=list[RecordaRead])
-def list_user_recordas(
-    user_id: UUID,
-    current_user: AppUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> list[RecordaRead]:
-    """Grid do perfil, sujeito à mesma privacidade das listas de seguidores."""
-    try:
-        return recorda_service.list_for_profile(db, user_id, current_user)
-    except follow_service.UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado.") from exc
-    except follow_service.PrivateAccountError as exc:
-        raise HTTPException(status_code=403, detail="Esta conta é privada.") from exc

@@ -9,7 +9,6 @@ from app.models import AppUser, Recorda
 from app.models.app_user import STATUS_ACTIVE
 from app.repositories import (
     comment_repository,
-    follow_repository,
     recorda_like_repository,
     recorda_repository,
     user_repository,
@@ -20,7 +19,7 @@ from app.schemas.recorda import (
     RecordaDetail,
     RecordaUpdate,
 )
-from app.services import follow_service
+from app.services import profile_service
 
 
 class NotRecordaOwnerError(Exception):
@@ -29,11 +28,6 @@ class NotRecordaOwnerError(Exception):
 
 def list_visible_to_user(db: Session, viewer: AppUser) -> list[Recorda]:
     return recorda_repository.list_visible_to_user(db, viewer)
-
-
-def list_for_profile(db: Session, owner_id: UUID, viewer: AppUser) -> list[Recorda]:
-    follow_service.authorize_profile_access(db, owner_id, viewer)
-    return recorda_repository.list_by_user(db, owner_id)
 
 
 def get_by_id(db: Session, recorda_id: UUID) -> Recorda | None:
@@ -133,9 +127,6 @@ def get_viewable_recorda(
     if author is None or author.status != STATUS_ACTIVE:
         return None
 
-    if author.user_id != viewer.user_id and author.is_private:
-        if not follow_repository.is_accepted_follower(
-            db, viewer.user_id, author.user_id
-        ):
-            raise RecordaAccessDeniedError
+    if not profile_service.can_view_content(db, author, viewer):
+        raise RecordaAccessDeniedError
     return recorda
