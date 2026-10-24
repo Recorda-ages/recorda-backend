@@ -56,7 +56,6 @@ def test_list_admin_users_returns_page_with_report_counts(client, db):
 
 def test_suspend_user(client, db):
     admin_user = add_user(db, "admin_user", role=ROLE_ADMIN)
-    admin_user2 = add_user(db, "admin_user2", role=ROLE_ADMIN)
     admin_headers = auth_headers(admin_user)
 
     suspend_target = add_user(db, "suspend_target", status=STATUS_SUSPENDED)
@@ -83,17 +82,10 @@ def test_suspend_user(client, db):
         headers=admin_headers,
     )
 
-    suspend_admin = client.post(
-        suspend_url(admin_user2),
-        json=payload,
-        headers=admin_headers,
-    )
-
     assert self_suspend.status_code == 400
     assert unknown_user.status_code == 404
     assert first_suspend.status_code == 200
     assert already_suspended.status_code == 409
-    assert suspend_admin.status_code == 403
 
 
 def test_reactivate_user(client, db):

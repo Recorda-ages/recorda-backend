@@ -1,10 +1,10 @@
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import AppUser, Recorda
-from app.models.report import Report
+from app.models.report import TARGET_RECORDA, TARGET_USER, Report
 from app.repositories import moderation_action_repository
 from app.repositories._query import only_live
 
@@ -32,7 +32,7 @@ def filtered_users(q: str, status: str | None):
         try:
             user_id = UUID(q)
         except ValueError:
-            escaped_q = q.replace("%", "\\%").replace("_", "\\_").replace("\\", "\\\\")
+            escaped_q = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             pattern = f"%{escaped_q}%"
 
             if "@" in q:
@@ -74,13 +74,21 @@ def count_reports_by_user(db: Session, user_ids: list[UUID]) -> dict[UUID, int]:
     if not user_ids:
         return {}
 
-    return dict(
-        db.execute(
-            select(Report.reported_user_id, func.count())
-            .where(Report.reported_user_id.in_(user_ids))
-            .group_by(Report.reported_user_id)
-        ).all()
-    )
+    owner_id = func.coalesce(Report.reported_user_id, Recorda.user_id)
+    rows = db.execute(
+        select(owner_id, func.count(Report.report_id))
+        .select_from(Report)
+        .outerjoin(Recorda, Report.recorda_id == Recorda.recorda_id)
+        .where(
+            Report.comment_id.is_(None),
+            or_(
+                Report.reported_user_id.in_(user_ids),
+                Recorda.user_id.in_(user_ids),
+            ),
+        )
+        .group_by(owner_id)
+    ).all()
+    return dict(rows)
 
 
 def count_recordas_by_user(db: Session, user_id: UUID) -> int:
@@ -91,20 +99,32 @@ def count_recordas_by_user(db: Session, user_id: UUID) -> int:
 
 
 def list_report_groups_for_user(db: Session, user_id: UUID):
+    target_type = case(
+        (Report.reported_user_id.is_not(None), literal(TARGET_USER)),
+        else_=literal(TARGET_RECORDA),
+    )
+    target_id = func.coalesce(Report.reported_user_id, Report.recorda_id)
     return list(
         db.execute(
             select(
-                Report.status,
+                target_type.label("target_type"),
+                target_id.label("target_id"),
+                Report.status.label("status"),
                 func.count(Report.report_id).label("report_count"),
                 func.min(Report.created_at).label("first_reported_at"),
                 func.max(Report.created_at).label("last_reported_at"),
             )
+            .select_from(Report)
+            .outerjoin(Recorda, Report.recorda_id == Recorda.recorda_id)
             .where(
-                Report.reported_user_id == user_id,
                 Report.comment_id.is_(None),
+                or_(
+                    Report.reported_user_id == user_id,
+                    Recorda.user_id == user_id,
+                ),
             )
-            .group_by(Report.status)
-            .order_by(Report.status)
+            .group_by(Report.reported_user_id, Report.recorda_id, Report.status)
+            .order_by(target_type, target_id, Report.status)
         ).all()
     )
 
@@ -113,16 +133,3 @@ def list_actions_for_user(db: Session, user_id: UUID):
     return moderation_action_repository.list_for_target(
         db, target_type="USER", target_id=user_id
     )
-
-
-def to_admin_user_row(user: AppUser, reports_count: int) -> dict[str, object]:
-    return {
-        "user_id": user.user_id,
-        "username": user.username,
-        "name": user.name,
-        "email": user.email,
-        "profile_picture_url": user.profile_picture_url,
-        "role": user.role,
-        "status": user.status,
-        "reports_count": reports_count,
-    }

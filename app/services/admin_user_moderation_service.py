@@ -22,6 +22,7 @@ from app.schemas.admin_user import (
     AdminUserReportGroup,
 )
 from app.schemas.admin_user_moderation import ReactivateUserRequest, SuspendUserRequest
+from app.services.report_preview_service import load_target_previews
 
 ResolveReports = Callable[[Session, UUID], int]
 
@@ -128,10 +129,7 @@ def search_users(
         db, [user.user_id for user in users]
     )
     items = [
-        admin_user_repository.to_admin_user_row(
-            user, report_counts.get(user.user_id, 0)
-        )
-        for user in users
+        _to_admin_user_row(user, report_counts.get(user.user_id, 0)) for user in users
     ]
     return AdminUserPage(items=items, total=total)
 
@@ -143,20 +141,30 @@ def get_user(db: Session, *, user_id: UUID) -> AdminUserDetail:
             status_code=404, detail=f"User with ID {user_id} not found."
         )
 
-    row = admin_user_repository.to_admin_user_row(
-        user,
-        admin_user_repository.count_reports_by_user(db, [user_id]).get(user_id, 0),
+    row = _to_admin_user_row(
+        user, admin_user_repository.count_reports_by_user(db, [user_id]).get(user_id, 0)
+    )
+    report_groups = admin_user_repository.list_report_groups_for_user(db, user_id)
+    previews = load_target_previews(
+        db,
+        user_ids={user_id},
+        recorda_ids={
+            report.target_id
+            for report in report_groups
+            if report.target_type == "RECORDA"
+        },
     )
     reports_received = [
         AdminUserReportGroup(
-            target_type="USER",
-            target_id=user_id,
+            target_type=report.target_type,
+            target_id=report.target_id,
             status=report.status,
             report_count=report.report_count,
             first_reported_at=report.first_reported_at,
             last_reported_at=report.last_reported_at,
+            preview=previews.get((report.target_type, report.target_id)),
         )
-        for report in admin_user_repository.list_report_groups_for_user(db, user_id)
+        for report in report_groups
     ]
     actions = [
         AdminUserAction(
@@ -182,3 +190,16 @@ def get_user(db: Session, *, user_id: UUID) -> AdminUserDetail:
         reports_received=reports_received,
         actions=actions,
     )
+
+
+def _to_admin_user_row(user: AppUser, reports_count: int) -> dict[str, object]:
+    return {
+        "user_id": user.user_id,
+        "username": user.username,
+        "name": user.name,
+        "email": user.email,
+        "profile_picture_url": user.profile_picture_url,
+        "role": user.role,
+        "status": user.status,
+        "reports_count": reports_count,
+    }
