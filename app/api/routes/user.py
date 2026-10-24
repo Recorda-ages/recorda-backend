@@ -13,6 +13,8 @@ from app.schemas.music_preference import (
     MusicPreferencesRead,
 )
 from app.schemas.profile import ProfileRead
+from app.schemas.recorda import RecordaRead
+from app.schemas.settings import UserSettings, UserSettingsResult, UserSettingsUpdate
 from app.schemas.user import (
     AccountRead,
     AccountUpdate,
@@ -22,8 +24,6 @@ from app.schemas.user import (
     UserCreate,
     UserRead,
     UserSearchResult,
-    UserSettingsRead,
-    UserSettingsUpdate,
     UserUpdate,
 )
 from app.services import (
@@ -31,12 +31,32 @@ from app.services import (
     follow_service,
     music_preference_service,
     profile_service,
+    recorda_service,
+    settings_service,
     user_service,
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 _current_admin = Depends(get_current_admin_user)
+
+
+@router.get("/me/settings", response_model=UserSettings)
+def get_own_settings(
+    current_user: AppUser = Depends(get_current_user),
+) -> UserSettings:
+    """Retorna a privacidade e o idioma salvo da conta autenticada."""
+    return UserSettings.model_validate(current_user)
+
+
+@router.patch("/me/settings", response_model=UserSettingsResult)
+def update_own_settings(
+    payload: UserSettingsUpdate,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserSettingsResult:
+    """Altera a privacidade; tornar pública aceita os pedidos pendentes."""
+    return settings_service.update(db, current_user, payload)
 
 
 @router.get("/search", response_model=list[UserSearchResult])
@@ -68,15 +88,6 @@ def get_own_profile(
             status_code=status.HTTP_409_CONFLICT,
             detail="Complete o onboarding musical para acessar o perfil.",
         ) from exc
-
-
-@router.patch("/me/settings", response_model=UserSettingsRead)
-def update_own_settings(
-    payload: UserSettingsUpdate,
-    current_user: AppUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> AppUser:
-    return user_service.update_settings(db, current_user, payload)
 
 
 @router.get("/me/account", response_model=AccountRead)
@@ -227,3 +238,18 @@ def delete_follow(
     if not follow_service.delete_follow(db, user_id, current_user):
         raise HTTPException(status_code=404, detail="Você não segue este usuário.")
     return FollowMutationResult(follow_status="nenhuma")
+
+
+@router.get("/{user_id}/recordas", response_model=list[RecordaRead])
+def list_user_recordas(
+    user_id: UUID,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[RecordaRead]:
+    """Grid do perfil, sujeito à mesma privacidade das listas de seguidores."""
+    try:
+        return recorda_service.list_for_profile(db, user_id, current_user)
+    except follow_service.UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.") from exc
+    except follow_service.PrivateAccountError as exc:
+        raise HTTPException(status_code=403, detail="Esta conta é privada.") from exc

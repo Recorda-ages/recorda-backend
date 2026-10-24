@@ -131,15 +131,3 @@ class UserProfileRead(BaseModel):
     favorite_genres: list[ProfileGenre]
     favorite_artists: list[ProfileArtist]
     recordas: list[RecordaRead]
-
-
-class UserSettingsUpdate(BaseModel):
-    is_private: bool | None = None
-    language: Literal["pt-BR", "en", "es"] | None = None
-
-
-class UserSettingsRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    is_private: bool
-    language: Literal["pt-BR", "en", "es"]

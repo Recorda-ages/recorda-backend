@@ -103,9 +103,14 @@ def mark_all_as_read(db: Session, recipient_id: UUID) -> int:
     return result.rowcount
 
 
-def add(db: Session, notification: Notification) -> Notification:
+def add(
+    db: Session, notification: Notification, *, commit: bool = True
+) -> Notification:
     db.add(notification)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(notification)
 
     return notification

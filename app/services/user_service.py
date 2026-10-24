@@ -25,7 +25,6 @@ from app.schemas.user import (
     UserCreate,
     UserProfileRead,
     UserSearchResult,
-    UserSettingsUpdate,
     UserUpdate,
 )
 from app.services import affinity_service
@@ -272,11 +271,3 @@ def suggest_by_affinity(
     # Username desempata para a ordem ser estável entre requisições iguais.
     suggestions.sort(key=lambda suggestion: (-suggestion.affinity, suggestion.username))
     return suggestions[:limit]
-
-
-def update_settings(db: Session, user: AppUser, payload: UserSettingsUpdate) -> AppUser:
-    if payload.is_private is not None:
-        user.is_private = payload.is_private
-    if payload.language is not None:
-        user.language = payload.language
-    return user_repository.save(db, user)
