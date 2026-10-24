@@ -54,10 +54,22 @@ def delete(db: Session, recorda_id: UUID, author: AppUser) -> bool:
     recorda = _get_owned(db, recorda_id, author)
     if recorda is None:
         return False
-    recorda_like_repository.delete_all_for_recorda(db, recorda_id)
-    comment_repository.soft_delete_all_for_recorda(db, recorda_id)
-    recorda_repository.soft_delete(db, recorda)
+    soft_delete_with_cleanup(db, recorda)
     return True
+
+
+def soft_delete_with_cleanup(
+    db: Session, recorda: Recorda, *, commit: bool = True
+) -> None:
+    """Exclui a Recorda e limpa o que depende dela.
+
+    Mecanismo único da exclusão pelo autor e da remoção pelo admin: curtidas
+    apagadas, comentários com soft delete e `deleted_at` na Recorda. Com
+    `commit=False`, quem chama decide quando fechar a transação.
+    """
+    recorda_like_repository.delete_all_for_recorda(db, recorda.recorda_id)
+    comment_repository.soft_delete_all_for_recorda(db, recorda.recorda_id)
+    recorda_repository.soft_delete(db, recorda, commit=commit)
 
 
 def _get_owned(db: Session, recorda_id: UUID, author: AppUser) -> Recorda | None:
