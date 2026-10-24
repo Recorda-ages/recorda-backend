@@ -22,9 +22,23 @@ def list_admins(db: Session) -> list[AppUser]:
     return list(db.scalars(stmt))
 
 
-def get_by_id(db: Session, user_id: UUID) -> AppUser | None:
+def get_by_id(
+    db: Session, user_id: UUID, *, for_update: bool = False
+) -> AppUser | None:
     stmt = select(AppUser).where(AppUser.user_id == user_id)
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return db.scalars(only_live(stmt, AppUser)).first()
+
+
+def get_for_update(db: Session, user_id: UUID) -> AppUser:
+    stmt = (
+        select(AppUser)
+        .where(AppUser.user_id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return db.scalars(stmt).one()
 
 
 def get_by_id_including_deleted(db: Session, user_id: UUID) -> AppUser | None:

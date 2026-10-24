@@ -46,50 +46,57 @@ def db():
         engine.dispose()
 
 
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+@pytest.fixture(scope="session")
+def pg_database_url():
+    """Um container por execução; URLs externas continuam protegidas pela guarda."""
+    external_url = os.getenv("TEST_DATABASE_URL")
+    if external_url:
+        assert_disposable_database(
+            external_url,
+            app_url=settings.database_url,
+            allow_destructive=os.getenv(ALLOW_DESTRUCTIVE_ENV),
+        )
+        yield external_url
+        return
 
-requires_postgres = pytest.mark.skipif(
-    not TEST_DATABASE_URL,
-    reason="requer PostgreSQL: defina TEST_DATABASE_URL (banco descartável)",
-)
+    from testcontainers.postgres import PostgresContainer
+
+    with PostgresContainer(
+        "postgres:16-alpine", dbname="test_recorda", driver="psycopg"
+    ) as postgres:
+        url = postgres.get_connection_url()
+        assert_disposable_database(
+            url, app_url=settings.database_url, allow_destructive="1"
+        )
+        yield url
 
 
 @pytest.fixture
-def pg_db():
-    """Sessão em PostgreSQL real, com o schema criado pelas migrations Alembic.
-
-    Só roda quando `TEST_DATABASE_URL` está definida — o CI atual não tem
-    PostgreSQL e os testes que dependem desta fixture são skipados.
-
-    Serve para o que não existe no SQLite, como o trigger de imutabilidade de
-    `moderation_action`. O schema `public` é recriado do zero, por isso o
-    destino passa pela guarda de `tests.pg_guard` antes de qualquer DDL.
-    """
-    assert_disposable_database(
-        TEST_DATABASE_URL,
-        app_url=settings.database_url,
-        allow_destructive=os.getenv(ALLOW_DESTRUCTIVE_ENV),
-    )
-
-    engine = create_engine(TEST_DATABASE_URL, poolclass=NullPool)
-    with engine.begin() as connection:
-        connection.exec_driver_sql("DROP SCHEMA IF EXISTS public CASCADE")
-        connection.exec_driver_sql("CREATE SCHEMA public")
-
-    config = Config("alembic.ini")
-    previous_url = settings.database_url
-    settings.database_url = TEST_DATABASE_URL
+def pg_db(pg_database_url):
+    """Schema migrado e recriado por teste, isolando commits e alterações de DDL."""
+    engine = create_engine(pg_database_url, poolclass=NullPool)
     try:
-        command.upgrade(config, "head")
-    finally:
-        settings.database_url = previous_url
+        with engine.begin() as connection:
+            connection.exec_driver_sql("DROP SCHEMA IF EXISTS public CASCADE")
+            connection.exec_driver_sql("CREATE SCHEMA public")
 
-    session = sessionmaker(bind=engine, autocommit=False, autoflush=False)()
-    try:
-        yield session
+        config = Config("alembic.ini")
+        previous_url = settings.database_url
+        settings.database_url = pg_database_url
+        try:
+            command.upgrade(config, "head")
+        finally:
+            settings.database_url = previous_url
+
+        with Session(engine, autoflush=False) as session:
+            yield session
     finally:
-        session.close()
-        engine.dispose()
+        try:
+            with engine.begin() as connection:
+                connection.exec_driver_sql("DROP SCHEMA IF EXISTS public CASCADE")
+                connection.exec_driver_sql("CREATE SCHEMA public")
+        finally:
+            engine.dispose()
 
 
 @pytest.fixture

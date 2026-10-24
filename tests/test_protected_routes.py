@@ -32,6 +32,7 @@ def test_protected_route_with_valid_token(client, db):
         "username": "alice",
         "role": "USER",
         "onboarding_completed": False,
+        "language": "pt-BR",
     }
 
 

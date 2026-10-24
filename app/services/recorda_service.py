@@ -2,8 +2,6 @@
 
 from uuid import UUID
 
-from sqlalchemy.orm import Session
-
 from app.core.music_preview import public_preview_url
 from app.models import AppUser, Recorda
 from app.models.app_user import STATUS_ACTIVE
@@ -20,6 +18,7 @@ from app.schemas.recorda import (
     RecordaUpdate,
 )
 from app.services import profile_service
+from sqlalchemy.orm import Session
 
 
 class NotRecordaOwnerError(Exception):

@@ -29,7 +29,8 @@ def create_follow(db: Session, user_id: UUID, current_user: AppUser) -> str:
     if current_user.user_id == user_id:
         raise SelfFollowError
 
-    target_user = user_repository.get_by_id(db, user_id)
+    # O mesmo bloqueio do PATCH evita inserir PENDING após tornar a conta pública.
+    target_user = user_repository.get_by_id(db, user_id, for_update=True)
     if target_user is None or target_user.status != STATUS_ACTIVE:
         raise FollowTargetNotFoundError
     if follow_repository.get_by_users(db, current_user.user_id, user_id) is not None:
@@ -78,7 +79,7 @@ class PrivateAccountError(Exception):
     """Conta privada e o solicitante não é seguidor aceito dela."""
 
 
-def _authorize(db: Session, owner_id: UUID, viewer: AppUser) -> None:
+def authorize_profile_access(db: Session, owner_id: UUID, viewer: AppUser) -> None:
     """Deixa passar o dono, contas públicas e seguidores aceitos. Só isso."""
     try:
         owner = profile_service.get_active_owner(db, owner_id)
@@ -104,7 +105,7 @@ def list_followers(
     limit: int,
     offset: int,
 ) -> list[FollowUser]:
-    _authorize(db, owner_id, viewer)
+    authorize_profile_access(db, owner_id, viewer)
     users = follow_repository.list_followers(
         db, owner_id, q=_normalize(q), limit=limit, offset=offset
     )
@@ -120,7 +121,7 @@ def list_following(
     limit: int,
     offset: int,
 ) -> list[FollowUser]:
-    _authorize(db, owner_id, viewer)
+    authorize_profile_access(db, owner_id, viewer)
     users = follow_repository.list_following(
         db, owner_id, q=_normalize(q), limit=limit, offset=offset
     )
