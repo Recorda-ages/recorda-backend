@@ -106,9 +106,10 @@ def save(db: Session, recorda: Recorda) -> Recorda:
     return recorda
 
 
-def soft_delete(db: Session, recorda: Recorda) -> None:
+def soft_delete(db: Session, recorda: Recorda, *, commit: bool = True) -> None:
     recorda.deleted_at = now_utc()
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def list_with_author_by_ids(db: Session, recorda_ids: Collection[UUID]) -> list[Row]:
