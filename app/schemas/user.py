@@ -1,8 +1,14 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.auth import (
+    MINIMUM_PASSWORD_LENGTH,
+    validate_email,
+    validate_name,
+    validate_username,
+)
 from app.schemas.profile import FollowStatus
 from app.schemas.profile import ProfileFavoriteSong as ProfileFavoriteSong
 from app.schemas.recorda import RecordaRead
@@ -25,6 +31,52 @@ class UserUpdate(BaseModel):
 
 class UserChangeRole(BaseModel):
     role: Literal["USER", "ADMIN"]
+
+
+class AccountRead(BaseModel):
+    """Dados editáveis da tela "Minha conta" (US34)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: UUID
+    name: str
+    username: str
+    email: str
+
+
+class AccountUpdate(BaseModel):
+    """Atualização parcial da conta: campo omitido ou nulo fica inalterado.
+
+    A senha nova não exige a atual; a confirmação do par é feita na tela.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    username: str | None = Field(default=None, min_length=1, max_length=255)
+    email: str | None = Field(default=None, min_length=1, max_length=255)
+    password: str | None = Field(default=None, min_length=MINIMUM_PASSWORD_LENGTH)
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_blank(cls, value: str | None) -> str | None:
+        return None if value is None else validate_name(value)
+
+    @field_validator("username")
+    @classmethod
+    def username_must_not_have_spaces(cls, value: str | None) -> str | None:
+        return None if value is None else validate_username(value)
+
+    @field_validator("email")
+    @classmethod
+    def email_must_be_valid(cls, value: str | None) -> str | None:
+        return None if value is None else validate_email(value)
+
+
+class AccountUpdateResponse(BaseModel):
+    """O token é reemitido porque trocar o username invalida o anterior."""
+
+    access_token: str
+    token_type: str = "bearer"
+    account: AccountRead
 
 
 class UserRead(UserBase):

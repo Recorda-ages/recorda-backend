@@ -17,6 +17,7 @@ from app.repositories import (
 )
 from app.schemas.profile import ProfileFavoriteSong
 from app.schemas.user import (
+    AccountUpdate,
     ProfileArtist,
     ProfileGenre,
     SuggestedUser,
@@ -115,11 +116,18 @@ def create(db: Session, payload: UserCreate, *, language: str | None = None) -> 
     return user_repository.create(db, user)
 
 
-def ensure_unique_credentials(db: Session, username: str, email: str) -> None:
+def ensure_unique_credentials(
+    db: Session, username: str | None, email: str | None
+) -> None:
+    """Campos `None` não são verificados (atualização parcial da conta)."""
     fields = []
-    if user_repository.get_by_username(db, username, include_deleted=True):
+    if username is not None and user_repository.get_by_username(
+        db, username, include_deleted=True
+    ):
         fields.append({"field": "username", "message": USERNAME_TAKEN_MESSAGE})
-    if user_repository.get_by_email(db, email, include_deleted=True):
+    if email is not None and user_repository.get_by_email(
+        db, email, include_deleted=True
+    ):
         fields.append({"field": "email", "message": EMAIL_TAKEN_MESSAGE})
     if fields:
         raise UserAlreadyExistsError(fields)
@@ -133,6 +141,23 @@ def update(db: Session, user_id: UUID, payload: UserUpdate) -> AppUser | None:
         user.name = payload.name
     if payload.email is not None:
         user.email = payload.email
+    return user_repository.save(db, user)
+
+
+def update_own_account(db: Session, user: AppUser, payload: AccountUpdate) -> AppUser:
+    """Aplica só os campos enviados; valores iguais aos atuais não conflitam."""
+    username = payload.username if payload.username != user.username else None
+    email = payload.email if payload.email != user.email else None
+    ensure_unique_credentials(db, username, email)
+
+    if payload.name is not None:
+        user.name = payload.name
+    if username is not None:
+        user.username = username
+    if email is not None:
+        user.email = email
+    if payload.password is not None:
+        user.password_hash = security.hash_password(payload.password)
     return user_repository.save(db, user)
 
 

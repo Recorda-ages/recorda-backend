@@ -14,6 +14,9 @@ from app.schemas.music_preference import (
 )
 from app.schemas.profile import ProfileRead
 from app.schemas.user import (
+    AccountRead,
+    AccountUpdate,
+    AccountUpdateResponse,
     SuggestedUser,
     UserChangeRole,
     UserCreate,
@@ -24,6 +27,7 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.services import (
+    auth_service,
     follow_service,
     music_preference_service,
     profile_service,
@@ -73,6 +77,29 @@ def update_own_settings(
     db: Session = Depends(get_db),
 ) -> AppUser:
     return user_service.update_settings(db, current_user, payload)
+
+
+@router.get("/me/account", response_model=AccountRead)
+def get_own_account(
+    current_user: AppUser = Depends(get_current_user),
+) -> AppUser:
+    return current_user
+
+
+@router.patch("/me/account", response_model=AccountUpdateResponse)
+def update_own_account(
+    payload: AccountUpdate,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AccountUpdateResponse:
+    try:
+        user = user_service.update_own_account(db, current_user, payload)
+    except user_service.UserAlreadyExistsError as exc:
+        raise user_already_exists_error(exc) from exc
+    return AccountUpdateResponse(
+        access_token=auth_service.issue_access_token(user),
+        account=AccountRead.model_validate(user),
+    )
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
