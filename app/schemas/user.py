@@ -87,6 +87,12 @@ class UserRead(UserBase):
     role: str
 
 
+class AvatarRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    profile_picture_url: str
+
+
 class UserSearchResult(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
