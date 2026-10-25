@@ -273,7 +273,6 @@ def suggest_by_affinity(
     return suggestions[:limit]
 
 
-
 def update_avatar(db: Session, user: AppUser, content: bytes) -> AppUser:
     user.profile_picture_url = media_service.upload_avatar(db, content)
     return user_repository.save(db, user)
