@@ -1,7 +1,7 @@
 """Router administrativo /admin com a guarda de admin aplicada no router (T-E10.BE.01)."""
 
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +14,10 @@ from app.models.moderation_action import ACTION_CHANGE_REPORT_STATUS
 from app.models.report import TARGET_RECORDA, TARGET_USER
 from app.repositories import report_repository
 from app.repositories.report_repository import GroupOrder
+from app.schemas.admin_recorda_moderation import (
+    RemoveRecordaRequest,
+    RemoveRecordaResponse,
+)
 from app.schemas.admin_user import AdminUserDetail, AdminUserPage
 from app.schemas.admin_user_moderation import (
     ReactivateUserRequest,
@@ -30,6 +34,7 @@ from app.schemas.report import (
     ReportTargetType,
 )
 from app.services import (
+    admin_recorda_moderation_service,
     admin_report_service,
     admin_user_moderation_service,
     moderation_service,
@@ -229,3 +234,24 @@ def reactivate_user(
         record_action=moderation_service.record_action,
     )
     return UserStatusResponse(status_code=200, user_id=user_id, status=user.status)
+
+
+@router.post(
+    "/recordas/{recorda_id}/removal",
+    response_model=RemoveRecordaResponse,
+    status_code=status.HTTP_200_OK,
+)
+def remove_recorda(
+    recorda_id: UUID,
+    payload: RemoveRecordaRequest,
+    current_admin: Annotated[AppUser, Depends(get_current_admin_user)],
+    db: Session = Depends(get_db),
+) -> RemoveRecordaResponse:
+    return admin_recorda_moderation_service.remove_recorda(
+        db,
+        recorda_id,
+        payload,
+        current_admin,
+        resolve_reports=admin_report_service.resolve_open_reports,
+        record_action=moderation_service.record_action,
+    )
