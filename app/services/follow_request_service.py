@@ -27,7 +27,16 @@ class AlreadyResolvedError(Exception):
 def accept(db: Session, follow_id: UUID, current_user: AppUser) -> None:
     """Só quem recebeu o pedido aceita. Vira follow ativo e avisa quem pediu."""
     follow = _pending_for(db, follow_id, current_user, recipient=True)
+    try:
+        _accept(db, follow)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
+
+def _accept(db: Session, follow: Follow) -> None:
+    """Aceita sem commit; o chamador controla a autorização e a transação."""
     follow.status = STATUS_ACCEPTED
     follow.accepted_at = now_utc()
     notification_repository.convert_follow_request(

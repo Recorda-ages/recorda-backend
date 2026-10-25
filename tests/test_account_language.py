@@ -51,7 +51,11 @@ def test_patch_settings_persists_language(
         payload["is_private"] = True
     response = client.patch("/api/v1/users/me/settings", json=payload, headers=headers)
     assert response.status_code == 200
-    assert response.json() == {"language": language, "is_private": with_privacy}
+    assert response.json() == {
+        "language": language,
+        "is_private": with_privacy,
+        "accepted_requests": 0,
+    }
     db.expire_all()
     assert db.get(AppUser, common_user.user_id).language == language
     for path in ("me", "verify"):

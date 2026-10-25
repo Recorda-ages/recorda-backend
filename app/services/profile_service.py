@@ -1,4 +1,4 @@
-"""Montagem do cabeçalho do perfil (contrato ProfileRead, C-2 do Épico 06)."""
+"""Regra de privacidade e montagem do cabeçalho do perfil (contrato ProfileRead, C-2 do Épico 06)."""
 
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.music_preview import public_preview_url
 from app.core.time import now_utc, to_local
 from app.models import AppUser
-from app.repositories import follow_repository, recorda_repository
+from app.models.app_user import STATUS_ACTIVE
+from app.repositories import follow_repository, recorda_repository, user_repository
 from app.schemas.profile import (
     ProfileCounts,
     ProfileFavoriteSong,
@@ -17,9 +18,52 @@ from app.schemas.profile import (
     ProfileStreak,
 )
 
+# ---------------------------------------------------------------------------
+# Erros de privacidade (reutilizados pela grade e outros serviços)
+# ---------------------------------------------------------------------------
+
+
+class UserNotFoundError(Exception):
+    """Dono do perfil inexistente, excluído ou suspenso."""
+
+
+class PrivateAccountError(Exception):
+    """Conta privada e o visitante não é seguidor aceito."""
+
 
 class IncompleteProfileError(Exception):
     """O usuário ainda não concluiu o onboarding musical."""
+
+
+# ---------------------------------------------------------------------------
+# Helpers de privacidade
+# ---------------------------------------------------------------------------
+
+
+def get_active_owner(db: Session, owner_id: UUID) -> AppUser:
+    """Retorna o dono se existir e estiver ativo; levanta UserNotFoundError caso contrário."""
+    owner = user_repository.get_by_id(db, owner_id)
+    if owner is None or owner.status != STATUS_ACTIVE:
+        raise UserNotFoundError
+    return owner
+
+
+def can_view_content(db: Session, owner: AppUser, viewer: AppUser) -> bool:
+    """Dono, conta pública ou seguidor ACCEPTED podem ver o conteúdo. Retorna True ou False."""
+    if owner.user_id == viewer.user_id or not owner.is_private:
+        return True
+    return follow_repository.is_accepted_follower(db, viewer.user_id, owner.user_id)
+
+
+def authorize_content_access(db: Session, owner: AppUser, viewer: AppUser) -> None:
+    """Levanta PrivateAccountError se viewer não tiver acesso ao perfil de owner."""
+    if not can_view_content(db, owner, viewer):
+        raise PrivateAccountError
+
+
+# ---------------------------------------------------------------------------
+# Contadores do perfil
+# ---------------------------------------------------------------------------
 
 
 def count_recordas(db: Session, user_id: UUID) -> int:
@@ -33,6 +77,11 @@ def count_followers(db: Session, user_id: UUID) -> int:
 
 def count_following(db: Session, user_id: UUID) -> int:
     return follow_repository.count_following(db, user_id)
+
+
+# ---------------------------------------------------------------------------
+# Streak de publicações
+# ---------------------------------------------------------------------------
 
 
 def calculate_streak(days: set[date], today: date) -> ProfileStreak:
@@ -68,6 +117,11 @@ def _to_publication_day(value: datetime) -> date:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return to_local(value).date()
+
+
+# ---------------------------------------------------------------------------
+# Montagem do cabeçalho do perfil
+# ---------------------------------------------------------------------------
 
 
 def build_profile(db: Session, owner: AppUser, viewer: AppUser) -> ProfileRead:

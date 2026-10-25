@@ -13,6 +13,29 @@ def normalize_email(value: str) -> str:
     return value.strip().lower()
 
 
+def validate_name(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("Informe seu nome.")
+    return stripped
+
+
+def validate_username(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("Informe seu usuário.")
+    if re.search(r"\s", stripped):
+        raise ValueError("O usuário não pode conter espaços.")
+    return stripped
+
+
+def validate_email(value: str) -> str:
+    normalized = normalize_email(value)
+    if not _EMAIL_PATTERN.match(normalized):
+        raise ValueError("Informe um email válido.")
+    return normalized
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -34,28 +57,17 @@ class RegisterRequest(BaseModel):
     @field_validator("name")
     @classmethod
     def name_must_not_be_blank(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("Informe seu nome.")
-        return stripped
+        return validate_name(value)
 
     @field_validator("username")
     @classmethod
     def username_must_not_have_spaces(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("Informe seu usuário.")
-        if re.search(r"\s", stripped):
-            raise ValueError("O usuário não pode conter espaços.")
-        return stripped
+        return validate_username(value)
 
     @field_validator("email")
     @classmethod
     def email_must_be_valid(cls, value: str) -> str:
-        normalized = normalize_email(value)
-        if not _EMAIL_PATTERN.match(normalized):
-            raise ValueError("Informe um email válido.")
-        return normalized
+        return validate_email(value)
 
 
 class ResetPasswordRequest(BaseModel):

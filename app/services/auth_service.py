@@ -53,13 +53,16 @@ def register(db: Session, payload: RegisterRequest) -> LoginResponse:
     return _issue_login_response(user)
 
 
-def _issue_login_response(user: AppUser) -> LoginResponse:
-    token = security.create_access_token(
+def issue_access_token(user: AppUser) -> str:
+    return security.create_access_token(
         subject=str(user.user_id),
         additional_claims={"username": user.username, "role": user.role},
     )
+
+
+def _issue_login_response(user: AppUser) -> LoginResponse:
     return LoginResponse(
-        access_token=token,
+        access_token=issue_access_token(user),
         user=UserBasicResponse.model_validate(user),
     )
 

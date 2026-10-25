@@ -1,3 +1,5 @@
+"""Business logic and orchestration for the AppUser entity."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
@@ -13,28 +15,54 @@ from app.schemas.music_preference import (
     MusicPreferencesRead,
 )
 from app.schemas.profile import ProfileRead
+from app.schemas.recorda import RecordaGridPage
+from app.schemas.settings import UserSettings, UserSettingsResult, UserSettingsUpdate
 from app.schemas.user import (
+    AccountRead,
+    AccountUpdate,
+    AccountUpdateResponse,
     AvatarRead,
     SuggestedUser,
     UserChangeRole,
     UserCreate,
     UserRead,
     UserSearchResult,
-    UserSettingsRead,
-    UserSettingsUpdate,
     UserUpdate,
 )
 from app.services import (
+    auth_service,
     follow_service,
     media_service,
     music_preference_service,
+    profile_grid_service,
     profile_service,
+    settings_service,
     user_service,
 )
+from app.services.feed_service import InvalidCursorError
+from app.services.profile_service import PrivateAccountError, UserNotFoundError
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 _current_admin = Depends(get_current_admin_user)
+
+
+@router.get("/me/settings", response_model=UserSettings)
+def get_own_settings(
+    current_user: AppUser = Depends(get_current_user),
+) -> UserSettings:
+    """Retorna a privacidade e o idioma salvo da conta autenticada."""
+    return UserSettings.model_validate(current_user)
+
+
+@router.patch("/me/settings", response_model=UserSettingsResult)
+def update_own_settings(
+    payload: UserSettingsUpdate,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserSettingsResult:
+    """Altera a privacidade; tornar pública aceita os pedidos pendentes."""
+    return settings_service.update(db, current_user, payload)
 
 
 @router.get("/search", response_model=list[UserSearchResult])
@@ -68,13 +96,27 @@ def get_own_profile(
         ) from exc
 
 
-@router.patch("/me/settings", response_model=UserSettingsRead)
-def update_own_settings(
-    payload: UserSettingsUpdate,
+@router.get("/me/account", response_model=AccountRead)
+def get_own_account(
+    current_user: AppUser = Depends(get_current_user),
+) -> AppUser:
+    return current_user
+
+
+@router.patch("/me/account", response_model=AccountUpdateResponse)
+def update_own_account(
+    payload: AccountUpdate,
     current_user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> AppUser:
-    return user_service.update_settings(db, current_user, payload)
+) -> AccountUpdateResponse:
+    try:
+        user = user_service.update_own_account(db, current_user, payload)
+    except user_service.UserAlreadyExistsError as exc:
+        raise user_already_exists_error(exc) from exc
+    return AccountUpdateResponse(
+        access_token=auth_service.issue_access_token(user),
+        account=AccountRead.model_validate(user),
+    )
 
 
 @router.put("/me/avatar", response_model=AvatarRead)
@@ -131,6 +173,54 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserRead:
         return user_service.create(db, payload)
     except user_service.UserAlreadyExistsError as exc:
         raise user_already_exists_error(exc) from exc
+
+
+@router.get("/{user_id}/recordas", response_model=RecordaGridPage)
+def get_profile_grid(
+    user_id: UUID,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=24, ge=1, le=60),
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RecordaGridPage:
+    """Grade paginada de Recordas do perfil, respeitando privacidade."""
+    try:
+        return profile_grid_service.get_profile_grid(
+            db=db,
+            owner_id=user_id,
+            viewer=current_user,
+            cursor=cursor,
+            limit=limit,
+        )
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    except PrivateAccountError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta conta é privada.",
+        ) from exc
+    except InvalidCursorError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cursor inválido.",
+        ) from exc
+
+
+@router.get("/me/music-preferences", response_model=MusicPreferencesRead)
+def list_music_preferences(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MusicPreferencesRead:
+    try:
+        return music_preference_service.read_music_preference(db, current_user)
+    except music_preference_service.IncompleteMusicPreferencesError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Complete o onboarding musical para acessar o perfil.",
+        ) from exc
 
 
 @router.get("/{user_id}", response_model=UserRead, dependencies=[_current_admin])

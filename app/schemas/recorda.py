@@ -75,3 +75,22 @@ class RecordaDetail(BaseModel):
     created_at: datetime  # Data de Publicação
     is_liked: bool
     likes_count: int
+
+
+class RecordaGridItem(BaseModel):
+    """Item enxuto para a grade do perfil — só miniatura, sem curtidas nem descrição."""
+
+    recorda_id: UUID
+    media_url: str
+    media_type: MediaType
+    song_title: str
+    song_artist_name: str
+    song_cover_url: str
+    created_at: datetime
+
+
+class RecordaGridPage(BaseModel):
+    """Página paginada por cursor da grade de Recordas de um perfil."""
+
+    items: list[RecordaGridItem]
+    next_cursor: str | None = None

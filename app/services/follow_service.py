@@ -10,7 +10,7 @@ from app.models.app_user import STATUS_ACTIVE, AppUser
 from app.models.follow import STATUS_ACCEPTED, STATUS_PENDING, Follow
 from app.repositories import follow_repository, user_repository
 from app.schemas.follow import FollowUser
-from app.services import notification_service
+from app.services import notification_service, profile_service
 
 
 class FollowTargetNotFoundError(Exception):
@@ -29,7 +29,8 @@ def create_follow(db: Session, user_id: UUID, current_user: AppUser) -> str:
     if current_user.user_id == user_id:
         raise SelfFollowError
 
-    target_user = user_repository.get_by_id(db, user_id)
+    # O mesmo bloqueio do PATCH evita inserir PENDING após tornar a conta pública.
+    target_user = user_repository.get_by_id(db, user_id, for_update=True)
     if target_user is None or target_user.status != STATUS_ACTIVE:
         raise FollowTargetNotFoundError
     if follow_repository.get_by_users(db, current_user.user_id, user_id) is not None:
@@ -78,15 +79,16 @@ class PrivateAccountError(Exception):
     """Conta privada e o solicitante não é seguidor aceito dela."""
 
 
-def _authorize(db: Session, owner_id: UUID, viewer: AppUser) -> None:
+def authorize_profile_access(db: Session, owner_id: UUID, viewer: AppUser) -> None:
     """Deixa passar o dono, contas públicas e seguidores aceitos. Só isso."""
-    owner = user_repository.get_by_id(db, owner_id)
-    if owner is None or owner.status != STATUS_ACTIVE:
-        raise UserNotFoundError
-    if owner.user_id == viewer.user_id or not owner.is_private:
-        return
-    if not follow_repository.is_accepted_follower(db, viewer.user_id, owner.user_id):
-        raise PrivateAccountError
+    try:
+        owner = profile_service.get_active_owner(db, owner_id)
+    except profile_service.UserNotFoundError as exc:
+        raise UserNotFoundError from exc
+    try:
+        profile_service.authorize_content_access(db, owner, viewer)
+    except profile_service.PrivateAccountError as exc:
+        raise PrivateAccountError from exc
 
 
 def _normalize(q: str | None) -> str | None:
@@ -103,7 +105,7 @@ def list_followers(
     limit: int,
     offset: int,
 ) -> list[FollowUser]:
-    _authorize(db, owner_id, viewer)
+    authorize_profile_access(db, owner_id, viewer)
     users = follow_repository.list_followers(
         db, owner_id, q=_normalize(q), limit=limit, offset=offset
     )
@@ -119,7 +121,7 @@ def list_following(
     limit: int,
     offset: int,
 ) -> list[FollowUser]:
-    _authorize(db, owner_id, viewer)
+    authorize_profile_access(db, owner_id, viewer)
     users = follow_repository.list_following(
         db, owner_id, q=_normalize(q), limit=limit, offset=offset
     )

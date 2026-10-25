@@ -208,3 +208,32 @@ def token_for(user: AppUser, expires_delta: timedelta | None = None) -> str:
 
 def auth_headers(user: AppUser) -> dict[str, str]:
     return {"Authorization": f"Bearer {token_for(user)}"}
+
+
+MUSIC_PREFERENCES_INITIAL_GENRES = [
+    {"deezer_id": 132, "name": "Pop"},
+    {"deezer_id": 152, "name": "Rock"},
+    {"deezer_id": 116, "name": "Rap/Hip Hop"},
+]
+
+MUSIC_PREFERENCES_UPDATED_GENRES = [
+    {"deezer_id": 129, "name": "Jazz"},
+    {"deezer_id": 132, "name": "Pop"},
+    {"deezer_id": 152, "name": "Rock"},
+]
+
+
+def music_preferences_body(genres: list[dict]) -> dict:
+    return {
+        "genres": genres,
+        "artists": [
+            {"deezer_id": 27, "name": "Daft Punk"},
+            {"deezer_id": 13, "name": "Eminem"},
+            {"deezer_id": 145, "name": "Coldplay"},
+        ],
+        "favorite_track": {
+            "deezer_id": 3135556,
+            "title": "Harder, Better, Faster, Stronger",
+            "artist_name": "Daft Punk",
+        },
+    }

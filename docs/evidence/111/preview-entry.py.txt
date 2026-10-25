@@ -1,0 +1,42 @@
+"""Disposable local API preview for issue 111; no production data or stubs."""
+
+import json
+import os
+import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+REPO = Path(__file__).resolve().parents[1] / "recorda-backend"
+sys.path.insert(0, str(REPO))
+os.environ["ENVIRONMENT"] = "test"
+os.environ["ACCESS_TOKEN_SECRET_KEY"] = "disposable-local-preview-111-only"
+
+with TemporaryDirectory(prefix="recorda-111-") as directory:
+    os.environ["DATABASE_URL"] = "sqlite:///" + str(Path(directory) / "preview.db")
+    import uvicorn
+
+    from app.db.seed_data import GENRE_SEED
+    from app.db.session import Base, SessionLocal, engine
+    from app.main import app
+    from app.models import Genre
+    from tests.factories import add_recorda, add_user, token_for
+
+    Base.metadata.create_all(engine)
+    with SessionLocal() as db:
+        db.add_all(Genre(genre_id=gid, name=name) for gid, name in GENRE_SEED)
+        db.commit()
+        owner = add_user(db, "demo_owner", is_private=True)
+        senders = [add_user(db, f"demo_sender{i}") for i in (1, 2)]
+        recorda = add_recorda(db, owner)
+        preview = {
+            "owner_id": str(owner.user_id),
+            "owner_token": token_for(owner),
+            "sender_tokens": [token_for(sender) for sender in senders],
+            "recorda_id": str(recorda.recorda_id),
+        }
+        (REPO.parent / "tmp" / "preview-111-session.json").write_text(json.dumps(preview))
+    print("Disposable SQLite preview: http://127.0.0.1:8011/docs", flush=True)
+    try:
+        uvicorn.run(app, host="127.0.0.1", port=8011)
+    finally:
+        engine.dispose()
