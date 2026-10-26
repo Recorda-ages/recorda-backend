@@ -8,7 +8,7 @@ trigger recusa UPDATE e DELETE).
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Row, Select, func, select
+from sqlalchemy import Row, Select, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.models.app_user import AppUser
@@ -18,6 +18,7 @@ from app.models.report import TARGET_RECORDA
 
 Admin = aliased(AppUser)
 TargetUser = aliased(AppUser)
+RecordaAuthor = aliased(AppUser)
 
 
 def add(db: Session, action: ModerationAction) -> ModerationAction:
@@ -31,14 +32,39 @@ def add(db: Session, action: ModerationAction) -> ModerationAction:
     return action
 
 
+def _matching(q: str):
+    """Ações cujo admin, usuário alvo, Recorda alvo (título ou autor) ou motivo contém `q`.
+
+    Subconsultas em vez de joins: `_with_labels` já faz os joins da listagem.
+    """
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
+    users = select(AppUser.user_id).where(AppUser.username.ilike(pattern, escape="\\"))
+    recordas = select(Recorda.recorda_id).where(
+        or_(
+            Recorda.song_title.ilike(pattern, escape="\\"),
+            Recorda.user_id.in_(users),
+        )
+    )
+    return or_(
+        ModerationAction.admin_id.in_(users),
+        ModerationAction.target_user_id.in_(users),
+        ModerationAction.target_recorda_id.in_(recordas),
+        ModerationAction.reason.ilike(pattern, escape="\\"),
+    )
+
+
 def _filtered(
     *,
     admin_id: UUID | None,
     action_type: str | None,
     created_from: datetime | None,
     created_before: datetime | None,
+    q: str | None = None,
 ) -> Select:
     statement = select(ModerationAction)
+    if q:
+        statement = statement.where(_matching(q))
     if admin_id is not None:
         statement = statement.where(ModerationAction.admin_id == admin_id)
     if action_type is not None:
@@ -57,6 +83,7 @@ def search(
     action_type: str | None = None,
     created_from: datetime | None = None,
     created_before: datetime | None = None,
+    q: str | None = None,
     limit: int,
     offset: int,
 ) -> tuple[list[Row], int]:
@@ -70,6 +97,7 @@ def search(
         action_type=action_type,
         created_from=created_from,
         created_before=created_before,
+        q=q,
     )
     page = _with_labels(filtered).limit(limit).offset(offset)
     total = filtered.with_only_columns(func.count(ModerationAction.action_id))
@@ -93,10 +121,12 @@ def _with_labels(statement: Select) -> Select:
         statement.join(Admin, ModerationAction.admin_id == Admin.user_id)
         .outerjoin(TargetUser, ModerationAction.target_user_id == TargetUser.user_id)
         .outerjoin(Recorda, ModerationAction.target_recorda_id == Recorda.recorda_id)
+        .outerjoin(RecordaAuthor, Recorda.user_id == RecordaAuthor.user_id)
         .add_columns(
             Admin.username.label("admin_username"),
             TargetUser.username.label("target_username"),
             Recorda.song_title.label("target_song_title"),
+            RecordaAuthor.username.label("target_recorda_author"),
         )
         .order_by(
             ModerationAction.created_at.desc(),

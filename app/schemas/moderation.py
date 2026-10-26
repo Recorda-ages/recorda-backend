@@ -28,6 +28,8 @@ class AuditEntry(BaseModel):
     target_user_id: UUID | None = None
     target_recorda_id: UUID | None = None
     target_label: str
+    # Autor da Recorda alvo; None quando o alvo é um perfil.
+    target_owner_username: str | None = None
     reason: str
     details: dict[str, Any] | None = None
     created_at: datetime

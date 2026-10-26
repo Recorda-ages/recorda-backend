@@ -170,6 +170,7 @@ def list_audit_log(
     action_type: ModerationActionType | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    q: str = Query(default="", max_length=100),
     limit: int = Query(default=20, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -190,6 +191,7 @@ def list_audit_log(
         action_type=action_type,
         date_from=date_from,
         date_to=date_to,
+        q=q,
         limit=limit,
         offset=offset,
     )

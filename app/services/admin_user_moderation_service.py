@@ -168,19 +168,18 @@ def get_user(db: Session, *, user_id: UUID) -> AdminUserDetail:
     ]
     actions = [
         AdminUserAction(
-            action_id=action.action_id,
-            action_type=action.action_type,
-            admin_id=action.admin_id,
-            admin_username=admin_username,
-            target_user_id=action.target_user_id,
-            target_recorda_id=action.target_recorda_id,
-            reason=action.reason,
-            details=action.details,
-            created_at=action.created_at,
+            action_id=row.ModerationAction.action_id,
+            action_type=row.ModerationAction.action_type,
+            admin_id=row.ModerationAction.admin_id,
+            admin_username=row.admin_username,
+            target_user_id=row.ModerationAction.target_user_id,
+            target_recorda_id=row.ModerationAction.target_recorda_id,
+            reason=row.ModerationAction.reason,
+            details=row.ModerationAction.details,
+            created_at=row.ModerationAction.created_at,
         )
-        for action, admin_username, _, _ in admin_user_repository.list_actions_for_user(
-            db, user_id
-        )
+        # By column name: the history rows carry extra label columns.
+        for row in admin_user_repository.list_actions_for_user(db, user_id)
     ]
     return AdminUserDetail(
         **row,

@@ -46,6 +46,7 @@ def test_entry_shows_who_what_target_when_and_reason(client, db, admin_user, tar
     assert entry["target_user_id"] == str(target.user_id)
     assert entry["target_recorda_id"] is None
     assert entry["target_label"] == "alvo"
+    assert entry["target_owner_username"] is None
     assert entry["reason"] == "Spam reiterado"
     assert entry["created_at"]
 
@@ -74,6 +75,8 @@ def test_remove_recorda_is_labeled_by_song_title_and_keeps_details(
     items = _get(client, admin_user).json()["items"]
 
     assert [item["target_label"] for item in items] == ["Hurt", "Hurt"]
+    # Also on the status change, which only targets the Recorda.
+    assert [item["target_owner_username"] for item in items] == ["autor", "autor"]
     assert {item["action_type"]: item["details"] for item in items}[
         ACTION_CHANGE_REPORT_STATUS
     ] == details
@@ -125,6 +128,61 @@ def test_action_type_filter(client, db, admin_user, target):
 
 def test_unknown_action_type_returns_422(client, admin_user):
     assert _get(client, admin_user, action_type="DELETE_ALL").status_code == 422
+
+
+def test_search_matches_admin_target_recorda_and_reason(client, db, admin_user):
+    other_admin = add_user(db, "moderadora", role=ROLE_ADMIN)
+    marcos = add_user(db, "marcos_silva")
+    author = add_user(db, "autor")
+    by_admin = add_moderation_action(db, other_admin, target_user=author)
+    by_target = add_moderation_action(db, admin_user, target_user=marcos)
+    by_recorda = add_moderation_action(
+        db,
+        admin_user,
+        action_type=ACTION_REMOVE_RECORDA,
+        target_recorda=add_recorda(db, author, song_title="Bohemian Rhapsody"),
+    )
+    by_reason = add_moderation_action(
+        db, admin_user, target_user=author, reason="Conteúdo ofensivo"
+    )
+
+    def found(q):
+        body = _get(client, admin_user, q=q).json()
+        return {item["action_id"] for item in body["items"]}, body["total"]
+
+    assert found("MODERADORA") == ({str(by_admin.action_id)}, 1)
+    assert found("marcos") == ({str(by_target.action_id)}, 1)
+    assert found("rhapsody") == ({str(by_recorda.action_id)}, 1)
+    assert found("ofensivo") == ({str(by_reason.action_id)}, 1)
+
+
+def test_search_by_author_finds_actions_on_their_recordas(client, db, admin_user):
+    marina = add_user(db, "marina")
+    on_recorda = add_moderation_action(
+        db,
+        admin_user,
+        action_type=ACTION_CHANGE_REPORT_STATUS,
+        target_recorda=add_recorda(db, marina, song_title="Levitating"),
+    )
+    add_moderation_action(db, admin_user, target_user=add_user(db, "outra"))
+
+    body = _get(client, admin_user, q="marina").json()
+
+    assert [item["action_id"] for item in body["items"]] == [str(on_recorda.action_id)]
+
+
+def test_search_treats_wildcards_literally(client, db, admin_user, target):
+    add_moderation_action(db, admin_user, target_user=target, reason="Spam")
+
+    body = _get(client, admin_user, q="%").json()
+
+    assert body == {"items": [], "total": 0}
+
+
+def test_blank_search_returns_everything(client, db, admin_user, target):
+    add_moderation_action(db, admin_user, target_user=target)
+
+    assert _get(client, admin_user, q="   ").json()["total"] == 1
 
 
 def test_period_respects_the_sao_paulo_day(client, db, admin_user, target):

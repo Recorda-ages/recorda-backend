@@ -64,6 +64,7 @@ def list_audit_log(
     action_type: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    q: str | None = None,
     limit: int,
     offset: int,
 ) -> AuditLogPage:
@@ -71,6 +72,7 @@ def list_audit_log(
 
     `date_from` e `date_to` são dias inclusivos no fuso de São Paulo: vão da
     meia-noite local de `date_from` até a meia-noite local seguinte a `date_to`.
+    `q` busca no admin, no usuário ou Recorda alvo e no motivo.
     """
     created_from = local_day_bounds(date_from)[0] if date_from else None
     created_before = local_day_bounds(date_to)[1] if date_to else None
@@ -81,6 +83,7 @@ def list_audit_log(
         action_type=action_type,
         created_from=created_from,
         created_before=created_before,
+        q=q.strip() if q else None,
         limit=limit,
         offset=offset,
     )
@@ -114,6 +117,7 @@ def _to_entry(row: Row) -> AuditEntry:
         target_user_id=action.target_user_id,
         target_recorda_id=action.target_recorda_id,
         target_label=target_label,
+        target_owner_username=row.target_recorda_author,
         reason=action.reason,
         details=action.details,
         created_at=action.created_at,
