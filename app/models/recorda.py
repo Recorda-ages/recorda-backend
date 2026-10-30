@@ -45,6 +45,7 @@ class Recorda(Base):
     song_artist_name: Mapped[str] = mapped_column(String, nullable=False)
     song_cover_url: Mapped[str] = mapped_column(String, nullable=False)
     song_preview_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    song_genre_name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

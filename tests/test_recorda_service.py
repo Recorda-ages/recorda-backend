@@ -93,3 +93,34 @@ def test_delete_soft_deletes_when_recorda_exists(db, author):
 
 def test_delete_returns_false_when_recorda_missing(db, author):
     assert recorda_service.delete(db, uuid.uuid4(), author) is False
+
+
+def test_create_persists_recorda_with_genre(db, author):
+    created = recorda_service.create(
+        db,
+        RecordaCreate(
+            media_url="photo.jpg",
+            media_type="PHOTO",
+            song_title="Enter Sandman",
+            deezer_track_id="99",
+            song_artist_name="Metallica",
+            song_genre_name="Metal",
+        ),
+        author,
+    )
+    assert created.song_genre_name == "Metal"
+
+
+def test_create_persists_recorda_without_genre(db, author):
+    created = recorda_service.create(
+        db,
+        RecordaCreate(
+            media_url="photo.jpg",
+            media_type="PHOTO",
+            song_title="Enter Sandman",
+            deezer_track_id="99",
+            song_artist_name="Metallica",
+        ),
+        author,
+    )
+    assert created.song_genre_name is None

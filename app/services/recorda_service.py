@@ -122,6 +122,7 @@ def get_by_id_for_viewer(
         song_preview_url=public_preview_url(
             recorda.deezer_track_id, recorda.song_preview_url
         ),
+        song_genre_name=recorda.song_genre_name,
         created_at=recorda.created_at,
         is_liked=is_liked,
         likes_count=likes_count,
