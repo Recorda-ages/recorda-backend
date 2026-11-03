@@ -36,6 +36,7 @@ def test_upgrade_and_downgrade_preserve_social_notifications(pg_db, pg_database_
     )
     assert "CONTENT_REMOVED" in check["sqltext"]
     pg_db.rollback()
+    recorda_id = recorda.recorda_id  # capture before expunge_all detaches the object
     config = Config("alembic.ini")
     previous_url = settings.database_url
     settings.database_url = pg_database_url
@@ -47,12 +48,12 @@ def test_upgrade_and_downgrade_preserve_social_notifications(pg_db, pg_database_
         pg_db.rollback()
         with pytest.raises(IntegrityError):
             add_notification(
-                pg_db, author, "CONTENT_REMOVED", recorda_id=recorda.recorda_id
+                pg_db, author, "CONTENT_REMOVED", recorda_id=recorda_id
             )
         pg_db.rollback()
         command.upgrade(config, "head")
         notice = add_notification(
-            pg_db, author, "CONTENT_REMOVED", recorda_id=recorda.recorda_id
+            pg_db, author, "CONTENT_REMOVED", recorda_id=recorda_id
         )
         assert notice.type == "CONTENT_REMOVED"
     finally:
