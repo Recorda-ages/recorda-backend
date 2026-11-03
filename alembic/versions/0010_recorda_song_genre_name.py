@@ -7,6 +7,7 @@ Revises: 0009_content_removed
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0010_recorda_song_genre_name"
