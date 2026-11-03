@@ -47,9 +47,7 @@ def test_upgrade_and_downgrade_preserve_social_notifications(pg_db, pg_database_
         assert [notice.notification_id for notice in notifications] == [social_id]
         pg_db.rollback()
         with pytest.raises(IntegrityError):
-            add_notification(
-                pg_db, author, "CONTENT_REMOVED", recorda_id=recorda_id
-            )
+            add_notification(pg_db, author, "CONTENT_REMOVED", recorda_id=recorda_id)
         pg_db.rollback()
         command.upgrade(config, "head")
         notice = add_notification(
