@@ -40,6 +40,7 @@ def test_upgrade_and_downgrade_preserve_social_notifications(pg_db, pg_database_
     previous_url = settings.database_url
     settings.database_url = pg_database_url
     try:
+        pg_db.expunge_all()
         command.downgrade(config, "0008_moderation_action")
         notifications = list(pg_db.scalars(select(Notification)))
         assert [notice.notification_id for notice in notifications] == [social_id]
