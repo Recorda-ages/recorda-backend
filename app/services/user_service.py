@@ -9,7 +9,6 @@ from app.core import security
 from app.core.music_preview import public_preview_url
 from app.models import AppUser
 from app.models.app_user import ROLE_USER
-from app.models.follow import STATUS_ACCEPTED, STATUS_PENDING
 from app.repositories import (
     recorda_repository,
     user_favorite_repository,
@@ -28,17 +27,12 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.services import affinity_service, media_service
+from app.services.profile_service import FOLLOW_STATUS_MAP
 
 USERNAME_TAKEN_MESSAGE = "Este usuário já está cadastrado."
 EMAIL_TAKEN_MESSAGE = "Este email já está cadastrado."
 USER_ALREADY_EXISTS_MESSAGE = "Usuário ou email já cadastrado"
 DEFAULT_SUGGESTION_LIMIT = 20
-
-_FOLLOW_STATUS_MAP = {
-    STATUS_ACCEPTED: "seguindo",
-    STATUS_PENDING: "solicitado",
-    None: "nenhuma",
-}
 
 
 class UserAlreadyExistsError(Exception):
@@ -201,7 +195,7 @@ def search_by_username(
             user_id=user.user_id,
             username=user.username,
             avatar_url=user.profile_picture_url,
-            follow_status=_FOLLOW_STATUS_MAP[raw_status],
+            follow_status=FOLLOW_STATUS_MAP[raw_status],
         )
         for user, raw_status in results
     ]
