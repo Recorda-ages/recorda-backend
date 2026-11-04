@@ -1,8 +1,9 @@
-﻿import uuid
+import uuid
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
-from fastapi.testclient import TestClient
+
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -168,7 +169,9 @@ def test_calendar_timezone_and_grouping(sqlite_session: Session):
     assert day.media_type == "PHOTO"
 
 
-def test_calendar_route_flow_and_validation(client: TestClient, sqlite_session: Session, test_user: AppUser):
+def test_calendar_route_flow_and_validation(
+    client: TestClient, sqlite_session: Session, test_user: AppUser
+):
     # 1. Validação de mês inválido -> 422
     resp_invalid_month = client.get("/api/v1/users/me/calendar?year=2026&month=13")
     assert resp_invalid_month.status_code == 422

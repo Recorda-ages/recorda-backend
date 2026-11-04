@@ -1,4 +1,4 @@
-﻿from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 SAO_PAULO = ZoneInfo("America/Sao_Paulo")
