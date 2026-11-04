@@ -1,10 +1,12 @@
 from typing import Annotated
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.http import get_deezer_client
 from app.db.session import get_db
 from app.models import AppUser
 from app.schemas.comment import CommentCreate, CommentRead
@@ -15,7 +17,12 @@ from app.schemas.recorda import (
     RecordaRead,
     RecordaUpdate,
 )
-from app.services import comment_service, recorda_like_service, recorda_service
+from app.services import (
+    comment_service,
+    music_service,
+    recorda_like_service,
+    recorda_service,
+)
 
 router = APIRouter(prefix="/recordas", tags=["recordas"])
 
@@ -39,7 +46,12 @@ def create_recorda(
     payload: RecordaCreate,
     current_user: Annotated[AppUser, _current_user],
     db: Session = Depends(get_db),
+    deezer: httpx.Client = Depends(get_deezer_client),
 ) -> RecordaRead:
+    if payload.song_genre_name is None:
+        payload.song_genre_name = music_service.get_track_genre_name(
+            deezer, payload.deezer_track_id
+        )
     return recorda_service.create(db, payload, current_user)
 
 

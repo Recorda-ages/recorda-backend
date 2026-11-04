@@ -29,6 +29,23 @@ _NAME_CONTAINS = 3
 _NAME_OTHER = 4
 
 
+def get_track_genre_name(client: httpx.Client, track_id: str) -> str | None:
+    """Return the genre name for a Deezer track, or None if unavailable."""
+    try:
+        track_resp = client.get(f"/track/{track_id}")
+        track_resp.raise_for_status()
+        genre_id = track_resp.json().get("genre_id")
+        if not genre_id:
+            return None
+        genres = get_genres(client)
+        for genre in genres:
+            if genre.id == genre_id:
+                return genre.name
+    except (httpx.HTTPError, HTTPException):
+        pass
+    return None
+
+
 def get_genres(client: httpx.Client) -> list[GenreRead]:
     data = _get_data(client, "/genre")
 

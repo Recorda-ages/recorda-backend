@@ -10,6 +10,7 @@ from sqlalchemy.pool import NullPool, StaticPool
 
 from alembic import command
 from app.core.config import settings
+from app.core.http import get_deezer_client
 from app.db.seed_data import GENRE_SEED
 from app.db.session import Base, get_db
 from app.main import app
@@ -104,10 +105,30 @@ def client(db: Session):
     def _override_get_db():
         yield db
 
+    class _NullDeezerClient:
+        """Stub that makes no real HTTP calls; genre resolution returns None."""
+
+        def get(self, path: str, **_kwargs):
+            return _NullResponse()
+
+    class _NullResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {}
+
+    def _override_deezer():
+        yield _NullDeezerClient()
+
     app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_deezer_client] = _override_deezer
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_deezer_client, None)
 
 
 @pytest.fixture
