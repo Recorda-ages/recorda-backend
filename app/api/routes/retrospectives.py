@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -8,6 +8,7 @@ from app.schemas.retrospectives import AvailablePeriodsResponse
 from app.services import retrospectives_sevice
 
 router = APIRouter(prefix="/users/me/retrospectives", tags=["retrospectives"])
+
 
 @router.get("/available", response_model=AvailablePeriodsResponse)
 def get_available_periods(
