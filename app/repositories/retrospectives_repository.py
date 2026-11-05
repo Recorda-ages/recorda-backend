@@ -1,15 +1,13 @@
-from collections.abc import Collection
-from datetime import datetime
 from uuid import UUID
+from datetime import datetime
 
-from sqlalchemy import Row, Select, func, or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+    
+from app.models import Recorda
 
-from app.core.time import now_utc
-from app.models import AppUser, Recorda
 
-
-def temp(db: Session, user_id: UUID) -> list[Recorda]:
+def search_retrospectives(db: Session, user_id: UUID) -> list[datetime]:
     stmt = select(Recorda.created_at).where(
         Recorda.user_id == user_id,
         Recorda.deleted_at.is_(None),
