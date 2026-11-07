@@ -62,6 +62,25 @@ def list_by_user(db: Session, user_id: UUID) -> list[Recorda]:
     return list(db.scalars(only_live(stmt, Recorda)))
 
 
+def list_by_user_between(
+    db: Session, user_id: UUID, start: datetime, end: datetime
+) -> list[Recorda]:
+    """Recordas vivas do usuário em [start, end), da mais antiga à mais recente.
+
+    Usa o índice `ix_recorda_user_id_created_at` (calendário mensal, US37).
+    """
+    stmt = (
+        select(Recorda)
+        .where(
+            Recorda.user_id == user_id,
+            Recorda.created_at >= start,
+            Recorda.created_at < end,
+        )
+        .order_by(Recorda.created_at, Recorda.recorda_id)
+    )
+    return list(db.scalars(only_live(stmt, Recorda)))
+
+
 def get_profile_grid_query(user_id: UUID) -> Select:
     """Query base para a grade de perfil: só Recordas vivas do usuário, ordenadas por created_at DESC, recorda_id DESC."""
     return (
