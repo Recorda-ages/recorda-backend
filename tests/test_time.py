@@ -4,6 +4,7 @@ from app.core.time import (
     SAO_PAULO,
     local_day_bounds,
     local_month_bounds,
+    local_year_bounds,
     now_utc,
     to_local,
 )
@@ -42,3 +43,16 @@ def test_local_month_bounds_follow_historical_daylight_saving():
     start, end = local_month_bounds(2019, 2)
     assert start == datetime(2019, 2, 1, 2, tzinfo=UTC)
     assert end == datetime(2019, 3, 1, 3, tzinfo=UTC)
+
+
+def test_local_year_bounds_are_sao_paulo_midnights_in_utc():
+    start, end = local_year_bounds(2026)
+    assert start == datetime(2026, 1, 1, 3, tzinfo=UTC)
+    assert end == datetime(2027, 1, 1, 3, tzinfo=UTC)
+
+
+def test_local_year_bounds_follow_historical_daylight_saving():
+    # Em 01/01/2019 São Paulo ainda estava em horário de verão (UTC-2).
+    start, end = local_year_bounds(2019)
+    assert start == datetime(2019, 1, 1, 2, tzinfo=UTC)
+    assert end == datetime(2020, 1, 1, 3, tzinfo=UTC)
