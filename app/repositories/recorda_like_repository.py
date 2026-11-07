@@ -1,8 +1,9 @@
 """Persistence helpers for likes on Recordas."""
 
+from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import delete, exists, func, select
+from sqlalchemy import case, delete, exists, func, select
 from sqlalchemy.orm import Session
 
 from app.models.recorda_like import RecordaLike
@@ -53,6 +54,25 @@ def is_liked_by_user(db: Session, *, user_id: UUID, recorda_id: UUID) -> bool:
         )
     )
     return bool(db.scalar(statement))
+
+
+def summarize_for_recordas(
+    db: Session, recorda_ids: Collection[UUID], user_id: UUID
+) -> dict[UUID, tuple[int, bool]]:
+    """Quantidade e curtida própria em lote, sem alterar a visibilidade das curtidas."""
+    statement = (
+        select(
+            RecordaLike.recorda_id,
+            func.count(),
+            func.max(case((RecordaLike.user_id == user_id, 1), else_=0)),
+        )
+        .where(RecordaLike.recorda_id.in_(recorda_ids))
+        .group_by(RecordaLike.recorda_id)
+    )
+    return {
+        recorda_id: (count, bool(is_liked))
+        for recorda_id, count, is_liked in db.execute(statement)
+    }
 
 
 def delete_all_for_recorda(db: Session, recorda_id: UUID) -> None:

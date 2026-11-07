@@ -81,6 +81,26 @@ def list_by_user_between(
     return list(db.scalars(only_live(stmt, Recorda)))
 
 
+def adjacent_publication_times(
+    db: Session, user_id: UUID, start: datetime, end: datetime
+) -> tuple[datetime | None, datetime | None]:
+    """Instantes vivos mais próximos antes/depois de [start, end), por autor."""
+    previous = only_live(
+        select(func.max(Recorda.created_at)).where(
+            Recorda.user_id == user_id, Recorda.created_at < start
+        ),
+        Recorda,
+    ).scalar_subquery()
+    following = only_live(
+        select(func.min(Recorda.created_at)).where(
+            Recorda.user_id == user_id, Recorda.created_at >= end
+        ),
+        Recorda,
+    ).scalar_subquery()
+    previous_time, next_time = db.execute(select(previous, following)).one()
+    return previous_time, next_time
+
+
 def get_profile_grid_query(user_id: UUID) -> Select:
     """Query base para a grade de perfil: só Recordas vivas do usuário, ordenadas por created_at DESC, recorda_id DESC."""
     return (
