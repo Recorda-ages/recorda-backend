@@ -1,10 +1,12 @@
 from typing import Annotated
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.http import get_deezer_client
 from app.db.session import get_db
 from app.models import AppUser
 from app.schemas.comment import CommentCreate, CommentRead
@@ -39,8 +41,9 @@ def create_recorda(
     payload: RecordaCreate,
     current_user: Annotated[AppUser, _current_user],
     db: Session = Depends(get_db),
+    deezer: httpx.Client = Depends(get_deezer_client),
 ) -> RecordaRead:
-    return recorda_service.create(db, payload, current_user)
+    return recorda_service.create(db, payload, current_user, deezer)
 
 
 @router.get("/{recorda_id}", response_model=RecordaDetail)

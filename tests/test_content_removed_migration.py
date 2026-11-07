@@ -35,7 +35,8 @@ def test_upgrade_and_downgrade_preserve_social_notifications(pg_db, pg_database_
         if constraint["name"] == "ck_notification_type"
     )
     assert "CONTENT_REMOVED" in check["sqltext"]
-    pg_db.rollback()
+    recorda_id = recorda.recorda_id  # capture before session is closed
+    pg_db.close()  # release connection so Alembic DDL is not blocked by our lock
     config = Config("alembic.ini")
     previous_url = settings.database_url
     settings.database_url = pg_database_url
@@ -45,13 +46,11 @@ def test_upgrade_and_downgrade_preserve_social_notifications(pg_db, pg_database_
         assert [notice.notification_id for notice in notifications] == [social_id]
         pg_db.rollback()
         with pytest.raises(IntegrityError):
-            add_notification(
-                pg_db, author, "CONTENT_REMOVED", recorda_id=recorda.recorda_id
-            )
+            add_notification(pg_db, author, "CONTENT_REMOVED", recorda_id=recorda_id)
         pg_db.rollback()
         command.upgrade(config, "head")
         notice = add_notification(
-            pg_db, author, "CONTENT_REMOVED", recorda_id=recorda.recorda_id
+            pg_db, author, "CONTENT_REMOVED", recorda_id=recorda_id
         )
         assert notice.type == "CONTENT_REMOVED"
     finally:

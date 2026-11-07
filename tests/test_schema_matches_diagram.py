@@ -49,6 +49,7 @@ DIAGRAM = {
         "song_artist_name": (String, REQUIRED),
         "song_cover_url": (String, REQUIRED),
         "song_preview_url": (String, NULLABLE),
+        "song_genre_name": (String, NULLABLE),
         "created_at": (DateTime, REQUIRED),
         "deleted_at": (DateTime, NULLABLE),
     },

@@ -18,6 +18,7 @@ class RecordaCreate(BaseModel):
     song_artist_name: str = Field(..., min_length=1)
     song_cover_url: str = ""
     song_preview_url: str | None = None
+    song_genre_name: str | None = None
 
 
 class RecordaUpdate(BaseModel):
@@ -42,6 +43,7 @@ class RecordaRead(BaseModel):
     song_artist_name: str
     song_cover_url: str
     song_preview_url: str | None
+    song_genre_name: str | None
     created_at: datetime
 
     @model_validator(mode="after")
@@ -72,6 +74,7 @@ class RecordaDetail(BaseModel):
     song_artist_name: str
     song_cover_url: str
     song_preview_url: str | None
+    song_genre_name: str | None
     created_at: datetime  # Data de Publicação
     is_liked: bool
     likes_count: int

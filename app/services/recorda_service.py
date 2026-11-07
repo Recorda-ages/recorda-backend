@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.core.music_preview import public_preview_url
@@ -19,7 +20,7 @@ from app.schemas.recorda import (
     RecordaDetail,
     RecordaUpdate,
 )
-from app.services import profile_service
+from app.services import music_service, profile_service
 
 
 class NotRecordaOwnerError(Exception):
@@ -34,8 +35,15 @@ def get_by_id(db: Session, recorda_id: UUID) -> Recorda | None:
     return recorda_repository.get_by_id(db, recorda_id)
 
 
-def create(db: Session, payload: RecordaCreate, author: AppUser) -> Recorda:
-    recorda = Recorda(user_id=author.user_id, **payload.model_dump())
+def create(
+    db: Session, payload: RecordaCreate, author: AppUser, deezer: httpx.Client
+) -> Recorda:
+    values = payload.model_dump()
+    if values["song_genre_name"] is None:
+        values["song_genre_name"] = music_service.get_track_genre_name(
+            deezer, payload.deezer_track_id
+        )
+    recorda = Recorda(user_id=author.user_id, **values)
     return recorda_repository.create(db, recorda)
 
 
@@ -122,6 +130,7 @@ def get_by_id_for_viewer(
         song_preview_url=public_preview_url(
             recorda.deezer_track_id, recorda.song_preview_url
         ),
+        song_genre_name=recorda.song_genre_name,
         created_at=recorda.created_at,
         is_liked=is_liked,
         likes_count=likes_count,

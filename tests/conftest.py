@@ -10,12 +10,13 @@ from sqlalchemy.pool import NullPool, StaticPool
 
 from alembic import command
 from app.core.config import settings
+from app.core.http import get_deezer_client
 from app.db.seed_data import GENRE_SEED
 from app.db.session import Base, get_db
 from app.main import app
 from app.models import AppUser, Genre
 from app.models.app_user import ROLE_ADMIN, ROLE_USER
-from tests.factories import add_user, token_for
+from tests.factories import add_user, deezer_stub, token_for
 from tests.pg_guard import (
     ALLOW_DESTRUCTIVE_ENV,
     assert_disposable_database,
@@ -105,9 +106,11 @@ def client(db: Session):
         yield db
 
     app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_deezer_client] = lambda: deezer_stub()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_deezer_client, None)
 
 
 @pytest.fixture

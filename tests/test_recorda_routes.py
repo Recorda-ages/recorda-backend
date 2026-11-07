@@ -2,10 +2,20 @@
 
 import uuid
 
+import httpx
 import pytest
 
+from app.core.http import get_deezer_client
+from app.main import app
 from app.models import RecordaComment, RecordaLike
-from tests.factories import add_follow, add_recorda, add_user, auth_headers
+from tests.factories import (
+    DEEZER_ROUTES,
+    add_follow,
+    add_recorda,
+    add_user,
+    auth_headers,
+    deezer_stub,
+)
 
 PREFIX = "/api/v1/recordas"
 MISSING_ID = uuid.uuid4()
@@ -323,3 +333,43 @@ def test_delete_recorda_removes_likes_and_soft_deletes_comments(
     assert db.get(RecordaLike, (liker.user_id, recorda.recorda_id)) is None
     db.refresh(comment)
     assert comment.deleted_at is not None
+
+
+@pytest.fixture
+def use_deezer(client):
+    def _use(deezer):
+        app.dependency_overrides[get_deezer_client] = lambda: deezer
+
+    return _use
+
+
+def test_create_recorda_persists_genre_from_deezer(client, auth, use_deezer):
+    use_deezer(deezer_stub(DEEZER_ROUTES))
+
+    resp = client.post(PREFIX, json=create_payload(), headers=auth)
+
+    assert resp.status_code == 201
+    assert resp.json()["song_genre_name"] == "Electro"
+    detail = client.get(f"{PREFIX}/{resp.json()['recorda_id']}", headers=auth)
+    assert detail.json()["song_genre_name"] == "Electro"
+
+
+@pytest.mark.parametrize(
+    "deezer",
+    [
+        pytest.param(lambda: deezer_stub(), id="unknown-track"),
+        pytest.param(
+            lambda: deezer_stub(error=httpx.TimeoutException("timeout")),
+            id="offline",
+        ),
+    ],
+)
+def test_create_recorda_without_genre_when_deezer_has_none(
+    client, auth, use_deezer, deezer
+):
+    use_deezer(deezer())
+
+    resp = client.post(PREFIX, json=create_payload(), headers=auth)
+
+    assert resp.status_code == 201
+    assert resp.json()["song_genre_name"] is None
