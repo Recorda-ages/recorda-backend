@@ -1,63 +1,51 @@
-import uuid
+"""Calendário mensal de memórias do usuário autenticado (US37)."""
+
 from collections import defaultdict
+from datetime import UTC, date, datetime
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.time import get_month_utc_bounds, to_local
-from app.models.recorda import Recorda
+from app.core.time import local_month_bounds, to_local
+from app.models import Recorda
+from app.repositories import recorda_repository
 from app.schemas.calendar import CalendarDaySummary, MonthlyCalendarResponse
 
 
 def get_monthly_calendar(
-    db: Session,
-    user_id: uuid.UUID,
-    year: int,
-    month: int,
+    db: Session, user_id: UUID, year: int, month: int
 ) -> MonthlyCalendarResponse:
-    start_utc, end_utc = get_month_utc_bounds(year, month)
+    """Agrupa as Recordas vivas do mês pelo dia local em America/Sao_Paulo.
 
-    recordas = (
-        db.query(Recorda)
-        .filter(
-            Recorda.user_id == user_id,
-            Recorda.deleted_at.is_(None),
-            Recorda.created_at >= start_utc,
-            Recorda.created_at < end_utc,
+    Exclusões pelo autor e pela moderação não aparecem.
+    """
+    start, end = local_month_bounds(year, month)
+    recordas_by_day: dict[date, list[Recorda]] = defaultdict(list)
+    for recorda in recorda_repository.list_by_user_between(db, user_id, start, end):
+        recordas_by_day[_local_day(recorda.created_at)].append(recorda)
+
+    days = [
+        CalendarDaySummary(
+            date=day,
+            day=day.day,
+            count=len(recordas),
+            thumbnail_url=recordas[0].media_url,
+            media_type=recordas[0].media_type,
+            first_recorda_id=recordas[0].recorda_id,
         )
-        .all()
-    )
-
-    grouped_by_day = defaultdict(list)
-    for rec in recordas:
-        local_date = to_local(rec.created_at).date()
-        grouped_by_day[local_date].append(rec)
-
-    days_summary: list[CalendarDaySummary] = []
-    total_memories = 0
-
-    for day_date in sorted(grouped_by_day.keys()):
-        day_records = grouped_by_day[day_date]
-        day_records.sort(key=lambda r: r.created_at)
-
-        first_record = day_records[0]
-        day_count = len(day_records)
-        total_memories += day_count
-
-        days_summary.append(
-            CalendarDaySummary(
-                date=day_date.isoformat(),
-                day=day_date.day,
-                count=day_count,
-                thumbnail_url=first_record.media_url,
-                media_type=first_record.media_type,
-                first_recorda_id=first_record.recorda_id,
-            )
-        )
-
+        for day, recordas in sorted(recordas_by_day.items())
+    ]
     return MonthlyCalendarResponse(
         year=year,
         month=month,
-        total_memories=total_memories,
-        active_days_count=len(days_summary),
-        days=days_summary,
+        total_memories=sum(day.count for day in days),
+        active_days_count=len(days),
+        days=days,
     )
+
+
+def _local_day(value: datetime) -> date:
+    """O SQLite dos testes devolve datetime sem fuso; o valor gravado é UTC."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return to_local(value).date()

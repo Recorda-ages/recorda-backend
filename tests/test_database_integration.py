@@ -1,6 +1,7 @@
 """Contratos de persistência e integridade no PostgreSQL migrado."""
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import delete, select, text
@@ -8,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.models import AppUser, Notification, Recorda, RecordaComment, RecordaLike
 from app.repositories import recorda_repository
+from app.services import calendar_service
 from tests.factories import add_comment, add_notification, add_recorda, add_user
 
 pytestmark = pytest.mark.postgres
@@ -113,3 +115,28 @@ def test_author_with_recordas_cannot_be_hard_deleted(pg_db):
     assert error.value.orig.sqlstate == "23503"
     pg_db.rollback()
     assert recorda_repository.get_by_id(pg_db, recorda_id) is not None
+
+
+def test_monthly_calendar_uses_sao_paulo_bounds_on_timestamptz(pg_db):
+    author = add_user(pg_db, "author")
+    for created_at in [
+        datetime(2026, 11, 1, 2, 59, 59, tzinfo=UTC),  # 31/10 23:59:59 local
+        datetime(2026, 11, 1, 3, tzinfo=UTC),  # 01/11 00:00 local
+        datetime(2026, 11, 11, 2, 59, tzinfo=UTC),  # 10/11 23:59 local
+        datetime(2026, 12, 1, 2, 59, 59, tzinfo=UTC),  # 30/11 23:59:59 local
+        datetime(2026, 12, 1, 3, tzinfo=UTC),  # 01/12 00:00 local
+    ]:
+        add_recorda(pg_db, author, created_at=created_at)
+    add_recorda(
+        pg_db,
+        author,
+        created_at=datetime(2026, 11, 20, 15, tzinfo=UTC),
+        deleted_at=datetime(2026, 11, 21, tzinfo=UTC),
+    )
+    author_id = author.user_id
+    pg_db.expunge_all()
+
+    result = calendar_service.get_monthly_calendar(pg_db, author_id, 2026, 11)
+
+    assert [(day.day, day.count) for day in result.days] == [(1, 1), (10, 1), (30, 1)]
+    assert result.total_memories == 3

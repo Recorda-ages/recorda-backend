@@ -1,28 +1,29 @@
-import uuid
+"""Contrato do calendário mensal de memórias: GET /users/me/calendar (US37)."""
 
-from pydantic import BaseModel, ConfigDict, Field
+import datetime as dt
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+from app.schemas.recorda import MediaType
 
 
 class CalendarDaySummary(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    """Dia do mês com ao menos uma Recorda viva; a miniatura é a primeira do dia."""
 
-    date: str = Field(description="Data da publicação no formato YYYY-MM-DD")
+    date: dt.date = Field(description="Dia local em America/Sao_Paulo (YYYY-MM-DD)")
     day: int = Field(ge=1, le=31, description="Dia do mês (1-31)")
-    count: int = Field(ge=1, description="Total de memórias publicadas no dia")
-    thumbnail_url: str = Field(description="Miniatura da primeira memória do dia")
-    media_type: str = Field(description="Tipo de mídia: 'PHOTO' ou 'VIDEO'")
-    first_recorda_id: uuid.UUID = Field(description="ID da primeira Recorda do dia")
+    count: int = Field(ge=1, description="Recordas publicadas no dia")
+    thumbnail_url: str = Field(description="`media_url` da primeira Recorda do dia")
+    media_type: MediaType = Field(description="Tipo de mídia da primeira Recorda")
+    first_recorda_id: UUID = Field(description="ID da primeira Recorda do dia")
 
 
 class MonthlyCalendarResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    year: int = Field(description="Ano consultado")
-    month: int = Field(ge=1, le=12, description="Mês consultado")
-    total_memories: int = Field(description="Total acumulado de memórias no mês")
-    active_days_count: int = Field(
-        description="Quantidade de dias com publicações ativas"
-    )
+    year: int
+    month: int = Field(ge=1, le=12)
+    total_memories: int = Field(ge=0, description="Recordas vivas no mês")
+    active_days_count: int = Field(ge=0, description="Dias com publicações")
     days: list[CalendarDaySummary] = Field(
-        default_factory=list, description="Lista de dias com memórias"
+        description="Somente dias com publicações, em ordem crescente"
     )
