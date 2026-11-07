@@ -33,10 +33,8 @@ env -u TEST_DATABASE_URL DEBUG=false ENVIRONMENT=test DATABASE_URL=sqlite:// .ve
 
 Sem `TEST_DATABASE_URL`, a fixture existente provisiona seu próprio PostgreSQL descartável no Docker. Não foi usado banco da aplicação.
 
-Evidências:
+Os logs de execução e os relatórios de cobertura devem acompanhar a descrição do PR ou ser publicados como artefatos da CI. Não são versionados como arquivos `.txt` na árvore da branch.
 
-- [Saída completa dos testes e cobertura](evidence/145/test-output.txt).
-- [Cobertura dos arquivos envolvidos](evidence/145/calendar-coverage.txt).
 - [Respostas HTTP e medição de consultas](evidence/145/http-smoke.json).
 
 ## Contrato do cliente

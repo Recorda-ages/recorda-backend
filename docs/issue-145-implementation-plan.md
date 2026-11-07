@@ -181,7 +181,7 @@ ruff format --check .
 pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage-unit.xml --cov-fail-under=80 -ra tests/
 ```
 
-Além do limite global da CI, conferir que o código novo tem cobertura de pelo menos 80%. Registrar evidências HTTP de dia com múltiplos posts, dia vazio, navegação e data inválida, além do relatório de cobertura, em `docs/evidence/145/`.
+Além do limite global da CI, conferir que o código novo tem cobertura de pelo menos 80%. Incluir os logs e relatórios de cobertura na descrição do PR ou nos artefatos da CI. As evidências HTTP de dia com múltiplos posts, dia vazio, navegação e data inválida ficam em `docs/evidence/145/http-smoke.json`; logs completos `.txt` não são versionados.
 
 Antes do PR da implementação, sincronizar com `origin/dev` por rebase, repetir os checks afetados e apontar o PR para `dev`, com Conventional Commit, vínculo à #145 e evidências conforme `CONTRIBUTING.md`.
 
