@@ -1,9 +1,9 @@
 from datetime import UTC, date, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
-from app.schemas.metrics import MetricsPeriod
+from app.schemas.metrics import MetricsPeriod, RecordaMetrics
 from app.services.metrics.context import MetricsContext
 from app.services.metrics.engine import MetricsEngine
 from tests.factories import add_recorda, add_user, auth_headers
@@ -31,7 +31,11 @@ def test_daily_streak(offsets, current, maximum):
     assert result.last_post_date == (max(days) if days else None)
 
 
-def test_profile_filters_deleted_foreign_and_future_recordas(db):
+@pytest.mark.parametrize(
+    "database", ["db", pytest.param("pg_db", marks=pytest.mark.postgres)]
+)
+def test_profile_filters_deleted_foreign_and_future_recordas(request, database):
+    db = request.getfixturevalue(database)
     user = add_user(db, "owner")
     other = add_user(db, "other")
     for artist, genre in [("B", "Pop"), ("A", "Rock"), ("A", None)]:
@@ -61,7 +65,11 @@ def test_profile_filters_deleted_foreign_and_future_recordas(db):
         (MetricsPeriod.LAST_YEAR, 365),
     ],
 )
-def test_period_starts_at_local_midnight(db, period, length):
+@pytest.mark.parametrize(
+    "database", ["db", pytest.param("pg_db", marks=pytest.mark.postgres)]
+)
+def test_period_starts_at_local_midnight(request, database, period, length):
+    db = request.getfixturevalue(database)
     user = add_user(db, "owner")
     start = datetime(2026, 11, 7, 3, tzinfo=UTC) - timedelta(days=length - 1)
     add_recorda(
@@ -87,7 +95,11 @@ def test_empty_profile(db):
     }
 
 
-def test_streak_local_midnight_and_deleted_gap(db):
+@pytest.mark.parametrize(
+    "database", ["db", pytest.param("pg_db", marks=pytest.mark.postgres)]
+)
+def test_streak_local_midnight_and_deleted_gap(request, database):
+    db = request.getfixturevalue(database)
     user = add_user(db, "owner")
     add_recorda(
         db, user, created_at=datetime(2026, 11, 7, 2, 59, tzinfo=UTC)
@@ -123,7 +135,7 @@ def test_strategies_and_injection():
     assert engine.calculate("top_artists", context) == []
 
     class Constant:
-        def calculate(self, context):
+        def calculate(self, context: MetricsContext) -> int:
             return 42
 
     assert (
@@ -178,3 +190,25 @@ def test_metrics_requires_jwt(client):
         ).status_code
         == 401
     )
+
+
+@pytest.mark.parametrize("same_timestamp", [False, True])
+def test_artist_cover_is_independent_of_input_order(same_timestamp):
+    newest = RecordaMetrics(
+        recorda_id=UUID(int=2),
+        created_at=NOW,
+        song_artist_name="Artist",
+        song_cover_url="latest-cover",
+        song_genre_name=None,
+    )
+    older = RecordaMetrics(
+        recorda_id=UUID(int=1),
+        created_at=NOW if same_timestamp else NOW - timedelta(days=1),
+        song_artist_name="Artist",
+        song_cover_url="older-cover",
+        song_genre_name=None,
+    )
+    for recordas in [(newest, older), (older, newest)]:
+        context = MetricsContext(recordas, frozenset({TODAY}), TODAY)
+        artists = MetricsEngine().calculate("top_artists", context)
+        assert artists[0].image_url == "latest-cover"

@@ -1,7 +1,9 @@
 """Contracts for the profile metrics bundle."""
 
-from datetime import date
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from enum import StrEnum
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -35,3 +37,21 @@ class ProfileMetricsResponse(BaseModel):
     top_artist: TopArtistMetric | None
     top_genres: list[TopGenreMetric]
     streak: DailyStreakMetric
+
+
+@dataclass(frozen=True)
+class RecordaMetrics:
+    """Publication snapshot containing only fields used by calculators."""
+
+    recorda_id: UUID
+    created_at: datetime
+    song_artist_name: str
+    song_cover_url: str
+    song_genre_name: str | None
+
+    def __post_init__(self) -> None:
+        # SQLite returns naive UTC timestamps; PostgreSQL returns aware ones.
+        timestamp = self.created_at
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=UTC)
+        object.__setattr__(self, "created_at", timestamp.astimezone(UTC))

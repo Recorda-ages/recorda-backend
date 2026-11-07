@@ -5,12 +5,12 @@ from datetime import date
 from typing import Protocol
 from uuid import UUID
 
-from app.models import Recorda
+from app.schemas.metrics import RecordaMetrics
 
 
 @dataclass(frozen=True)
 class MetricsContext:
-    recordas: tuple[Recorda, ...]
+    recordas: tuple[RecordaMetrics, ...]
     publication_days: frozenset[date]
     today: date
     # Retrospective callers supply explicit tag relations and engagement counts.
