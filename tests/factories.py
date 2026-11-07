@@ -15,6 +15,7 @@ from app.models import (
     Notification,
     Recorda,
     RecordaComment,
+    RecordaLike,
     Report,
     UserFavoriteArtist,
     UserFavoriteGenre,
@@ -78,6 +79,14 @@ def add_comment(
     db.commit()
     db.refresh(comment)
     return comment
+
+
+def add_like(db: Session, user: AppUser, recorda: Recorda) -> RecordaLike:
+    like = RecordaLike(user_id=user.user_id, recorda_id=recorda.recorda_id)
+    db.add(like)
+    db.commit()
+    db.refresh(like)
+    return like
 
 
 def add_report(
