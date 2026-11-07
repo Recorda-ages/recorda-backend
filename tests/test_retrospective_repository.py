@@ -74,5 +74,13 @@ def test_count_comments_received_ignores_deleted_comments(db):
 def test_counts_are_zero_without_recordas_in_period(db):
     owner = add_user(db, "owner")
 
-    assert retrospective_repository.count_likes_received(db, owner.user_id, *NOVEMBER_2026) == 0
-    assert retrospective_repository.count_comments_received(db, owner.user_id, *NOVEMBER_2026) == 0
+    assert (
+        retrospective_repository.count_likes_received(db, owner.user_id, *NOVEMBER_2026)
+        == 0
+    )
+    assert (
+        retrospective_repository.count_comments_received(
+            db, owner.user_id, *NOVEMBER_2026
+        )
+        == 0
+    )
