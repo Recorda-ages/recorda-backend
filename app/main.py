@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     admin,
     auth,
+    calendar,
     comment,
     feed,
     follow,
@@ -40,6 +41,10 @@ tags_metadata = [
     {
         "name": "users",
         "description": "Gerenciamento de usuários (acesso administrativo).",
+    },
+    {
+        "name": "calendar",
+        "description": "Calendário mensal de memórias do usuário autenticado.",
     },
     {
         "name": "follows",
@@ -95,6 +100,7 @@ app.include_router(general_feed.router, prefix="/api/v1")
 app.include_router(follow_request.router, prefix="/api/v1")
 app.include_router(comment.router, prefix="/api/v1")
 app.include_router(report.router, prefix="/api/v1")
+app.include_router(calendar.router, prefix="/api/v1")
 
 
 @app.get("/api/v1")
