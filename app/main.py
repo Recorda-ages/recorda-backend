@@ -14,6 +14,7 @@ from app.api.routes import (
     general_feed,
     health,
     media,
+    metrics,
     music,
     notification,
     recorda,
@@ -106,3 +107,6 @@ app.include_router(calendar.router, prefix="/api/v1")
 @app.get("/api/v1")
 def root() -> dict:
     return {"status": "ok"}
+
+
+app.include_router(metrics.router, prefix="/api/v1")
