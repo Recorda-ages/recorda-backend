@@ -209,6 +209,33 @@ def get_profile_grid(
         ) from exc
 
 
+@router.get("/{user_id}/profile", response_model=ProfileRead)
+def get_user_profile(
+    user_id: UUID,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProfileRead:
+    """Cabeçalho do perfil de outro usuário, respeitando a privacidade (D-06)."""
+    try:
+        owner = profile_service.get_active_owner(db, user_id)
+        return profile_service.build_profile(db, owner, current_user)
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    except profile_service.IncompleteProfileError as exc:
+        if user_id == current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Complete o onboarding musical para acessar o perfil.",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+
+
 @router.get("/me/music-preferences", response_model=MusicPreferencesRead)
 def list_music_preferences(
     current_user: AppUser = Depends(get_current_user),

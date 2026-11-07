@@ -9,6 +9,7 @@ from app.core.music_preview import public_preview_url
 from app.core.time import now_utc, to_local
 from app.models import AppUser
 from app.models.app_user import STATUS_ACTIVE
+from app.models.follow import STATUS_ACCEPTED, STATUS_PENDING
 from app.repositories import follow_repository, recorda_repository, user_repository
 from app.schemas.profile import (
     ProfileCounts,
@@ -17,6 +18,12 @@ from app.schemas.profile import (
     ProfileRelationship,
     ProfileStreak,
 )
+
+FOLLOW_STATUS_MAP = {
+    STATUS_ACCEPTED: "seguindo",
+    STATUS_PENDING: "solicitado",
+    None: "nenhuma",
+}
 
 # ---------------------------------------------------------------------------
 # Erros de privacidade (reutilizados pela grade e outros serviços)
@@ -127,11 +134,11 @@ def _to_publication_day(value: datetime) -> date:
 def build_profile(db: Session, owner: AppUser, viewer: AppUser) -> ProfileRead:
     """Cabeçalho do perfil de `owner` visto por `viewer`.
 
-    Por enquanto só o perfil próprio (`owner == viewer`). Relação e privacidade
-    para terceiros entram na T-E6.US29.BE.01; o streak, na T-E6.US35.BE.01.
+    Identidade, música favorita e streak são sempre visíveis; os contadores
+    só aparecem para quem pode ver o conteúdo (D-06).
     """
-    if owner.user_id != viewer.user_id:
-        raise NotImplementedError("Perfil de terceiros: T-E6.US29.BE.01")
+
+    can_view = can_view_content(db, owner, viewer)
 
     return ProfileRead(
         user_id=owner.user_id,
@@ -139,13 +146,29 @@ def build_profile(db: Session, owner: AppUser, viewer: AppUser) -> ProfileRead:
         username=owner.username,
         profile_picture_url=owner.profile_picture_url,
         is_private=owner.is_private,
-        counts=_build_counts(db, owner.user_id),
+        counts=_build_counts(db, owner.user_id) if can_view else None,
         favorite_song=_build_favorite_song(owner),
         streak=build_streak(db, owner.user_id),
-        relationship=ProfileRelationship(
+        relationship=_build_relationship(db, owner, viewer),
+        can_view_content=can_view,
+    )
+
+
+def _build_relationship(
+    db: Session, owner: AppUser, viewer: AppUser
+) -> ProfileRelationship:
+    """Relação do visitante com o dono: próprio perfil, seguindo, solicitado ou nenhuma."""
+
+    if owner.user_id == viewer.user_id:
+        return ProfileRelationship(
             is_self=True, follow_status="nenhuma", follow_id=None
-        ),
-        can_view_content=True,
+        )
+
+    follow = follow_repository.get_by_users(db, viewer.user_id, owner.user_id)
+    return ProfileRelationship(
+        is_self=False,
+        follow_status=FOLLOW_STATUS_MAP[follow.status if follow else None],
+        follow_id=follow.follow_id if follow else None,
     )
 
 
