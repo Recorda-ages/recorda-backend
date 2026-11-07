@@ -17,12 +17,7 @@ from app.schemas.recorda import (
     RecordaRead,
     RecordaUpdate,
 )
-from app.services import (
-    comment_service,
-    music_service,
-    recorda_like_service,
-    recorda_service,
-)
+from app.services import comment_service, recorda_like_service, recorda_service
 
 router = APIRouter(prefix="/recordas", tags=["recordas"])
 
@@ -48,11 +43,7 @@ def create_recorda(
     db: Session = Depends(get_db),
     deezer: httpx.Client = Depends(get_deezer_client),
 ) -> RecordaRead:
-    if payload.song_genre_name is None:
-        payload.song_genre_name = music_service.get_track_genre_name(
-            deezer, payload.deezer_track_id
-        )
-    return recorda_service.create(db, payload, current_user)
+    return recorda_service.create(db, payload, current_user, deezer)
 
 
 @router.get("/{recorda_id}", response_model=RecordaDetail)

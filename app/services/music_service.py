@@ -30,20 +30,25 @@ _NAME_OTHER = 4
 
 
 def get_track_genre_name(client: httpx.Client, track_id: str) -> str | None:
-    """Return the genre name for a Deezer track, or None if unavailable."""
+    """Return the main genre name of a Deezer track, or None if unavailable.
+
+    Deezer track objects carry no genre; it lives on the track's album.
+    """
     try:
-        track_resp = client.get(f"/track/{track_id}")
-        track_resp.raise_for_status()
-        genre_id = track_resp.json().get("genre_id")
-        if not genre_id:
+        track = _get_json(client, f"/track/{track_id}")
+        album_id = (track.get("album") or {}).get("id")
+        if not album_id:
             return None
-        genres = get_genres(client)
-        for genre in genres:
-            if genre.id == genre_id:
-                return genre.name
-    except (httpx.HTTPError, HTTPException):
-        pass
-    return None
+        album = _get_json(client, f"/album/{album_id}")
+    except (httpx.HTTPError, ValueError):
+        return None
+
+    genres = (album.get("genres") or {}).get("data") or []
+    main_genre = next(
+        (g for g in genres if g.get("id") == album.get("genre_id")),
+        genres[0] if genres else {},
+    )
+    return main_genre.get("name") or None
 
 
 def get_genres(client: httpx.Client) -> list[GenreRead]:
@@ -229,3 +234,10 @@ def _get_data(
         raise HTTPException(status_code=502, detail=MUSIC_UNAVAILABLE_MESSAGE) from err
 
     return response.json().get("data", [])
+
+
+def _get_json(client: httpx.Client, path: str) -> dict[str, Any]:
+    response = client.get(path)
+    response.raise_for_status()
+    body = response.json()
+    return body if isinstance(body, dict) else {}

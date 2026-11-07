@@ -2,11 +2,18 @@
 
 import uuid
 
+import httpx
 import pytest
 
 from app.schemas.recorda import RecordaCreate, RecordaUpdate
 from app.services import recorda_service
-from tests.factories import add_recorda, add_user
+from tests.factories import (
+    DEEZER_ALBUM,
+    DEEZER_ROUTES,
+    add_recorda,
+    add_user,
+    deezer_stub,
+)
 
 
 @pytest.fixture
@@ -39,6 +46,7 @@ def test_create_persists_recorda_with_author_and_song(db, author):
             song_artist_name="Iron Maiden",
         ),
         author,
+        deezer_stub(),
     )
     assert isinstance(created.recorda_id, uuid.UUID)
     assert created.user_id == author.user_id
@@ -95,32 +103,68 @@ def test_delete_returns_false_when_recorda_missing(db, author):
     assert recorda_service.delete(db, uuid.uuid4(), author) is False
 
 
-def test_create_persists_recorda_with_genre(db, author):
+def _genre_payload(**fields) -> RecordaCreate:
+    return RecordaCreate(
+        media_url="photo.jpg",
+        media_type="PHOTO",
+        song_title="Harder, Better, Faster, Stronger",
+        deezer_track_id="3135556",
+        song_artist_name="Daft Punk",
+        **fields,
+    )
+
+
+def test_create_persists_genre_resolved_from_deezer_album(db, author):
     created = recorda_service.create(
-        db,
-        RecordaCreate(
-            media_url="photo.jpg",
-            media_type="PHOTO",
-            song_title="Enter Sandman",
-            deezer_track_id="99",
-            song_artist_name="Metallica",
-            song_genre_name="Metal",
-        ),
-        author,
+        db, _genre_payload(), author, deezer_stub(DEEZER_ROUTES)
+    )
+    db.expire_all()
+    assert recorda_service.get_by_id(db, created.recorda_id).song_genre_name == (
+        "Electro"
+    )
+
+
+def test_create_falls_back_to_first_album_genre(db, author):
+    album = {**DEEZER_ALBUM, "genre_id": 999}
+    routes = {**DEEZER_ROUTES, "/album/302127": album}
+    created = recorda_service.create(db, _genre_payload(), author, deezer_stub(routes))
+    assert created.song_genre_name == "Dance"
+
+
+def test_create_keeps_genre_sent_in_payload_without_calling_deezer(db, author):
+    offline = deezer_stub(error=AssertionError("Deezer não deveria ser chamado"))
+    created = recorda_service.create(
+        db, _genre_payload(song_genre_name="Metal"), author, offline
     )
     assert created.song_genre_name == "Metal"
 
 
-def test_create_persists_recorda_without_genre(db, author):
-    created = recorda_service.create(
-        db,
-        RecordaCreate(
-            media_url="photo.jpg",
-            media_type="PHOTO",
-            song_title="Enter Sandman",
-            deezer_track_id="99",
-            song_artist_name="Metallica",
+@pytest.mark.parametrize(
+    "deezer",
+    [
+        pytest.param(
+            lambda: deezer_stub(
+                {
+                    **DEEZER_ROUTES,
+                    "/album/302127": {**DEEZER_ALBUM, "genre_id": -1, "genres": {}},
+                }
+            ),
+            id="album-without-genre",
         ),
-        author,
-    )
+        pytest.param(
+            lambda: deezer_stub({"/track/3135556": {"id": 3135556}}),
+            id="track-without-album",
+        ),
+        pytest.param(lambda: deezer_stub(), id="unknown-track"),
+        pytest.param(
+            lambda: deezer_stub(DEEZER_ROUTES, status_code=503), id="http-error"
+        ),
+        pytest.param(
+            lambda: deezer_stub(error=httpx.ConnectError("offline")), id="offline"
+        ),
+    ],
+)
+def test_create_persists_recorda_without_genre(db, author, deezer):
+    created = recorda_service.create(db, _genre_payload(), author, deezer())
+    assert created.recorda_id is not None
     assert created.song_genre_name is None

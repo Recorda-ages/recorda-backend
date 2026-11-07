@@ -1,15 +1,21 @@
 """Endpoint tests for the Recorda API under /api/v1/recordas."""
 
 import uuid
-from contextlib import contextmanager
 
+import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from app.core.http import get_deezer_client
 from app.main import app
 from app.models import RecordaComment, RecordaLike
-from tests.factories import add_follow, add_recorda, add_user, auth_headers
+from tests.factories import (
+    DEEZER_ROUTES,
+    add_follow,
+    add_recorda,
+    add_user,
+    auth_headers,
+    deezer_stub,
+)
 
 PREFIX = "/api/v1/recordas"
 MISSING_ID = uuid.uuid4()
@@ -329,77 +335,41 @@ def test_delete_recorda_removes_likes_and_soft_deletes_comments(
     assert comment.deleted_at is not None
 
 
-def test_create_recorda_persists_genre_from_deezer(db, common_user):
-    fake = _FakeDeezerClient(
-        track_response={"id": 10, "genre_id": 132},
-        genre_response={"data": [{"id": 132, "name": "Pop", "picture_medium": ""}]},
-    )
-    with _deezer_override(fake, db) as c:
-        resp = c.post(PREFIX, json=create_payload(), headers=auth_headers(common_user))
+@pytest.fixture
+def use_deezer(client):
+    def _use(deezer):
+        app.dependency_overrides[get_deezer_client] = lambda: deezer
+
+    return _use
+
+
+def test_create_recorda_persists_genre_from_deezer(client, auth, use_deezer):
+    use_deezer(deezer_stub(DEEZER_ROUTES))
+
+    resp = client.post(PREFIX, json=create_payload(), headers=auth)
+
     assert resp.status_code == 201
-    assert resp.json()["song_genre_name"] == "Pop"
+    assert resp.json()["song_genre_name"] == "Electro"
+    detail = client.get(f"{PREFIX}/{resp.json()['recorda_id']}", headers=auth)
+    assert detail.json()["song_genre_name"] == "Electro"
 
 
-def test_create_recorda_genre_is_none_when_deezer_unavailable(db, common_user):
-    with _deezer_override(_ErrorDeezerClient(), db) as c:
-        resp = c.post(PREFIX, json=create_payload(), headers=auth_headers(common_user))
+@pytest.mark.parametrize(
+    "deezer",
+    [
+        pytest.param(lambda: deezer_stub(), id="unknown-track"),
+        pytest.param(
+            lambda: deezer_stub(error=httpx.TimeoutException("timeout")),
+            id="offline",
+        ),
+    ],
+)
+def test_create_recorda_without_genre_when_deezer_has_none(
+    client, auth, use_deezer, deezer
+):
+    use_deezer(deezer())
+
+    resp = client.post(PREFIX, json=create_payload(), headers=auth)
+
     assert resp.status_code == 201
     assert resp.json()["song_genre_name"] is None
-
-
-def test_create_recorda_genre_is_none_when_track_has_no_genre(db, common_user):
-    fake = _FakeDeezerClient(track_response={"id": 10, "genre_id": None})
-    with _deezer_override(fake, db) as c:
-        resp = c.post(PREFIX, json=create_payload(), headers=auth_headers(common_user))
-    assert resp.status_code == 201
-    assert resp.json()["song_genre_name"] is None
-
-
-class _FakeDeezerClient:
-    def __init__(self, *, track_response: dict, genre_response: dict | None = None):
-        self._track = track_response
-        self._genres = genre_response or {"data": []}
-
-    def get(self, path: str, **_kwargs):
-        body = self._track if path.startswith("/track/") else self._genres
-        return _FakeResp(body)
-
-
-class _FakeResp:
-    status_code = 200
-
-    def __init__(self, body: dict):
-        self._body = body
-
-    def raise_for_status(self):
-        pass
-
-    def json(self):
-        return self._body
-
-
-class _ErrorDeezerClient:
-    def get(self, path: str, **_kwargs):
-        import httpx
-
-        raise httpx.TimeoutException("timeout")
-
-
-@contextmanager
-def _deezer_override(fake, db):
-    from app.db.session import get_db
-
-    def _override_db():
-        yield db
-
-    def _override_deezer():
-        yield fake
-
-    app.dependency_overrides[get_db] = _override_db
-    app.dependency_overrides[get_deezer_client] = _override_deezer
-    try:
-        with TestClient(app) as c:
-            yield c
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-        app.dependency_overrides.pop(get_deezer_client, None)

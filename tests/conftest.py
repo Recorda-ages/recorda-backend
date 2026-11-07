@@ -16,7 +16,7 @@ from app.db.session import Base, get_db
 from app.main import app
 from app.models import AppUser, Genre
 from app.models.app_user import ROLE_ADMIN, ROLE_USER
-from tests.factories import add_user, token_for
+from tests.factories import add_user, deezer_stub, token_for
 from tests.pg_guard import (
     ALLOW_DESTRUCTIVE_ENV,
     assert_disposable_database,
@@ -105,26 +105,8 @@ def client(db: Session):
     def _override_get_db():
         yield db
 
-    class _NullDeezerClient:
-        """Stub that makes no real HTTP calls; genre resolution returns None."""
-
-        def get(self, path: str, **_kwargs):
-            return _NullResponse()
-
-    class _NullResponse:
-        status_code = 200
-
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {}
-
-    def _override_deezer():
-        yield _NullDeezerClient()
-
     app.dependency_overrides[get_db] = _override_get_db
-    app.dependency_overrides[get_deezer_client] = _override_deezer
+    app.dependency_overrides[get_deezer_client] = lambda: deezer_stub()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.pop(get_db, None)
