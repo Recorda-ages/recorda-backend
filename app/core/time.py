@@ -24,3 +24,10 @@ def local_month_bounds(year: int, month: int) -> tuple[datetime, datetime]:
     start = datetime.combine(date(year, month, 1), time.min, tzinfo=SAO_PAULO)
     end = datetime.combine(date(next_year, next_month, 1), time.min, tzinfo=SAO_PAULO)
     return start.astimezone(UTC), end.astimezone(UTC)
+
+
+def local_year_bounds(year: int) -> tuple[datetime, datetime]:
+    """Meia-noite de 1º de janeiro do ano e do ano seguinte em São Paulo, em UTC."""
+    start = datetime.combine(date(year, 1, 1), time.min, tzinfo=SAO_PAULO)
+    end = datetime.combine(date(year + 1, 1, 1), time.min, tzinfo=SAO_PAULO)
+    return start.astimezone(UTC), end.astimezone(UTC)
