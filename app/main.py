@@ -19,6 +19,7 @@ from app.api.routes import (
     notification,
     recorda,
     report,
+    retrospectives,
     user,
 )
 from app.core.config import settings
@@ -64,6 +65,10 @@ tags_metadata = [
         "name": "reports",
         "description": "Denúncias de conteúdo enviadas pelos usuários.",
     },
+    {
+        "name": "retrospectives",
+        "description": "Retrospectivas de Recordas.",
+    },
 ]
 
 app = FastAPI(
@@ -102,6 +107,7 @@ app.include_router(follow_request.router, prefix="/api/v1")
 app.include_router(comment.router, prefix="/api/v1")
 app.include_router(report.router, prefix="/api/v1")
 app.include_router(calendar.router, prefix="/api/v1")
+app.include_router(retrospectives.router, prefix="/api/v1")
 
 
 @app.get("/api/v1")
