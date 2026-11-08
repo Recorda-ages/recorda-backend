@@ -423,6 +423,7 @@ Se a porta do frontend mudar, atualize `CORS_ORIGINS` no `.env` antes de iniciar
 | GET | `/api/v1/users/me/settings` | Retorna privacidade e idioma da conta autenticada |
 | PATCH | `/api/v1/users/me/settings` | Altera privacidade e/ou idioma; ao tornar pública, aceita pedidos pendentes atomicamente e retorna `accepted_requests` |
 | GET | `/api/v1/users/{user_id}/recordas` | Grid do perfil, respeitando privacidade e exclusão lógica |
+| GET | `/api/v1/users/me/calendar?year=YYYY&month=MM` | Calendário mensal de memórias: dias com Recordas vivas agrupados pelo dia local em `America/Sao_Paulo`, com `count` e a miniatura (`thumbnail_url`, `media_type`, `first_recorda_id`) da primeira Recorda do dia. `year` 1970..2100 e `month` 1..12; fora disso: 422 |
 
 Detalhes do contrato, validações e evidências: [configurações e privacidade (#111)](docs/issue-111.md).
 

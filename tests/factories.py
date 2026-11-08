@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime, timedelta
+from typing import Any
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.core import security
@@ -237,3 +239,36 @@ def music_preferences_body(genres: list[dict]) -> dict:
             "artist_name": "Daft Punk",
         },
     }
+
+
+# Formato real do Deezer: a faixa não traz gênero, só o id do álbum; o álbum
+# traz `genre_id` (gênero principal, -1 se não houver) e a lista `genres`.
+DEEZER_TRACK = {"id": 3135556, "album": {"id": 302127}}
+DEEZER_ALBUM = {
+    "id": 302127,
+    "genre_id": 106,
+    "genres": {"data": [{"id": 113, "name": "Dance"}, {"id": 106, "name": "Electro"}]},
+}
+DEEZER_ROUTES = {"/track/3135556": DEEZER_TRACK, "/album/302127": DEEZER_ALBUM}
+DEEZER_NOT_FOUND = {
+    "error": {"type": "DataException", "message": "no data", "code": 800}
+}
+
+
+def deezer_stub(
+    routes: dict[str, Any] | None = None,
+    *,
+    status_code: int = 200,
+    error: Exception | None = None,
+) -> httpx.Client:
+    """httpx.Client que responde como o Deezer, sem acessar a rede."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if error is not None:
+            raise error
+        body = (routes or {}).get(request.url.path, DEEZER_NOT_FOUND)
+        return httpx.Response(status_code, json=body)
+
+    return httpx.Client(
+        base_url="https://api.deezer.com", transport=httpx.MockTransport(handler)
+    )

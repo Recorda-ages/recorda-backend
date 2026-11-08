@@ -70,7 +70,7 @@ def test_postgres_specific_indexes_and_seed(pg_db):
         GENRE_SEED
     )
     assert pg_db.scalar(text("SELECT version_num FROM alembic_version")) == (
-        "0009_content_removed"
+        "0010_recorda_song_genre_name"
     )
 
 

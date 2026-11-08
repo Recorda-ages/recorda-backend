@@ -16,3 +16,11 @@ def local_day_bounds(day: date) -> tuple[datetime, datetime]:
     start = datetime.combine(day, time.min, tzinfo=SAO_PAULO)
     end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=SAO_PAULO)
     return start.astimezone(UTC), end.astimezone(UTC)
+
+
+def local_month_bounds(year: int, month: int) -> tuple[datetime, datetime]:
+    """Meia-noite do dia 1 do mês e do mês seguinte em São Paulo, em UTC."""
+    next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
+    start = datetime.combine(date(year, month, 1), time.min, tzinfo=SAO_PAULO)
+    end = datetime.combine(date(next_year, next_month, 1), time.min, tzinfo=SAO_PAULO)
+    return start.astimezone(UTC), end.astimezone(UTC)

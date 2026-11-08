@@ -23,3 +23,6 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+
+# Segredos de produção
+deploy/.env.prod

@@ -72,8 +72,8 @@ def get_available_periods(db: Session, user_id: UUID) -> AvailablePeriodsRespons
             )
         )
 
-    for (year), count in yearly_counts.items():
-        if (year) >= (current_year):
+    for year, count in yearly_counts.items():
+        if year >= current_year:
             continue
 
         available_periods.append(

@@ -38,6 +38,7 @@
 | `app_user` | `status` (`ACTIVE` / `SUSPENDED`) | D57 |
 | `app_user` | `fav_song_deezer_track_id`, `fav_song_title`, `fav_song_artist_name`, `fav_song_cover_url`, `fav_song_preview_url` | D15 (anuláveis na criação, preenchidos no onboarding — ADR 0001). |
 | `recorda` | `deezer_track_id`, `song_title`, `song_artist_name`, `song_cover_url`, `song_preview_url` | D1, D5 (`song_cover_url` aceita `''` se a faixa não tiver capa — ADR 0001). |
+| `recorda` | `song_genre_name` (anulável) | Snapshot do gênero para o cálculo de preferências sem chamada síncrona ao Deezer. Migration `0010_recorda_song_genre_name` (#146). |
 | `recorda_comment` | `deleted_at` | D52 |
 | `notification` | `comment_id`, `follow_id` (FK opcionais) | D47 |
 | `user_favorite_artist` | `deezer_artist_id`, `artist_name`, `artist_image_url` | D19 (snapshot; sem FK para tabela de artista). |
@@ -217,6 +218,7 @@ A entidade central: uma memória musical. Amarra um usuário, uma mídia e o **s
 | song_artist_name | VARCHAR | — | Não | artista principal (D8) |
 | song_cover_url | VARCHAR | — | Não | capa (D5; aceita `''` se não houver — ADR 0001) |
 | song_preview_url | VARCHAR | — | Sim | prévia de áudio, quando o Deezer fornece |
+| song_genre_name | VARCHAR | — | Sim | gênero principal do álbum da faixa no Deezer, capturado na criação; `NULL` em Recordas anteriores à migration `0010` ou se o Deezer não informar (#146) |
 | created_at | TIMESTAMPTZ | — | Não | também usado na ordenação do feed e no filtro por data |
 | deleted_at | TIMESTAMPTZ | — | Sim | soft delete |
 
@@ -534,6 +536,7 @@ erDiagram
         varchar song_artist_name
         varchar song_cover_url
         varchar song_preview_url
+        varchar song_genre_name
         timestamptz created_at
         timestamptz deleted_at
     }

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     admin,
     auth,
+    calendar,
     comment,
     feed,
     follow,
@@ -13,6 +14,7 @@ from app.api.routes import (
     general_feed,
     health,
     media,
+    metrics,
     music,
     notification,
     recorda,
@@ -43,6 +45,10 @@ tags_metadata = [
         "description": "Gerenciamento de usuários (acesso administrativo).",
     },
     {
+        "name": "calendar",
+        "description": "Calendário mensal de memórias do usuário autenticado.",
+    },
+    {
         "name": "follows",
         "description": (
             "Listas de Seguidores/Seguindo, remoção de um seguidor e "
@@ -61,7 +67,7 @@ tags_metadata = [
     },
     {
         "name": "retrospectives",
-        "description": "Retropectivas de Recordas.",
+        "description": "Retrospectivas de Recordas.",
     },
 ]
 
@@ -100,9 +106,13 @@ app.include_router(general_feed.router, prefix="/api/v1")
 app.include_router(follow_request.router, prefix="/api/v1")
 app.include_router(comment.router, prefix="/api/v1")
 app.include_router(report.router, prefix="/api/v1")
+app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(retrospectives.router, prefix="/api/v1")
 
 
 @app.get("/api/v1")
 def root() -> dict:
     return {"status": "ok"}
+
+
+app.include_router(metrics.router, prefix="/api/v1")
