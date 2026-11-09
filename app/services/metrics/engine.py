@@ -11,6 +11,7 @@ from app.repositories import metrics_repository
 from app.schemas.metrics import (
     DailyStreakMetric,
     MetricsPeriod,
+    MonthlyCountMetric,
     ProfileMetricsResponse,
     TopArtistMetric,
     TopGenreMetric,
@@ -19,12 +20,17 @@ from app.services.metrics.calculators.engagement import (
     EngagementCalculator,
     EngagementResult,
 )
+from app.services.metrics.calculators.monthly_distribution import (
+    MonthlyDistributionCalculator,
+)
 from app.services.metrics.calculators.streak import StreakCalculator, StreakResult
 from app.services.metrics.calculators.tagged_users import TaggedUsersCalculator
 from app.services.metrics.calculators.top_artists import TopArtistsCalculator
 from app.services.metrics.calculators.top_genres import TopGenresCalculator
 from app.services.metrics.calculators.total_recordas import TotalRecordasCalculator
 from app.services.metrics.context import MetricCalculator, MetricsContext
+
+PROFILE_TOP_ARTISTS_LIMIT = 5
 
 
 def local_publication_day(value: datetime) -> date:
@@ -40,6 +46,7 @@ class MetricsCalculators(TypedDict, total=False):
     total_recordas: MetricCalculator[int]
     tagged_users: MetricCalculator[dict[UUID, int]]
     engagement: MetricCalculator[EngagementResult]
+    monthly_distribution: MetricCalculator[list[MonthlyCountMetric]]
 
 
 MetricName = Literal[
@@ -49,6 +56,7 @@ MetricName = Literal[
     "total_recordas",
     "tagged_users",
     "engagement",
+    "monthly_distribution",
 ]
 MetricResult = (
     list[TopArtistMetric]
@@ -57,6 +65,7 @@ MetricResult = (
     | int
     | dict[UUID, int]
     | EngagementResult
+    | list[MonthlyCountMetric]
 )
 
 
@@ -69,6 +78,7 @@ class MetricsEngine:
             "total_recordas": TotalRecordasCalculator(),
             "tagged_users": TaggedUsersCalculator(),
             "engagement": EngagementCalculator(),
+            "monthly_distribution": MonthlyDistributionCalculator(),
         }
         if calculators:
             self.calculators.update(calculators)
@@ -102,6 +112,11 @@ class MetricsEngine:
     def calculate(
         self, name: Literal["engagement"], context: MetricsContext
     ) -> EngagementResult: ...
+
+    @overload
+    def calculate(
+        self, name: Literal["monthly_distribution"], context: MetricsContext
+    ) -> list[MonthlyCountMetric]: ...
 
     def calculate(self, name: MetricName, context: MetricsContext) -> MetricResult:
         return self.calculators[name].calculate(context)
@@ -138,8 +153,11 @@ class MetricsEngine:
         streak = self.calculate("streak", context)
         return ProfileMetricsResponse(
             period=period,
+            total_recordas=self.calculate("total_recordas", context),
             top_artist=artists[0] if artists else None,
+            top_artists=artists[:PROFILE_TOP_ARTISTS_LIMIT],
             top_genres=self.calculate("top_genres", context),
+            monthly_distribution=self.calculate("monthly_distribution", context),
             streak=DailyStreakMetric(
                 current_streak_days=streak.current_streak,
                 last_post_date=streak.last_post_date,

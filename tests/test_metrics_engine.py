@@ -89,8 +89,11 @@ def test_empty_profile(db):
     result = MetricsEngine().profile(db, user.user_id, now=NOW)
     assert result.model_dump(mode="json") == {
         "period": "all_time",
+        "total_recordas": 0,
         "top_artist": None,
+        "top_artists": [],
         "top_genres": [],
+        "monthly_distribution": [],
         "streak": {"current_streak_days": 0, "last_post_date": None},
     }
 
@@ -111,6 +114,43 @@ def test_streak_local_midnight_and_deleted_gap(request, database):
         MetricsEngine().profile(db, user.user_id, now=NOW).streak.current_streak_days
         == 2
     )
+
+
+def test_profile_total_top_artists_and_monthly_distribution(db):
+    user = add_user(db, "owner")
+    other = add_user(db, "other")
+    stamps = [
+        datetime(2026, 9, 30, 12, tzinfo=UTC),
+        datetime(2026, 10, 1, 2, 59, tzinfo=UTC),
+        datetime(2026, 10, 1, 3, tzinfo=UTC),
+        datetime(2026, 11, 7, 12, tzinfo=UTC),
+    ]
+    artists = ["A", "A", "B", "C"]
+    for stamp, artist in zip(stamps, artists, strict=True):
+        add_recorda(db, user, created_at=stamp, song_artist_name=artist)
+    for index in range(6):
+        add_recorda(
+            db, user, created_at=NOW, song_artist_name=f"Z{index}", deleted_at=NOW
+        )
+    add_recorda(db, other, created_at=NOW, song_artist_name="Foreign")
+    result = MetricsEngine().profile(db, user.user_id, now=NOW)
+    assert result.total_recordas == 4
+    assert [a.artist_name for a in result.top_artists] == ["A", "B", "C"]
+    assert result.top_artists[0] == result.top_artist
+    assert [(m.year, m.month, m.count) for m in result.monthly_distribution] == [
+        (2026, 9, 2),
+        (2026, 10, 1),
+        (2026, 11, 1),
+    ]
+
+
+def test_profile_top_artists_are_capped(db):
+    user = add_user(db, "owner")
+    for index in range(7):
+        add_recorda(db, user, created_at=NOW, song_artist_name=f"Artist {index}")
+    result = MetricsEngine().profile(db, user.user_id, now=NOW)
+    assert len(result.top_artists) == 5
+    assert result.total_recordas == 7
 
 
 def test_streak_not_truncated_by_period(db):
@@ -161,7 +201,15 @@ def test_metrics_route(client, db):
         "/api/v1/users/me/metrics?bundle=profile", headers=auth_headers(user)
     )
     assert response.status_code == 200
-    assert set(response.json()) == {"period", "top_artist", "top_genres", "streak"}
+    assert set(response.json()) == {
+        "period",
+        "total_recordas",
+        "top_artist",
+        "top_artists",
+        "top_genres",
+        "monthly_distribution",
+        "streak",
+    }
     for period in MetricsPeriod:
         assert (
             client.get(

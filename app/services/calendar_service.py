@@ -44,6 +44,7 @@ def get_monthly_calendar(
             thumbnail_url=recordas[0].media_url,
             media_type=recordas[0].media_type,
             first_recorda_id=recordas[0].recorda_id,
+            song_cover_url=recordas[0].song_cover_url,
         )
         for day, recordas in sorted(recordas_by_day.items())
     ]
@@ -64,9 +65,10 @@ def _local_day(value: datetime) -> date:
 
 
 def get_daily_memories(
-    db: Session, user_id: UUID, target_date: date
+    db: Session, user_id: UUID, target_date: date, viewer_id: UUID | None = None
 ) -> DailyMemoriesResponse:
     """Memórias vivas do dia local e navegação entre dias com publicações."""
+    viewer_id = viewer_id or user_id
     start, end = local_day_bounds(target_date)
     recordas = recorda_repository.list_by_user_between(db, user_id, start, end)
     previous_time, next_time = recorda_repository.adjacent_publication_times(
@@ -75,7 +77,9 @@ def get_daily_memories(
     memories = []
     if recordas:
         recorda_ids = [recorda.recorda_id for recorda in recordas]
-        likes = recorda_like_repository.summarize_for_recordas(db, recorda_ids, user_id)
+        likes = recorda_like_repository.summarize_for_recordas(
+            db, recorda_ids, viewer_id
+        )
         comments = comment_repository.count_visible_for_recordas(db, recorda_ids)
         author = user_repository.get_by_id(db, user_id)
         recorda_author = RecordaAuthor(

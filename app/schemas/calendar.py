@@ -36,6 +36,9 @@ class CalendarDaySummary(BaseModel):
     thumbnail_url: str = Field(description="`media_url` da primeira Recorda do dia")
     media_type: MediaType = Field(description="Tipo de mídia da primeira Recorda")
     first_recorda_id: UUID = Field(description="ID da primeira Recorda do dia")
+    song_cover_url: str = Field(
+        description="Capa da música da primeira Recorda, usada como miniatura de vídeos"
+    )
 
 
 class MonthlyCalendarResponse(BaseModel):
