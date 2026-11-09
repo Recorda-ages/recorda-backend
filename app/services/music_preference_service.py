@@ -13,6 +13,7 @@ from app.schemas.music_preference import (
     MusicPreferencesCreate,
     MusicPreferencesRead,
 )
+from app.schemas.profile import ProfileMusicTastes
 
 logger = logging.getLogger(__name__)
 
@@ -90,15 +91,13 @@ def _set_favorite_track(user: AppUser, track: FavoriteTrack) -> None:
     user.fav_song_preview_url = track.preview_url
 
 
-def read_music_preference(db: Session, user: AppUser) -> MusicPreferencesRead:
-    if (
-        not user.fav_song_deezer_track_id
-        or not user.fav_song_title
-        or not user.fav_song_artist_name
-        or user.fav_song_cover_url is None
-    ):
-        raise IncompleteMusicPreferencesError
+def read_profile_tastes(db: Session, user: AppUser) -> ProfileMusicTastes:
+    """Artistas e gêneros favoritos de `user`, sem a música favorita."""
+    genres, artists = _read_tastes(db, user)
+    return ProfileMusicTastes(artists=artists, genres=genres)
 
+
+def _read_tastes(db: Session, user: AppUser) -> tuple[list[MusicItem], list[MusicItem]]:
     genres = []
     for genre in user_favorite_repository.get_genres(db, user.user_id):
         if genre.deezer_genre_id is None:
@@ -122,6 +121,20 @@ def read_music_preference(db: Session, user: AppUser) -> MusicPreferencesRead:
                 picture_url=artist.artist_image_url,
             )
         )
+
+    return genres, artists
+
+
+def read_music_preference(db: Session, user: AppUser) -> MusicPreferencesRead:
+    if (
+        not user.fav_song_deezer_track_id
+        or not user.fav_song_title
+        or not user.fav_song_artist_name
+        or user.fav_song_cover_url is None
+    ):
+        raise IncompleteMusicPreferencesError
+
+    genres, artists = _read_tastes(db, user)
 
     preview_url = public_preview_url(
         user.fav_song_deezer_track_id,

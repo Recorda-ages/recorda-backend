@@ -14,7 +14,7 @@ from app.schemas.music_preference import (
     MusicPreferencesCreate,
     MusicPreferencesRead,
 )
-from app.schemas.profile import ProfileRead
+from app.schemas.profile import ProfileMusicTastes, ProfileRead
 from app.schemas.recorda import RecordaGridPage
 from app.schemas.settings import UserSettings, UserSettingsResult, UserSettingsUpdate
 from app.schemas.user import (
@@ -293,6 +293,27 @@ def change_role(
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
+
+@router.get("/{user_id}/music-preferences", response_model=ProfileMusicTastes)
+def get_user_music_tastes(
+    user_id: UUID,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProfileMusicTastes:
+    """Artistas e gêneros favoritos de outro usuário, respeitando a privacidade (D-06)."""
+    try:
+        return profile_service.get_music_tastes(db, user_id, current_user)
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    except PrivateAccountError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta conta é privada.",
+        ) from exc
 
 
 @router.post("/me/music-preferences", response_model=MusicPreferencesRead)

@@ -14,10 +14,12 @@ from app.repositories import follow_repository, recorda_repository, user_reposit
 from app.schemas.profile import (
     ProfileCounts,
     ProfileFavoriteSong,
+    ProfileMusicTastes,
     ProfileRead,
     ProfileRelationship,
     ProfileStreak,
 )
+from app.services import music_preference_service
 
 FOLLOW_STATUS_MAP = {
     STATUS_ACCEPTED: "seguindo",
@@ -66,6 +68,25 @@ def authorize_content_access(db: Session, owner: AppUser, viewer: AppUser) -> No
     """Levanta PrivateAccountError se viewer não tiver acesso ao perfil de owner."""
     if not can_view_content(db, owner, viewer):
         raise PrivateAccountError
+
+
+def get_viewable_owner(db: Session, owner_id: UUID, viewer: AppUser) -> AppUser:
+    """Dono ativo cujo conteúdo `viewer` pode ver.
+
+    Levanta UserNotFoundError (inexistente, excluído ou suspenso) ou
+    PrivateAccountError (conta privada sem seguidor aceito).
+    """
+    owner = get_active_owner(db, owner_id)
+    authorize_content_access(db, owner, viewer)
+    return owner
+
+
+def get_music_tastes(
+    db: Session, owner_id: UUID, viewer: AppUser
+) -> ProfileMusicTastes:
+    """Chips de artistas e gêneros do perfil, sob a mesma regra do conteúdo."""
+    owner = get_viewable_owner(db, owner_id, viewer)
+    return music_preference_service.read_profile_tastes(db, owner)
 
 
 # ---------------------------------------------------------------------------

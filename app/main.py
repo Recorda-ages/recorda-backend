@@ -116,3 +116,4 @@ def root() -> dict:
 
 
 app.include_router(metrics.router, prefix="/api/v1")
+app.include_router(metrics.user_metrics_router, prefix="/api/v1")

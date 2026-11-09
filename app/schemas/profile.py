@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.schemas.music_preference import MusicItem
+
 FollowStatus = Literal["seguindo", "solicitado", "nenhuma"]
 
 
@@ -42,3 +44,10 @@ class ProfileRead(BaseModel):
     streak: ProfileStreak | None  # null até a #113
     relationship: ProfileRelationship
     can_view_content: bool
+
+
+class ProfileMusicTastes(BaseModel):
+    """Artistas e gêneros favoritos exibidos como chips no cabeçalho do perfil."""
+
+    artists: list[MusicItem]
+    genres: list[MusicItem]
