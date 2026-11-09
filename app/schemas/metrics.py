@@ -32,10 +32,19 @@ class DailyStreakMetric(BaseModel):
     last_post_date: date | None
 
 
+class MonthlyCountMetric(BaseModel):
+    year: int = Field(ge=1, le=9999)
+    month: int = Field(ge=1, le=12)
+    count: int = Field(ge=1)
+
+
 class ProfileMetricsResponse(BaseModel):
     period: MetricsPeriod
+    total_recordas: int = Field(ge=0)
     top_artist: TopArtistMetric | None
+    top_artists: list[TopArtistMetric] = Field(max_length=5)
     top_genres: list[TopGenreMetric]
+    monthly_distribution: list[MonthlyCountMetric]
     streak: DailyStreakMetric
 
 
