@@ -44,6 +44,7 @@ def test_returns_monthly_calendar_of_authenticated_user(client, db):
                 "thumbnail_url": "/api/v1/recordas/media/thumb.jpg",
                 "media_type": "PHOTO",
                 "first_recorda_id": str(recorda.recorda_id),
+                "song_cover_url": "https://e.deezer.com/cover.jpg",
             }
         ],
     }
