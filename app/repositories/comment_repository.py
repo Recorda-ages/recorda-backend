@@ -1,8 +1,9 @@
 """Persistence access for Recorda comments."""
 
+from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
@@ -26,6 +27,19 @@ def list_for_recorda(db: Session, recorda_id: UUID):
         .order_by(RecordaComment.created_at, RecordaComment.comment_id)
     )
     return db.execute(only_active_users(stmt)).all()
+
+
+def count_visible_for_recordas(
+    db: Session, recorda_ids: Collection[UUID]
+) -> dict[UUID, int]:
+    """Contagens em lote com a mesma visibilidade da listagem de comentários."""
+    stmt = (
+        select(RecordaComment.recorda_id, func.count())
+        .join(AppUser, AppUser.user_id == RecordaComment.user_id)
+        .where(RecordaComment.recorda_id.in_(recorda_ids))
+        .group_by(RecordaComment.recorda_id)
+    )
+    return dict(db.execute(only_active_users(only_live(stmt, RecordaComment))).all())
 
 
 def soft_delete(db: Session, comment: RecordaComment) -> None:
