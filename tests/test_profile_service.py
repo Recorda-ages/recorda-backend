@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from app.core.time import now_utc
-from app.models.follow import STATUS_PENDING
+from app.models.follow import STATUS_ACCEPTED, STATUS_PENDING
 from app.services import profile_service
 from tests.factories import add_follow, add_recorda, add_user
 
@@ -94,11 +94,52 @@ def test_build_profile_requires_completed_onboarding(db, missing_field):
         profile_service.build_profile(db, user, user)
 
 
-def test_build_profile_rejects_third_party_until_us29(db, owner):
-    viewer = add_user(db, "viewer", **FAVORITE_SONG)
+@pytest.mark.parametrize(
+    ("is_private", "follow_status", "expected_status", "expected_can_view"),
+    [
+        pytest.param(False, None, "nenhuma", True, id="publico-sem-follow"),
+        pytest.param(False, STATUS_ACCEPTED, "seguindo", True, id="publico-seguindo"),
+        pytest.param(True, None, "nenhuma", False, id="privado-sem-follow"),
+        pytest.param(True, STATUS_PENDING, "solicitado", False, id="privado-pendente"),
+        pytest.param(True, STATUS_ACCEPTED, "seguindo", True, id="privado-seguindo"),
+    ],
+)
+def test_build_profile_for_third_party(
+    db, is_private, follow_status, expected_status, expected_can_view
+):
+    owner = add_user(db, "dono", is_private=is_private, **FAVORITE_SONG)
+    viewer = add_user(db, "visitante")
+    follow = (
+        add_follow(db, viewer, owner, status=follow_status) if follow_status else None
+    )
 
-    with pytest.raises(NotImplementedError):
-        profile_service.build_profile(db, owner, viewer)
+    profile = profile_service.build_profile(db, owner, viewer)
+
+    assert profile.relationship.is_self is False
+    assert profile.relationship.follow_status == expected_status
+    assert profile.relationship.follow_id == (follow.follow_id if follow else None)
+    assert profile.can_view_content is expected_can_view
+    assert (profile.counts is not None) is expected_can_view
+
+
+def test_build_profile_hides_only_counts_from_blocked_viewer(db, owner):
+    add_recorda(db, owner)
+
+    profile = profile_service.build_profile(db, owner, add_user(db, "visitante"))
+
+    assert profile.counts is None
+    assert profile.favorite_song.deezer_track_id == "3135556"
+    assert profile.streak is not None
+
+
+def test_build_profile_ignores_follow_in_opposite_direction(db, owner):
+    viewer = add_user(db, "visitante")
+    add_follow(db, owner, viewer)  # o dono segue o visitante, não o contrário
+
+    profile = profile_service.build_profile(db, owner, viewer)
+
+    assert profile.relationship.follow_status == "nenhuma"
+    assert profile.can_view_content is False
 
 
 @pytest.mark.parametrize(

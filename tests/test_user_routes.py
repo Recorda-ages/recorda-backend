@@ -6,8 +6,10 @@ import pytest
 
 from app.core import security
 from app.core.config import settings
+from app.core.time import now_utc  # ← novo
 from app.models import AppUser
 from app.models.app_user import ROLE_ADMIN, ROLE_USER, STATUS_SUSPENDED
+from app.models.follow import STATUS_PENDING  # ← novo
 from tests.factories import add_follow, add_recorda, add_user, auth_headers
 
 PREFIX = "/api/v1/users"
@@ -98,6 +100,129 @@ def test_own_profile_rejects_token_issued_before_suspension(client, db):
     response = client.get(f"{PREFIX}/me/profile", headers=headers)
 
     assert response.status_code == 401
+
+
+def _profile_url(user_id) -> str:
+    return f"{PREFIX}/{user_id}/profile"
+
+
+def test_third_party_profile_requires_authentication(client, db):
+    owner = add_user(db, "dono", **FAVORITE_SONG)
+
+    assert client.get(_profile_url(owner.user_id)).status_code == 401
+
+
+def test_third_party_profile_shows_public_profile(client, db):
+    owner = add_user(db, "dono", **FAVORITE_SONG)
+    add_recorda(db, owner)
+    viewer = add_user(db, "visitante")
+
+    response = client.get(_profile_url(owner.user_id), headers=auth_headers(viewer))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["counts"] == {"recordas": 1, "followers": 0, "following": 0}
+    assert body["can_view_content"] is True
+    assert body["relationship"] == {
+        "is_self": False,
+        "follow_status": "nenhuma",
+        "follow_id": None,
+    }
+
+
+def test_third_party_profile_hides_counts_while_request_is_pending(client, db):
+    owner = add_user(db, "dono", is_private=True, **FAVORITE_SONG)
+    viewer = add_user(db, "visitante")
+    follow = add_follow(db, viewer, owner, status=STATUS_PENDING)
+
+    body = client.get(_profile_url(owner.user_id), headers=auth_headers(viewer)).json()
+
+    assert body["relationship"]["follow_status"] == "solicitado"
+    assert body["relationship"]["follow_id"] == str(follow.follow_id)
+    assert body["counts"] is None
+    assert body["can_view_content"] is False
+    assert body["favorite_song"]["deezer_track_id"] == "3135556"
+    assert body["streak"] is not None
+
+
+def test_third_party_profile_shows_private_profile_to_accepted_follower(client, db):
+    owner = add_user(db, "dono", is_private=True, **FAVORITE_SONG)
+    viewer = add_user(db, "visitante")
+    add_follow(db, viewer, owner)
+
+    body = client.get(_profile_url(owner.user_id), headers=auth_headers(viewer)).json()
+
+    assert body["relationship"]["follow_status"] == "seguindo"
+    assert body["counts"] is not None
+    assert body["can_view_content"] is True
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        pytest.param({"status": STATUS_SUSPENDED}, id="suspenso"),
+        pytest.param({"deleted_at": now_utc()}, id="excluido"),
+        pytest.param({}, id="sem-onboarding"),
+    ],
+)
+def test_third_party_profile_returns_404_for_unavailable_owner(client, db, fields):
+    song = {} if not fields else FAVORITE_SONG
+    owner = add_user(db, "dono", **song, **fields)
+    viewer = add_user(db, "visitante")
+
+    response = client.get(_profile_url(owner.user_id), headers=auth_headers(viewer))
+
+    assert response.status_code == 404
+    assert response.json()["error"]["message"] == "Usuário não encontrado."
+
+
+def test_third_party_profile_returns_404_for_missing_user(client, db):
+    viewer = add_user(db, "visitante")
+
+    response = client.get(_profile_url(MISSING_ID), headers=auth_headers(viewer))
+
+    assert response.status_code == 404
+
+
+def test_third_party_profile_of_self_matches_own_profile(client, db):
+    user = add_user(db, "gabi", **FAVORITE_SONG)
+    headers = auth_headers(user)
+
+    by_id = client.get(_profile_url(user.user_id), headers=headers).json()
+    own = client.get(f"{PREFIX}/me/profile", headers=headers).json()
+
+    assert by_id == own
+    assert by_id["relationship"]["is_self"] is True
+
+
+def test_third_party_profile_of_self_rejects_incomplete_onboarding(client, db):
+    user = add_user(db, "incomplete")
+
+    response = client.get(_profile_url(user.user_id), headers=auth_headers(user))
+
+    assert response.status_code == 409
+
+
+def test_third_party_profile_applies_privacy_change_immediately(client, db):
+    owner = add_user(db, "dono", **FAVORITE_SONG)
+    headers = auth_headers(add_user(db, "visitante"))
+    assert client.get(_profile_url(owner.user_id), headers=headers).json()["counts"]
+
+    owner.is_private = True
+    db.commit()
+
+    body = client.get(_profile_url(owner.user_id), headers=headers).json()
+    assert body["counts"] is None
+    assert body["can_view_content"] is False
+
+
+def test_third_party_profile_never_exposes_private_fields(client, db):
+    owner = add_user(db, "dono", **FAVORITE_SONG)
+    viewer = add_user(db, "visitante")
+
+    body = client.get(_profile_url(owner.user_id), headers=auth_headers(viewer)).json()
+
+    assert not {"email", "role", "status"} & body.keys()
 
 
 def test_list_users_returns_all_records(client, db, admin_headers):
