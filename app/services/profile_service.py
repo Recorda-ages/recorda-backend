@@ -129,7 +129,7 @@ def calculate_streak(days: set[date], today: date) -> ProfileStreak:
 
 
 def build_streak(db: Session, user_id: UUID) -> ProfileStreak:
-    """Inclui Recordas excluídas: o dia conquistado não se perde (US35)."""
+    """Considera apenas os dias com Recordas vivas."""
     days = {
         _to_publication_day(created_at)
         for created_at in recorda_repository.list_publication_times(db, user_id)

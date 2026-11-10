@@ -178,11 +178,11 @@ def test_build_streak_counts_several_recordas_on_same_day_once(db, owner, fixed_
     assert profile_service.build_streak(db, owner.user_id).current_days == 1
 
 
-def test_build_streak_keeps_day_of_deleted_recorda(db, owner, fixed_now):
+def test_build_streak_removes_day_of_deleted_recorda(db, owner, fixed_now):
     add_recorda(db, owner, created_at=NOW - timedelta(days=1), deleted_at=NOW)
     add_recorda(db, owner, created_at=NOW)
 
-    assert profile_service.build_streak(db, owner.user_id).current_days == 2
+    assert profile_service.build_streak(db, owner.user_id).current_days == 1
 
 
 def test_build_streak_ignores_other_users(db, owner, fixed_now):

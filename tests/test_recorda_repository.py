@@ -88,11 +88,10 @@ def test_save_commits_and_refreshes(db, author):
     assert recorda_repository.save(db, recorda).description == "Outro"
 
 
-def test_soft_delete_keeps_row(db, author):
+def test_delete_removes_row(db, author):
     recorda = add_recorda(db, author)
-    recorda_repository.soft_delete(db, recorda)
-    assert recorda.deleted_at is not None
-    assert db.get(Recorda, recorda.recorda_id) is recorda
+    recorda_repository.delete(db, recorda)
+    assert db.get(Recorda, recorda.recorda_id) is None
 
 
 def test_count_by_user_counts_only_live_recordas(db, author):
@@ -116,11 +115,11 @@ def test_count_by_user_returns_zero_without_recordas(db, author):
     assert recorda_repository.count_by_user(db, author.user_id) == 0
 
 
-def test_list_publication_times_includes_deleted_and_skips_other_users(db, author):
+def test_list_publication_times_skips_deleted_and_other_users(db, author):
     live = add_recorda(db, author)
-    deleted = add_recorda(db, author, deleted_at=now_utc())
+    add_recorda(db, author, deleted_at=now_utc())
     add_recorda(db, add_user(db, "other"))
 
     times = recorda_repository.list_publication_times(db, author.user_id)
 
-    assert sorted(times) == sorted([live.created_at, deleted.created_at])
+    assert sorted(times) == [live.created_at]

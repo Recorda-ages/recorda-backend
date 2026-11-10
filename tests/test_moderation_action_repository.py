@@ -1,7 +1,7 @@
 """Constraints da tabela moderation_action e funções do repository."""
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -160,7 +160,7 @@ def test_hard_delete_of_the_target_user_is_blocked_by_target_user_id(db: Session
         db.commit()
 
 
-def test_hard_delete_of_the_target_recorda_is_blocked_by_target_recorda_id(
+def test_hard_delete_of_the_target_recorda_preserves_target_recorda_id(
     db: Session,
 ):
     """Relação: moderation_action.target_recorda_id -> recorda.recorda_id."""
@@ -171,9 +171,10 @@ def test_hard_delete_of_the_target_recorda_is_blocked_by_target_recorda_id(
         db, admin, action_type=ACTION_REMOVE_RECORDA, target_recorda=recorda
     )
 
-    with pytest.raises(IntegrityError):
-        db.execute(delete(Recorda).where(Recorda.recorda_id == recorda.recorda_id))
-        db.commit()
+    target_id = recorda.recorda_id
+    db.execute(delete(Recorda).where(Recorda.recorda_id == target_id))
+    db.commit()
+    assert db.scalar(select(ModerationAction)).target_recorda_id == target_id
 
 
 # --------------------------------------------------------------------------- #

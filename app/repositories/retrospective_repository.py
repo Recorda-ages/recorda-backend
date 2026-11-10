@@ -4,7 +4,8 @@ from uuid import UUID
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import Session
 
-from app.models import Recorda, RecordaComment, RecordaLike
+from app.models import AppUser, Recorda, RecordaComment, RecordaLike, RecordaMention
+from app.repositories._query import only_active_users
 
 
 def search_retrospectives(db: Session, user_id: UUID) -> list[datetime]:
@@ -47,10 +48,31 @@ def count_comments_received(
     stmt = (
         select(func.count())
         .select_from(RecordaComment)
+        .join(AppUser, AppUser.user_id == RecordaComment.user_id)
         .join(Recorda, Recorda.recorda_id == RecordaComment.recorda_id)
         .where(
             *_live_recordas_in_period(user_id, start, end),
             RecordaComment.deleted_at.is_(None),
         )
     )
-    return int(db.scalar(stmt) or 0)
+    return int(db.scalar(only_active_users(stmt)) or 0)
+
+
+def top_tagged_users(db: Session, recorda_ids: list[UUID]) -> list[dict]:
+    stmt = (
+        select(AppUser, func.count().label("tag_count"))
+        .join(RecordaMention, RecordaMention.user_id == AppUser.user_id)
+        .where(RecordaMention.recorda_id.in_(recorda_ids))
+        .group_by(AppUser.user_id)
+        .order_by(func.count().desc(), AppUser.username)
+        .limit(5)
+    )
+    return [
+        dict(
+            user_id=user.user_id,
+            username=user.username,
+            profile_picture_url=user.profile_picture_url,
+            tag_count=count,
+        )
+        for user, count in db.execute(only_active_users(stmt))
+    ]

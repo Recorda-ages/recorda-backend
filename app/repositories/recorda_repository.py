@@ -7,7 +7,6 @@ from uuid import UUID
 from sqlalchemy import Row, Select, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.time import now_utc
 from app.models import AppUser, Recorda
 from app.repositories._query import only_active_users, only_live
 from app.repositories.general_feed_repository import _is_visible_to_user_condition
@@ -114,22 +113,19 @@ def get_profile_grid_query(user_id: UUID) -> Select:
 
 
 def count_by_user(db: Session, user_id: UUID) -> int:
-    """Recordas vivas do usuário (contador do perfil).
-
-    Não serve para o streak, que também considera Recordas excluídas.
-    """
+    """Recordas vivas do usuário, como no cálculo do streak."""
     stmt = select(func.count()).select_from(Recorda).where(Recorda.user_id == user_id)
     return db.scalar(only_live(stmt, Recorda)) or 0
 
 
 def list_publication_times(db: Session, user_id: UUID) -> list[datetime]:
-    """Datas de publicação do usuário, incluindo Recordas excluídas (streak, US35)."""
+    """Datas de publicação das Recordas vivas do usuário."""
     stmt = (
         select(Recorda.created_at)
         .where(Recorda.user_id == user_id)
         .order_by(Recorda.created_at.desc())
     )
-    return list(db.scalars(stmt))
+    return list(db.scalars(only_live(stmt, Recorda)))
 
 
 def create(db: Session, recorda: Recorda) -> Recorda:
@@ -145,8 +141,8 @@ def save(db: Session, recorda: Recorda) -> Recorda:
     return recorda
 
 
-def soft_delete(db: Session, recorda: Recorda, *, commit: bool = True) -> None:
-    recorda.deleted_at = now_utc()
+def delete(db: Session, recorda: Recorda, *, commit: bool = True) -> None:
+    db.delete(recorda)
     if commit:
         db.commit()
 

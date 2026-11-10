@@ -18,6 +18,7 @@ from app.repositories.report_repository import GroupOrder
 from app.schemas.moderation import AdminSummary
 from app.schemas.recorda import RecordaRead
 from app.schemas.report import (
+    RemovedContentTarget,
     ReportAuthor,
     ReportDetail,
     ReportGroup,
@@ -47,14 +48,16 @@ def get_detail(db: Session, *, target_type: str, target_id: UUID) -> ReportGroup
 
     if target_type == TARGET_RECORDA:
         recorda = recorda_repository.get_by_id_including_deleted(db, target_id)
-        author = user_repository.get_by_id_including_deleted(db, recorda.user_id)
-        # Reports retain their targets through non-cascading foreign keys.
-        # Administrative reads deliberately bypass viewer visibility rules.
-        target = ReportRecordaTarget(
-            **RecordaRead.model_validate(recorda).model_dump(),
-            deleted_at=recorda.deleted_at,
-            author=ReportAuthor.model_validate(author),
-        )
+        if recorda is None:
+            target = RemovedContentTarget(recorda_id=target_id)
+        else:
+            author = user_repository.get_by_id_including_deleted(db, recorda.user_id)
+            # Administrative reads deliberately bypass viewer visibility rules.
+            target = ReportRecordaTarget(
+                **RecordaRead.model_validate(recorda).model_dump(),
+                deleted_at=recorda.deleted_at,
+                author=ReportAuthor.model_validate(author),
+            )
     else:
         user = user_repository.get_by_id_including_deleted(db, target_id)
         target = ReportUserTarget.model_validate(user)

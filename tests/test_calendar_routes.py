@@ -132,6 +132,7 @@ def test_daily_route_returns_authenticated_users_memories(client, db):
                 "created_at": "2026-11-08T02:59:00Z",
                 "is_liked": False,
                 "likes_count": 0,
+                "mentioned_users": [],
                 "comments_count": 0,
                 "formatted_time": "23:59",
             }

@@ -70,7 +70,7 @@ def test_postgres_specific_indexes_and_seed(pg_db):
         GENRE_SEED
     )
     assert pg_db.scalar(text("SELECT version_num FROM alembic_version")) == (
-        "0010_recorda_song_genre_name"
+        "0011_content_deletion_mentions"
     )
 
 
@@ -119,8 +119,8 @@ def test_http_crud_and_authorization_on_postgres(pg_db):
             assert client.delete(path, headers=headers).status_code == 404
             assert client.get(prefix, headers=headers).json() == []
             pg_db.expunge_all()
-            assert pg_db.get(Recorda, uuid.UUID(recorda_id)).deleted_at is not None
-            assert pg_db.get(RecordaComment, comment_id).deleted_at is not None
+            assert pg_db.get(Recorda, uuid.UUID(recorda_id)) is None
+            assert pg_db.get(RecordaComment, comment_id) is None
             assert list(pg_db.scalars(select(RecordaLike))) == []
     finally:
         app.dependency_overrides.clear()

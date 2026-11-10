@@ -15,7 +15,7 @@ from tests.factories import add_comment, add_notification, add_recorda, add_user
 pytestmark = pytest.mark.postgres
 
 
-def test_recorda_crud_and_soft_delete(pg_db):
+def test_recorda_crud_and_physical_delete(pg_db):
     author = add_user(pg_db, "author")
     recorda = add_recorda(pg_db, author)
     recorda_id = recorda.recorda_id
@@ -27,12 +27,12 @@ def test_recorda_crud_and_soft_delete(pg_db):
     pg_db.expunge_all()
     stored = recorda_repository.get_by_id(pg_db, recorda_id)
     assert stored.description == "Descrição atualizada"
-    recorda_repository.soft_delete(pg_db, stored)
+    recorda_repository.delete(pg_db, stored)
     pg_db.expunge_all()
     assert recorda_repository.get_by_id(pg_db, recorda_id) is None
     assert recorda_repository.get_all(pg_db) == []
     preserved = recorda_repository.get_by_id_including_deleted(pg_db, recorda_id)
-    assert preserved.deleted_at is not None
+    assert preserved is None
 
 
 @pytest.mark.parametrize(
@@ -94,14 +94,14 @@ def test_fixture_starts_clean_even_after_commits(pg_db, attempt):
     assert pg_db.scalar(text("SELECT count(*) FROM app_user")) == 1
 
 
-def test_soft_delete_preserves_references(pg_db):
+def test_physical_delete_cascades_comments(pg_db):
     author = add_user(pg_db, "author")
     recorda = add_recorda(pg_db, author)
     comment = add_comment(pg_db, author, recorda)
     comment_id, recorda_id = comment.comment_id, recorda.recorda_id
-    recorda_repository.soft_delete(pg_db, recorda)
+    recorda_repository.delete(pg_db, recorda)
     pg_db.expunge_all()
-    assert pg_db.get(RecordaComment, comment_id).recorda_id == recorda_id
+    assert pg_db.get(RecordaComment, comment_id) is None
     assert recorda_repository.get_by_id(pg_db, recorda_id) is None
 
 

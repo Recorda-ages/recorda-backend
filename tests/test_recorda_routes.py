@@ -7,7 +7,7 @@ import pytest
 
 from app.core.http import get_deezer_client
 from app.main import app
-from app.models import RecordaComment, RecordaLike
+from app.models import Recorda, RecordaComment, RecordaLike
 from tests.factories import (
     DEEZER_ROUTES,
     add_follow,
@@ -267,14 +267,13 @@ def test_update_recorda_of_other_user_returns_403(client, db, common_user):
     assert resp.status_code == 403
 
 
-def test_delete_recorda_soft_deletes(client, db, auth, common_user):
+def test_delete_recorda_physically_deletes(client, db, auth, common_user):
     recorda = add_recorda(db, common_user)
 
     resp = client.delete(f"{PREFIX}/{recorda.recorda_id}", headers=auth)
 
     assert resp.status_code == 204
-    db.refresh(recorda)
-    assert recorda.deleted_at is not None
+    assert db.get(Recorda, recorda.recorda_id) is None
     again = client.get(f"{PREFIX}/{recorda.recorda_id}", headers=auth)
     assert again.status_code == 404
 
@@ -315,7 +314,7 @@ def create_payload(**overrides) -> dict:
     return payload
 
 
-def test_delete_recorda_removes_likes_and_soft_deletes_comments(
+def test_delete_recorda_removes_likes_and_deletes_comments(
     client, db, auth, common_user
 ):
     recorda = add_recorda(db, common_user)
@@ -326,13 +325,13 @@ def test_delete_recorda_removes_likes_and_soft_deletes_comments(
     )
     db.add(comment)
     db.commit()
+    comment_id = comment.comment_id
 
     resp = client.delete(f"{PREFIX}/{recorda.recorda_id}", headers=auth)
     assert resp.status_code == 204
 
     assert db.get(RecordaLike, (liker.user_id, recorda.recorda_id)) is None
-    db.refresh(comment)
-    assert comment.deleted_at is not None
+    assert db.get(RecordaComment, comment_id) is None
 
 
 @pytest.fixture

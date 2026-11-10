@@ -5,6 +5,7 @@ import uuid
 import httpx
 import pytest
 
+from app.models import Recorda
 from app.schemas.recorda import RecordaCreate, RecordaUpdate
 from app.services import recorda_service
 from tests.factories import (
@@ -92,10 +93,10 @@ def test_update_rejects_other_user(db, author):
         )
 
 
-def test_delete_soft_deletes_when_recorda_exists(db, author):
+def test_delete_physically_deletes_when_recorda_exists(db, author):
     recorda = add_recorda(db, author)
     assert recorda_service.delete(db, recorda.recorda_id, author) is True
-    assert recorda.deleted_at is not None
+    assert db.get(Recorda, recorda.recorda_id) is None
     assert recorda_service.get_by_id(db, recorda.recorda_id) is None
 
 

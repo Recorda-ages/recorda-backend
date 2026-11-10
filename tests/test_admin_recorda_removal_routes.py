@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.time import now_utc
-from app.models import ModerationAction, RecordaLike
+from app.models import ModerationAction, Recorda, RecordaComment, RecordaLike
 from app.models.moderation_action import ACTION_REMOVE_RECORDA
 from app.models.report import STATUS_DISMISSED, STATUS_OPEN, STATUS_RESOLVED
 from app.services import moderation_service
@@ -38,7 +38,7 @@ def moderation_actions(db) -> list[ModerationAction]:
     return list(db.scalars(select(ModerationAction)))
 
 
-def test_remove_recorda_soft_deletes_and_returns_summary(client, db, admin_user):
+def test_remove_recorda_physically_deletes_and_returns_summary(client, db, admin_user):
     recorda = add_recorda(db, add_user(db, "author"))
 
     response = remove(client, admin_user, recorda.recorda_id)
@@ -48,8 +48,7 @@ def test_remove_recorda_soft_deletes_and_returns_summary(client, db, admin_user)
     assert body["recorda_id"] == str(recorda.recorda_id)
     assert body["deleted_at"]
     assert body["resolved_reports"] == 0
-    db.refresh(recorda)
-    assert recorda.deleted_at is not None
+    assert db.get(Recorda, recorda.recorda_id) is None
 
 
 def test_remove_recorda_resolves_only_open_reports_of_that_recorda(
@@ -110,8 +109,7 @@ def test_remove_recorda_cleans_likes_and_comments_like_author_delete(
     assert remove(client, admin_user, recorda.recorda_id).status_code == 200
 
     assert db.get(RecordaLike, (fan.user_id, recorda.recorda_id)) is None
-    db.refresh(comment)
-    assert comment.deleted_at is not None
+    assert db.get(RecordaComment, comment.comment_id) is None
 
 
 def test_remove_recorda_twice_returns_409(client, db, admin_user):
