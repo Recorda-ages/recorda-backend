@@ -75,9 +75,7 @@ class ModerationAction(Base):
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("app_user.user_id"), nullable=True
     )
-    target_recorda_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("recorda.recorda_id"), nullable=True
-    )
+    target_recorda_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     details: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

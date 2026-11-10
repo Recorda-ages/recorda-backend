@@ -4,8 +4,10 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.time import now_utc
 from app.models.app_user import AppUser
 from app.models.moderation_action import ACTION_REMOVE_RECORDA, ModerationAction
 from app.models.report import STATUS_RESOLVED, TARGET_RECORDA
@@ -52,11 +54,20 @@ def remove_recorda(
     try:
         recorda = recorda_repository.get_by_id_including_deleted(db, recorda_id)
         if recorda is None:
+            if db.scalar(
+                select(ModerationAction.action_id)
+                .where(
+                    ModerationAction.target_recorda_id == recorda_id,
+                    ModerationAction.action_type == ACTION_REMOVE_RECORDA,
+                )
+                .limit(1)
+            ):
+                raise HTTPException(status_code=409, detail=ALREADY_REMOVED_MESSAGE)
             raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
         if recorda.deleted_at is not None:
             raise HTTPException(status_code=409, detail=ALREADY_REMOVED_MESSAGE)
 
-        recorda_service.soft_delete_with_cleanup(db, recorda, commit=False)
+        recorda_service.delete_with_cleanup(db, recorda, commit=False)
         resolved_reports = resolve_reports(
             db,
             target_type=TARGET_RECORDA,
@@ -73,7 +84,7 @@ def remove_recorda(
             details={"resolved_reports": resolved_reports},
         )
         # US 42 (Won't): notification_service.notify_content_removed(db, recorda)
-        removed_at = recorda.deleted_at
+        removed_at = now_utc()
         db.commit()
         return RemoveRecordaResponse(
             recorda_id=recorda_id,

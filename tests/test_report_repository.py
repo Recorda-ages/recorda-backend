@@ -1,7 +1,7 @@
 """Constraints da tabela report e funções do report_repository."""
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -134,16 +134,17 @@ def test_hard_delete_of_the_reported_user_is_blocked_by_reported_user_id(db: Ses
         db.commit()
 
 
-def test_hard_delete_of_the_reported_recorda_is_blocked_by_recorda_id(db: Session):
+def test_hard_delete_of_the_reported_recorda_preserves_recorda_id(db: Session):
     """Relação exercitada: report.recorda_id -> recorda.recorda_id."""
     reporter = add_user(db, "denunciante")
     author = add_user(db, "autor")
     recorda = add_recorda(db, author)
     add_report(db, reporter, recorda=recorda)
 
-    with pytest.raises(IntegrityError):
-        db.execute(delete(Recorda).where(Recorda.recorda_id == recorda.recorda_id))
-        db.commit()
+    target_id = recorda.recorda_id
+    db.execute(delete(Recorda).where(Recorda.recorda_id == target_id))
+    db.commit()
+    assert db.scalar(select(Report)).recorda_id == target_id
 
 
 # --------------------------------------------------------------------------- #

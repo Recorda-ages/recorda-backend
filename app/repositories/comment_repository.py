@@ -3,11 +3,11 @@
 from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete as delete_stmt
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.time import now_utc
-from app.models import AppUser, RecordaComment
+from app.models import AppUser, Notification, RecordaComment
 from app.repositories._query import only_active_users, only_live
 
 
@@ -42,16 +42,15 @@ def count_visible_for_recordas(
     return dict(db.execute(only_active_users(only_live(stmt, RecordaComment))).all())
 
 
-def soft_delete(db: Session, comment: RecordaComment) -> None:
-    comment.deleted_at = now_utc()
+def delete(db: Session, comment: RecordaComment) -> None:
+    db.execute(
+        delete_stmt(Notification).where(Notification.comment_id == comment.comment_id)
+    )
+    db.delete(comment)
     db.commit()
 
 
-def soft_delete_all_for_recorda(db: Session, recorda_id: UUID) -> None:
+def delete_all_for_recorda(db: Session, recorda_id: UUID) -> None:
     db.execute(
-        update(RecordaComment)
-        .where(
-            RecordaComment.recorda_id == recorda_id, RecordaComment.deleted_at.is_(None)
-        )
-        .values(deleted_at=now_utc())
+        delete_stmt(RecordaComment).where(RecordaComment.recorda_id == recorda_id)
     )

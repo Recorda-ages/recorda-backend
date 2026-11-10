@@ -100,8 +100,13 @@ class ReportDetail(BaseModel):
     resolved_at: datetime | None
 
 
+class RemovedContentTarget(BaseModel):
+    recorda_id: UUID
+    removed: Literal[True] = True
+
+
 class ReportGroupDetail(BaseModel):
     target_type: ReportTargetType
-    target: ReportRecordaTarget | ReportUserTarget
+    target: ReportRecordaTarget | ReportUserTarget | RemovedContentTarget
     reports: list[ReportDetail]
     actions: list[AuditEntry]

@@ -34,21 +34,41 @@ def get_track_genre_name(client: httpx.Client, track_id: str) -> str | None:
 
     Deezer track objects carry no genre; it lives on the track's album.
     """
+    if not track_id.isdecimal():
+        return None
     try:
         track = _get_json(client, f"/track/{track_id}")
-        album_id = (track.get("album") or {}).get("id")
-        if not album_id:
+        album_info = track.get("album")
+        album_id = album_info.get("id") if isinstance(album_info, dict) else None
+        if not str(album_id).isdigit() or int(album_id) <= 0:
             return None
         album = _get_json(client, f"/album/{album_id}")
     except (httpx.HTTPError, ValueError):
         return None
 
-    genres = (album.get("genres") or {}).get("data") or []
+    # ASVS 2.2.1: validate the external album/genre shape before storing it.
+    genre_data = album.get("genres")
+    genres = genre_data.get("data", []) if isinstance(genre_data, dict) else []
+    genres = (
+        [g for g in genres if isinstance(g, dict) and g.get("id") not in (0, -1, None)]
+        if isinstance(genres, list)
+        else []
+    )
     main_genre = next(
-        (g for g in genres if g.get("id") == album.get("genre_id")),
+        (g for g in genres if str(g.get("id")) == str(album.get("genre_id"))),
         genres[0] if genres else {},
     )
-    return main_genre.get("name") or None
+    name = main_genre.get("name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    genre_id = album.get("genre_id")
+    if str(genre_id).isdigit() and int(genre_id) > 0:
+        try:
+            name = _get_json(client, f"/genre/{int(genre_id)}").get("name")
+        except (httpx.HTTPError, ValueError):
+            return None
+        return name.strip() if isinstance(name, str) and name.strip() else None
+    return None
 
 
 def get_genres(client: httpx.Client) -> list[GenreRead]:

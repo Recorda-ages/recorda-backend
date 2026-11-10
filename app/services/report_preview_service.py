@@ -29,6 +29,11 @@ def load_target_previews(
                 recorda, author_username
             )
 
+    for recorda_id in recorda_ids:
+        previews.setdefault(
+            ("RECORDA", recorda_id), ReportTargetPreview(title="Conteúdo removido")
+        )
+
     if user_ids:
         for user in user_repository.list_by_ids(db, user_ids):
             previews[("USER", user.user_id)] = user_preview(user)

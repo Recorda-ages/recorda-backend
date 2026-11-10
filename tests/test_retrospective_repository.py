@@ -84,3 +84,19 @@ def test_counts_are_zero_without_recordas_in_period(db):
         )
         == 0
     )
+
+
+def test_count_comments_received_ignores_inactive_authors(db):
+    owner = add_user(db, "owner")
+    live = add_user(db, "live")
+    deleted = add_user(db, "deleted", deleted_at=at(2026, 11, 11))
+    suspended = add_user(db, "suspended", status="SUSPENDED")
+    recorda = add_recorda(db, owner, created_at=at(2026, 11, 10, 15))
+    for user in (live, deleted, suspended):
+        add_comment(db, user, recorda)
+    assert (
+        retrospective_repository.count_comments_received(
+            db, owner.user_id, *NOVEMBER_2026
+        )
+        == 1
+    )

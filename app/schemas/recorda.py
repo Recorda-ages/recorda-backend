@@ -19,6 +19,7 @@ class RecordaCreate(BaseModel):
     song_cover_url: str = ""
     song_preview_url: str | None = None
     song_genre_name: str | None = None
+    mentioned_user_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
 
 class RecordaUpdate(BaseModel):
@@ -78,6 +79,7 @@ class RecordaDetail(BaseModel):
     created_at: datetime  # Data de Publicação
     is_liked: bool
     likes_count: int
+    mentioned_users: list[RecordaAuthor] = Field(default_factory=list)
 
 
 class RecordaGridItem(BaseModel):

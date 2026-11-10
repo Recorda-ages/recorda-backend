@@ -80,12 +80,8 @@ class Report(Base):
     reported_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("app_user.user_id"), nullable=True
     )
-    recorda_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("recorda.recorda_id"), nullable=True
-    )
-    comment_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("recorda_comment.comment_id"), nullable=True
-    )
+    recorda_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    comment_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String, nullable=False, default=STATUS_OPEN, server_default=STATUS_OPEN

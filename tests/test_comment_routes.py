@@ -2,6 +2,7 @@
 
 import uuid
 
+from app.models import RecordaComment
 from tests.factories import add_comment, add_recorda, add_user, auth_headers
 
 PREFIX = "/api/v1/comments"
@@ -20,8 +21,7 @@ def test_comment_author_can_delete_immediately(client, db):
     response = client.delete(comment_url(comment), headers=auth_headers(comment_author))
 
     assert response.status_code == 204
-    db.refresh(comment)
-    assert comment.deleted_at is not None
+    assert db.get(RecordaComment, comment.comment_id) is None
 
     second_response = client.delete(
         comment_url(comment), headers=auth_headers(comment_author)

@@ -80,12 +80,12 @@ def delete(db: Session, comment_id: UUID, current_user: AppUser) -> bool:
         return False
 
     if comment.user_id == current_user.user_id:
-        comment_repository.soft_delete(db, comment)
+        comment_repository.delete(db, comment)
         return True
 
     recorda = recorda_repository.get_by_id(db, comment.recorda_id)
     if recorda is None or recorda.user_id != current_user.user_id:
         raise NotCommentOwnerError
 
-    comment_repository.soft_delete(db, comment)
+    comment_repository.delete(db, comment)
     return True

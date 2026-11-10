@@ -165,7 +165,7 @@ def get_retrospective_details(
             db, user_id, start, end
         ),
     )
-    return _build_details(query, is_preview, recordas, context)
+    return _build_details(query, is_preview, recordas, context, db)
 
 
 def _check_period_is_available(query: RetrospectivePeriodQuery, today: date) -> bool:
@@ -228,6 +228,7 @@ def _build_details(
     is_preview: bool,
     recordas: list[Recorda],
     context: MetricsContext,
+    db: Session,
 ) -> RetrospectiveDetailsResponse:
     engagement = _engine.calculate("engagement", context)
     return RetrospectiveDetailsResponse(
@@ -240,8 +241,9 @@ def _build_details(
         active_days=len(context.publication_days),
         top_artists=_engine.calculate("top_artists", context)[:TOP_ARTISTS_LIMIT],
         top_genres=_engine.calculate("top_genres", context),
-        # Sem fonte de marcações até a recorda_mention existir (issue #17).
-        tagged_users=[],
+        tagged_users=retrospective_repository.top_tagged_users(
+            db, [r.recorda_id for r in recordas]
+        ),
         engagement=RetrospectiveEngagement(
             likes_received=engagement.likes,
             comments_received=engagement.comments,
