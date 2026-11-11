@@ -3,12 +3,15 @@ import binascii
 from datetime import datetime
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session
 
 from app.core.music_preview import public_preview_url
+from app.models import AppUser, RecordaMention
+from app.repositories._query import only_active_users
 from app.repositories.feed_repository import apply_cursor, get_following_feed_query
-from app.schemas.feed import FeedAuthor, FeedItem, FeedPage
+from app.schemas.feed import FeedAuthor, FeedItem, FeedMention, FeedPage
 
 
 class InvalidCursorError(Exception):
@@ -37,6 +40,31 @@ def _to_feed_item(row: Row) -> FeedItem:
         is_liked=row.is_liked,
         created_at=recorda.created_at,
     )
+
+
+def attach_mentions(db: Session, items: list[FeedItem]) -> list[FeedItem]:
+    if not items:
+        return items
+    rows = db.execute(
+        only_active_users(
+            select(RecordaMention.recorda_id, AppUser)
+            .join(AppUser, RecordaMention.user_id == AppUser.user_id)
+            .where(RecordaMention.recorda_id.in_([item.recorda_id for item in items]))
+            .order_by(AppUser.username)
+        )
+    ).all()
+    mentions: dict[UUID, list[FeedMention]] = {}
+    for recorda_id, user in rows:
+        mentions.setdefault(recorda_id, []).append(
+            FeedMention(
+                user_id=user.user_id,
+                username=user.username,
+                avatar_url=user.profile_picture_url,
+            )
+        )
+    for item in items:
+        item.mentioned_users = mentions.get(item.recorda_id, [])
+    return items
 
 
 def _encode_cursor(created_at: datetime, recorda_id: UUID) -> str:
@@ -83,7 +111,7 @@ def get_following_feed(
     has_next_page = len(rows) > limit
     page_rows = rows[:limit]
 
-    items = [_to_feed_item(row) for row in page_rows]
+    items = attach_mentions(db, [_to_feed_item(row) for row in page_rows])
 
     next_cursor = None
     if has_next_page and items:

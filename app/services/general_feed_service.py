@@ -18,6 +18,7 @@ from app.services.feed_service import (
     _decode_cursor,
     _encode_cursor,
     _to_feed_item,
+    attach_mentions,
 )
 
 # InvalidCursorError é reexportado para a rota tratar o erro a partir deste módulo.
@@ -41,10 +42,10 @@ def _get_eligible_author_ids(db: Session, current_user_id: UUID) -> list[UUID]:
     return list(set(followed_ids) | set(discovery_ids) | {current_user_id})
 
 
-def _build_page(rows: list[Row], limit: int) -> FeedPage:
+def _build_page(db: Session, rows: list[Row], limit: int) -> FeedPage:
     # rows vem com até limit + 1 linhas: a extra só indica que existe próxima página.
     page_rows = rows[:limit]
-    items = [_to_feed_item(row) for row in page_rows]
+    items = attach_mentions(db, [_to_feed_item(row) for row in page_rows])
 
     next_cursor = None
     if len(rows) > limit and page_rows:
@@ -75,4 +76,4 @@ def get_general_feed(
     query = apply_cursor(query, cursor_created_at, cursor_recorda_id).limit(limit + 1)
     rows = db.execute(query).all()
 
-    return _build_page(rows, limit)
+    return _build_page(db, rows, limit)

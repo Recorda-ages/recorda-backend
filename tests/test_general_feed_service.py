@@ -212,7 +212,11 @@ class TestGetGeneralFeedFlow:
 
         feed_query.return_value.limit.assert_called_once_with(21)
 
-    def test_discards_extra_row_and_points_cursor_to_last_kept_row(self):
+    def test_discards_extra_row_and_points_cursor_to_last_kept_row(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.services.general_feed_service.attach_mentions",
+            lambda _db, items: items,
+        )
         rows = [_make_row(day) for day in (3, 2, 1)]
         mock_db = MagicMock()
         mock_db.execute.return_value.all.return_value = rows

@@ -65,6 +65,9 @@ def list_for_recipient(
             Sender.profile_picture_url,
             removal_reason.label("removal_reason"),
             Recorda.song_title.label("recorda_song_title"),
+            Recorda.media_url.label("recorda_media_url"),
+            Recorda.media_type.label("recorda_media_type"),
+            Recorda.song_cover_url.label("recorda_song_cover_url"),
         )
         .order_by(
             Notification.created_at.desc(),

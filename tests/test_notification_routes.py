@@ -243,3 +243,40 @@ def test_accepted_follow_is_listed_for_the_requester(
 
     assert item["type"] == "FOLLOW_ACCEPTED"
     assert item["follow_id"] == str(follow.follow_id)
+
+
+def test_includes_the_recorda_media_for_content_notifications(
+    client: TestClient, db: Session, common_user: AppUser, sender: AppUser
+):
+    recorda = add_recorda(
+        db,
+        common_user,
+        media_url="/api/v1/recordas/media/photo.jpg",
+        song_cover_url="https://e.deezer.com/cover.jpg",
+    )
+    add_notification(
+        db, common_user, "LIKE", sender=sender, recorda_id=recorda.recorda_id
+    )
+    add_notification(db, common_user, "NEW_FOLLOWER", sender=sender)
+
+    items = client.get(LIST_URL, headers=auth_headers(common_user)).json()["items"]
+    by_type = {item["type"]: item for item in items}
+
+    assert by_type["LIKE"]["recorda_media_url"] == "/api/v1/recordas/media/photo.jpg"
+    assert by_type["LIKE"]["recorda_media_type"] == "PHOTO"
+    assert by_type["LIKE"]["recorda_song_cover_url"] == "https://e.deezer.com/cover.jpg"
+    assert by_type["NEW_FOLLOWER"]["recorda_media_url"] is None
+    assert by_type["NEW_FOLLOWER"]["recorda_media_type"] is None
+
+
+def test_does_not_expose_the_media_of_removed_content(
+    client: TestClient, db: Session, common_user: AppUser
+):
+    recorda = add_recorda(db, common_user)
+    add_notification(db, common_user, "CONTENT_REMOVED", recorda_id=recorda.recorda_id)
+
+    items = client.get(LIST_URL, headers=auth_headers(common_user)).json()["items"]
+
+    assert items[0]["type"] == "CONTENT_REMOVED"
+    assert items[0]["recorda_media_url"] is None
+    assert items[0]["recorda_song_cover_url"] is None

@@ -13,6 +13,12 @@ class FeedAuthor(BaseModel):
     profile_picture_url: str | None = None
 
 
+class FeedMention(BaseModel):
+    user_id: UUID
+    username: str
+    avatar_url: str | None = None
+
+
 class FeedItem(BaseModel):
     # Um item do feed = uma Recorda + dados agregados (curtidas) +
     # dados do autor "achatados" junto (evita o client ter que
@@ -38,6 +44,8 @@ class FeedItem(BaseModel):
     is_liked: bool
 
     created_at: datetime
+
+    mentioned_users: list[FeedMention] = []
 
 
 class FeedPage(BaseModel):

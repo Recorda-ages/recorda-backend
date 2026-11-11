@@ -36,6 +36,9 @@ class NotificationItem(BaseModel):
     follow_id: UUID | None = None
     removal_reason: str | None = None
     recorda_song_title: str | None = None
+    recorda_media_url: str | None = None
+    recorda_media_type: Literal["PHOTO", "VIDEO"] | None = None
+    recorda_song_cover_url: str | None = None
 
 
 class NotificationPage(BaseModel):

@@ -158,6 +158,11 @@ def _to_item(row: Row) -> NotificationItem:
             profile_picture_url=row.profile_picture_url,
         )
 
+    shows_recorda = (
+        notification.type != TYPE_CONTENT_REMOVED
+        and notification.recorda_id is not None
+    )
+
     return NotificationItem(
         notification_id=notification.notification_id,
         type=notification.type,
@@ -175,4 +180,7 @@ def _to_item(row: Row) -> NotificationItem:
             if notification.type == TYPE_CONTENT_REMOVED
             else None
         ),
+        recorda_media_url=row.recorda_media_url if shows_recorda else None,
+        recorda_media_type=row.recorda_media_type if shows_recorda else None,
+        recorda_song_cover_url=row.recorda_song_cover_url if shows_recorda else None,
     )

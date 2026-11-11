@@ -101,6 +101,12 @@ class TestToFeedItem:
 
 
 class TestGetFollowingFeed:
+    @pytest.fixture(autouse=True)
+    def _skip_mentions_query(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.services.feed_service.attach_mentions", lambda _db, items: items
+        )
+
     def test_returns_all_rows_when_under_limit(self):
         mock_db = MagicMock()
         mock_db.execute.return_value.all.return_value = [_make_row() for _ in range(3)]
@@ -169,3 +175,71 @@ class TestGetFollowingFeed:
             executed_query.compile(compile_kwargs={"literal_binds": True})
         ).upper()
         assert "LIMIT 21" in compiled
+
+
+class TestAttachMentions:
+    def test_fills_mentioned_users_per_recorda(self, db):
+        from app.models import RecordaMention
+        from app.schemas.feed import FeedAuthor
+        from app.services.feed_service import attach_mentions
+        from tests.factories import add_recorda, add_user
+
+        author = add_user(db, "autor")
+        ana = add_user(db, "ana")
+        bia = add_user(db, "bia")
+        with_mentions = add_recorda(db, author)
+        without_mentions = add_recorda(db, author)
+        db.add(RecordaMention(recorda_id=with_mentions.recorda_id, user_id=bia.user_id))
+        db.add(RecordaMention(recorda_id=with_mentions.recorda_id, user_id=ana.user_id))
+        db.commit()
+
+        def item(recorda):
+            return FeedItem(
+                recorda_id=recorda.recorda_id,
+                author=FeedAuthor(user_id=author.user_id, username="autor"),
+                media_url=recorda.media_url,
+                media_type=recorda.media_type,
+                song_title=recorda.song_title,
+                song_artist_name=recorda.song_artist_name,
+                song_cover_url=recorda.song_cover_url,
+                likes_count=0,
+                is_liked=False,
+                created_at=recorda.created_at,
+            )
+
+        items = attach_mentions(db, [item(with_mentions), item(without_mentions)])
+
+        assert [m.username for m in items[0].mentioned_users] == ["ana", "bia"]
+        assert items[1].mentioned_users == []
+
+    def test_ignores_suspended_or_deleted_mentioned_users(self, db):
+        from app.core.time import now_utc
+        from app.models import RecordaMention
+        from app.schemas.feed import FeedAuthor
+        from app.services.feed_service import attach_mentions
+        from tests.factories import add_recorda, add_user
+
+        author = add_user(db, "autor")
+        gone = add_user(db, "gone", deleted_at=now_utc())
+        recorda = add_recorda(db, author)
+        db.add(RecordaMention(recorda_id=recorda.recorda_id, user_id=gone.user_id))
+        db.commit()
+        feed_item = FeedItem(
+            recorda_id=recorda.recorda_id,
+            author=FeedAuthor(user_id=author.user_id, username="autor"),
+            media_url=recorda.media_url,
+            media_type=recorda.media_type,
+            song_title=recorda.song_title,
+            song_artist_name=recorda.song_artist_name,
+            song_cover_url=recorda.song_cover_url,
+            likes_count=0,
+            is_liked=False,
+            created_at=recorda.created_at,
+        )
+
+        assert attach_mentions(db, [feed_item])[0].mentioned_users == []
+
+    def test_empty_list_is_returned_untouched(self, db):
+        from app.services.feed_service import attach_mentions
+
+        assert attach_mentions(db, []) == []
