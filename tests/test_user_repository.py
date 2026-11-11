@@ -81,3 +81,8 @@ def test_soft_delete_keeps_row(db):
     user_repository.soft_delete(db, alice)
     assert alice.deleted_at is not None
     assert db.get(AppUser, alice.user_id) is alice
+
+
+def test_get_by_username_ignores_case(db):
+    alice = add_user(db, "alice")
+    assert user_repository.get_by_username(db, "Alice") is alice

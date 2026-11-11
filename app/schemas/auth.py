@@ -26,7 +26,7 @@ def validate_username(value: str) -> str:
         raise ValueError("Informe seu usuário.")
     if re.search(r"\s", stripped):
         raise ValueError("O usuário não pode conter espaços.")
-    return stripped
+    return stripped.lower()
 
 
 def validate_email(value: str) -> str:
@@ -43,7 +43,7 @@ class LoginRequest(BaseModel):
     @field_validator("username")
     @classmethod
     def strip_username(cls, value: str) -> str:
-        return value.strip()
+        return value.strip().lower()
 
 
 class RegisterRequest(BaseModel):

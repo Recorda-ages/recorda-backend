@@ -1,7 +1,17 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, String, Uuid, false, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Index,
+    String,
+    Uuid,
+    false,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import now_utc
@@ -19,6 +29,7 @@ class AppUser(Base):
     __table_args__ = (
         CheckConstraint("role IN ('USER', 'ADMIN')", name="ck_app_user_role"),
         CheckConstraint("status IN ('ACTIVE', 'SUSPENDED')", name="ck_app_user_status"),
+        Index("uq_app_user_username_lower", func.lower(text("username")), unique=True),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(

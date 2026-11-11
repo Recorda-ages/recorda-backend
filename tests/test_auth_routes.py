@@ -370,3 +370,36 @@ def invalid_credentials_body():
             "details": {},
         }
     }
+
+
+def test_register_lowercases_username(client, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+
+    resp = client.post(
+        f"{PREFIX}/register", json=register_payload(username="  Gabriel ")
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["user"]["username"] == "gabriel"
+
+
+def test_register_rejects_username_differing_only_by_case(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    auth_user(db, username="gabriel")
+
+    resp = client.post(f"{PREFIX}/register", json=register_payload(username="Gabriel"))
+
+    assert resp.status_code == 409
+    fields = resp.json()["error"]["details"]["fields"]
+    assert {f["field"] for f in fields} >= {"username"}
+
+
+def test_login_ignores_username_case(client, db):
+    auth_user(db, username="gabriel", password="correct")
+
+    resp = client.post(
+        f"{PREFIX}/login", json={"username": "Gabriel", "password": "correct"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["user"]["username"] == "gabriel"

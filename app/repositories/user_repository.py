@@ -3,7 +3,7 @@
 from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.time import now_utc
@@ -49,7 +49,9 @@ def get_by_id_including_deleted(db: Session, user_id: UUID) -> AppUser | None:
 def get_by_username(
     db: Session, username: str, *, include_deleted: bool = False
 ) -> AppUser | None:
-    stmt = select(AppUser).where(AppUser.username == username)
+    stmt = select(AppUser).where(
+        func.lower(AppUser.username) == username.strip().lower()
+    )
     if not include_deleted:
         stmt = only_live(stmt, AppUser)
     return db.scalars(stmt).first()
