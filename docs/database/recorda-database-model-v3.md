@@ -2,9 +2,9 @@
 
 **Status:** Decisões fechadas pelo sênior com adaptações técnicas consolidadas no backend (alinhado ao [ADR 0001](../adr/0001-alinhamento-ao-diagrama-do-banco.md) e ao [ADR 0002](../adr/0002-trilha-de-auditoria-de-moderacao.md)), atualizadas pelas regras aprovadas pelo **AGES IV** em nov/2026 (ver Parte 0). Este documento substitui a v2.0 e serve de referência canônica para os models SQLAlchemy, schemas Pydantic e migrations Alembic.
 
-**Versão verificada.** `dev` @ **`86eb6bb`** (13/nov/2026), head Alembic **`0012_lowercase_usernames`**. Os fatos deste documento foram conferidos nas migrations, nos models, nos serviços e nos testes desse commit.
+**Versão verificada.** `dev` @ **`86eb6bb`** (13/nov/2026), head Alembic **`0012_lowercase_usernames`**. Os fatos deste documento foram conferidos nas migrations, nos models, nos serviços e nos testes desse commit. Reconferido em 14/nov/2026: `dev` e `origin/dev` continuam em `86eb6bb`, sem migrations novas.
 
-**Pendências deste documento.** Três pontos estão **aguardando aval dos seniores** (S1–S3, Parte 0) e dois achados técnicos estão em aberto (N1–N2, Parte 0). Os detalhes e os casos de teste ficam na wiki interna do time (`wiki/modelo-de-dados.md`, seção 11).
+**Pendências deste documento.** Três pontos dependem de **decisão dos seniores** (S1–S3, Parte 0). Em cada um, o contrato descreve o que o backend faz hoje e separa o que ainda está em revisão; até a decisão, vale o comportamento implementado. Dois achados técnicos seguem em aberto (N1–N2, Parte 0), sem mudança no código desde a revisão. Os detalhes e os casos de teste ficam na wiki interna do time (`wiki/modelo-de-dados.md`, seção 11).
 
 **Escopo.** Isto é um **MVP / POC**. O modelo cobre exatamente o que foi decidido — nada além. Tudo que não foi decidido está **fora do escopo** (ver Parte 7) e pode ser adicionado numa iteração futura sem quebrar o que existe: quase tudo seria coluna ou tabela nova, não migração destrutiva.
 
@@ -92,13 +92,17 @@ Implementado nas issues **#79** (`report`) e **#83** (`moderation_action`), com 
 - **T2 — `deleted_at` de `recorda` e `recorda_comment`:** colunas mantidas para ler e filtrar registros legados; não são mais preenchidas.
 - **T3 — Notificações:** as notificações do Recorda e de seus comentários são apagadas na mesma transação da exclusão; a exclusão de um comentário apaga as notificações com o seu `comment_id`.
 
-**Aguardando aval dos seniores**
+**Comportamento atual e decisões pendentes dos seniores (S1–S3)**
 
-- **S1 — Marcações.** *Observado em `86eb6bb`:* só é possível marcar quem o autor segue com follow `ACCEPTED` e que pode ver o Recorda (com autor privado, a pessoa também precisa ser seguidora aceita dele); limite de **20** marcações por Recorda; não há rota para se desmarcar; a FK `recorda_mention.user_id → app_user` **não tem `CASCADE`**. *Decisão que falta:* adotar esse comportamento no contrato — o que substituiria D20 (seguir mutuamente), D22 (~10 por Recorda), D23 (o marcado pode se desmarcar) e o `CASCADE` a partir de `app_user` descrito na tabela 7 — ou manter o contrato e abrir ajuste no backend.
-- **S2 — Denúncia de Recorda apagado pelo autor.** *Observado em `86eb6bb`:* as denúncias continuam `OPEN`, com o UUID preservado; o admin vê "Conteúdo removido", não consegue mais remover (404, ou 409 se já houver `REMOVE_RECORDA`) e só pode mudar o status manualmente. *Decisão que falta:* confirmar se a denúncia deve permanecer `OPEN` até a ação manual do admin.
-- **S3 — Legenda, preferências e `follow`.** *Observado em `86eb6bb`:* `PUT /recordas/{id}` permite ao autor alterar `description` (o princípio 4 diz "criado, não se edita"); as FKs `user_favorite_genre.user_id` e `user_favorite_artist.user_id` não têm `CASCADE` (o contrato descreve `CASCADE`); `follow` tem índices de coluna única `ix_follow_follower_id` e `ix_follow_following_id` (a Parte 5 prevê compostos com `status`). *Decisão que falta:* confirmar se o contrato deve refletir esses três pontos como estão na `dev`.
+Nos três pontos, o backend em `86eb6bb` já tem um comportamento definido, descrito nas tabelas da Parte 2. O que segue em revisão é se esse comportamento passa a ser regra aprovada do contrato.
 
-**Achados técnicos em aberto**
+| # | O que o backend faz hoje | Diverge do contrato anterior em | Segue em revisão |
+|---|---|---|---|
+| S1 — Marcações | Marcações só na criação (`POST /recordas`, `mentioned_user_ids`), até **20** por Recorda, ids repetidos deduplicados. Só se marca conta ativa, que não seja o autor, que o autor segue com follow `ACCEPTED` e que pode ver o Recorda — com autor privado, a pessoa também precisa ser seguidora aceita dele. Qualquer marcação inválida recusa a criação (422) sem gravar nada. Uma notificação `MENTION` por pessoa. Não há rota para se desmarcar. FK `recorda_mention.user_id → app_user` sem `ondelete`. | D20 (seguir **mutuamente**); D22 (máx. ~10); D23 (o marcado pode se desmarcar); `CASCADE` a partir de `app_user` na tabela 7. | Adotar o comportamento implementado como regra ou manter as decisões D20, D22 e D23 e o `CASCADE`, com ajuste no backend. |
+| S2 — Denúncias | Quando o **autor** apaga um Recorda denunciado (`recorda_service.delete` → `delete_with_cleanup`), `report` não é alterado: as denúncias permanecem `OPEN`, com o UUID preservado, até o admin mudar o status. O admin vê "Conteúdo removido" e não consegue mais remover o Recorda (404, ou 409 se já houver `REMOVE_RECORDA`). | O contrato anterior não definia esse caso. | Manter o encerramento manual pelo admin ou encerrar as denúncias automaticamente quando o autor apaga o Recorda. |
+| S3 — Legenda, preferências e `follow` | `PUT /recordas/{id}` permite ao autor alterar `description`. `user_favorite_genre.user_id` e `user_favorite_artist.user_id` são FKs sem `ondelete`. `follow` tem os índices de coluna única `ix_follow_follower_id` e `ix_follow_following_id`. | Princípio 4 ("criado, não se edita"); `CASCADE` a partir de `app_user` nas tabelas 4 e 5; índices compostos `(follower_id, status)` e `(following_id, status)` na Parte 5. | Adotar essas três diferenças como regra aprovada ou ajustar o backend ao contrato anterior. |
+
+**Achados técnicos em aberto** (sem mudança no código até 14/nov/2026)
 
 - **N1 — Acesso por link direto à mídia depois da exclusão do Recorda.** A exclusão física não apaga o arquivo em `media`. A regra de acesso (`app/services/media_service.py::ensure_published_media_visible`) serve a qualquer usuário autenticado um arquivo que não esteja ligado a nenhum Recorda, tratando-o como prévia de upload. *Cenário reproduzido:* com um Recorda de conta privada e um usuário autenticado que não segue essa conta, `GET /api/v1/recordas/media/{arquivo}` responde **404** enquanto o Recorda existe e **200** depois que o autor o apaga. O mesmo vale para a remoção pela moderação. *Resultado esperado:* depois da exclusão, quem não tinha acesso ao Recorda continua recebendo **404**. A forma de correção (apagar o arquivo, negar acesso a arquivo que já foi publicado ou outra) fica para o backend.
 - **N2 — Credenciais iniciais de administradores versionadas.** `scripts/seed_admins.py` cria ou atualiza contas administrativas com senhas iniciais fixas no código, publicado em `origin/dev`. O script não é chamado pelo entrypoint nem pelo deploy; só roda se executado manualmente. *A verificar:* se o script foi executado em algum ambiente e se essas contas ainda usam as senhas iniciais; nesse caso, rotacioná-las e passar as senhas iniciais para fora do repositório (por exemplo, variáveis de ambiente). Ao ser executado, o script também reativa e restaura essas contas (`status = ACTIVE`, `deleted_at = NULL`) e redefine as senhas.
@@ -119,8 +123,8 @@ Implementado nas issues **#79** (`report`) e **#83** (`moderation_action`), com 
 1. **Snapshot-first.** A busca e a seleção de música/artista acontecem no cliente, contra o Deezer, no momento da escolha. O que interessa (`deezer_track_id`, título, artista principal, capa, preview) é **copiado** para o banco a partir do payload do cliente. Não há refresh: o dado é estático (D9). **D10 revista (AGES IV, A5):** a criação de um Recorda **não** revalida a faixa no backend; o backend aceita o snapshot enviado e faz apenas a busca **opcional** do gênero no Deezer, cuja falha grava `song_genre_name = NULL` e **não impede** a publicação.
 2. **Privacidade vive no perfil, nunca no post.** `app_user.is_private` decide tudo. Não existe visibilidade por Recorda. Podem ver conteúdo: o próprio dono, qualquer usuário autenticado se a conta for pública, ou seguidor com `follow` `ACCEPTED` se for privada. Pedido `PENDING` não dá acesso. Marcação não concede acesso.
 3. **Soft delete só para usuários (AGES IV, A2).** Excluir conta = preencher `app_user.deleted_at`. Excluir Recorda ou comentário = `DELETE` físico, junto com curtidas, marcações, comentários do Recorda e notificações ligadas. A remoção pela moderação segue a mesma regra (D56 qualificada), registrada em `moderation_action` na mesma transação. `moderation_action` é append-only — sem `deleted_at` e imutável por trigger. Denúncias e auditoria guardam o UUID do conteúdo apagado.
-4. **Recorda é imutável.** Criado, não se edita (sem `updated_at`). Só se exclui (D27). Comentário idem. *Aguardando aval (S3):* o backend permite ao autor alterar `description`.
-5. **Regras "quantitativas" são da aplicação, não do banco.** Mínimos do onboarding (1 música, ≥3 gêneros, ≥3 artistas), máximos visuais (~5 gêneros, ~10 artistas), limite de marcações — tudo validado no app (D16, D17, D22). A API aceita até 50 gêneros e 50 artistas; o limite de marcações na API é 20 (*aguardando aval — S1*).
+4. **Recorda é imutável, exceto a legenda.** Sem `updated_at` (D27). Mídia, música e marcações não mudam depois da criação; hoje o autor pode alterar `description` (ADR 0001). Comentário não é editável. *Adoção da edição de legenda como regra: em revisão (S3).*
+5. **Regras "quantitativas" são da aplicação, não do banco.** Mínimos do onboarding (1 música, ≥3 gêneros, ≥3 artistas), máximos visuais (~5 gêneros, ~10 artistas), limite de marcações — tudo validado no app (D16, D17, D22). A API aceita até 50 gêneros e 50 artistas; o limite de marcações na API é 20 (*em revisão — S1*).
 6. **Streak de publicações sem ledger separado (US35).** Conta dias consecutivos com pelo menos um Recorda publicado **e existente** (D42/D43 supersedidas), usando `recorda.created_at` no fuso fixo `America/Sao_Paulo` (D41), sem tabela de ledger (`streak_activity`) ou cache (`user_streak`). Conta-se o dia da publicação, não a data da memória; vários Recordas no mesmo dia contam como um dia. A sequência permanece válida se a última publicação foi hoje ou ontem; um dia inteiro sem publicação a interrompe, e a próxima publicação inicia uma nova sequência de 1 dia (T-E6.US35.BE.01). **AGES IV (A1):** Recordas excluídos pelo autor ou removidos pela moderação ficam fora do cálculo, no perfil e nas métricas; se o único Recorda de um dia for excluído, o dia deixa de contar.
 7. **O que não está neste documento está fora do escopo do MVP** (Parte 7).
 
@@ -222,7 +226,7 @@ Gêneros favoritos escolhidos no onboarding (editáveis depois).
 
 **Chaves & constraints.** PK composta `(user_id, genre_id)` — impede duplicado.
 
-**Regras (MVP).** Mínimo 3 no onboarding; máximo visual ~5 (D16, D17). A D16 previa mínimo 1; os requisitos funcionais (US3, US31) e a validação do backend (`MINIMUM_SELECTION = 3`) adotam 3. Edição por `INSERT`/`DELETE` (D18): salvar as preferências substitui a seleção inteira. `CASCADE` a partir de `app_user` (*aguardando aval — S3: a FK física não tem `CASCADE`*).
+**Regras (MVP).** Mínimo 3 no onboarding; máximo visual ~5 (D16, D17). A D16 previa mínimo 1; os requisitos funcionais (US3, US31) e a validação do backend (`MINIMUM_SELECTION = 3`) adotam 3. Edição por `INSERT`/`DELETE` (D18): salvar as preferências substitui a seleção inteira. A FK `user_id → app_user` não tem `ondelete`; o contrato anterior previa `CASCADE`, sem efeito prático enquanto contas forem soft-deleted (*em revisão — S3*).
 
 ---
 
@@ -242,7 +246,7 @@ Artistas favoritos do onboarding, guardados como **snapshot do Deezer** — sem 
 
 **Regras (MVP)**
 - "Artistas em comum" no Explorar = mesmo `deezer_artist_id` entre usuários (D74).
-- Mínimo 3 no onboarding; máximo visual ~10 (D16, D17). Edição por `INSERT`/`DELETE` (D18), com substituição da seleção inteira. `CASCADE` a partir de `app_user` (*aguardando aval — S3*).
+- Mínimo 3 no onboarding; máximo visual ~10 (D16, D17). Edição por `INSERT`/`DELETE` (D18), com substituição da seleção inteira. A FK `user_id → app_user` não tem `ondelete`; o contrato anterior previa `CASCADE` (*em revisão — S3*).
 
 ---
 
@@ -269,7 +273,7 @@ A entidade central: uma memória musical. Amarra um usuário, uma mídia e o **s
 **Chaves & constraints.** PK `recorda_id`. FK `user_id → app_user(user_id)`.
 
 **Regras (MVP)**
-- **Imutável:** sem `updated_at` (D27). *Aguardando aval (S3):* o autor pode alterar `description` (ADR 0001).
+- **Imutável, exceto a legenda:** sem `updated_at` (D27). `PUT /recordas/{id}` permite ao autor alterar só `description` (ADR 0001); os demais campos não mudam. *Adoção como regra: em revisão (S3).*
 - Exatamente 1 mídia (`media_url` + `media_type` obrigatórios) (D28).
 - `deezer_track_id`, `song_title`, `song_artist_name` e `song_cover_url` são `NOT NULL` (a capa aceita `''`); `song_preview_url` e `song_genre_name` são anuláveis. Snapshot estático (D9). O backend não revalida a faixa (D10 revista — A5).
 - `song_genre_name` é preenchido na criação: se o cliente enviar um valor não vazio, ele é gravado como veio; senão, o backend busca o gênero do álbum da faixa no Deezer e, se o álbum trouxer só o `genre_id`, consulta `/genre/{id}`. Qualquer falha grava `NULL` sem impedir a publicação. O valor é o nome do gênero no Deezer, sem FK para `genre`. O script `scripts/backfill_song_genres.py` preenche depois os Recordas existentes com gênero nulo ou vazio, sem sobrescrever valores.
@@ -297,9 +301,10 @@ Marcação de amigos em um Recorda. Migration `0011_content_deletion_mentions`.
 - Marcação não concede acesso: só se marca quem já pode ver o Recorda.
 - Marcação de conta excluída ou suspensa some das leituras pelo filtro de conta ativa (D26).
 - Leitura: detalhe do Recorda e feeds (`mentioned_users`) e retrospectiva (até 5 mais marcados).
-- *Aguardando aval (S1):* o contrato previa D20 (só se marca quem **segue mutuamente** o autor), D22 (máx. ~10) e D23 (o marcado pode se desmarcar apagando a própria linha). Em `86eb6bb`: o autor precisa seguir a pessoa (`ACCEPTED`) e, se a conta dele for privada, a pessoa precisa segui-lo; limite de 20; sem rota para se desmarcar.
+- **Quem pode ser marcado (hoje):** conta ativa, que não seja o autor, que o autor segue com follow `ACCEPTED` e que pode ver o Recorda; com autor privado, a pessoa também precisa ser seguidora aceita dele. Até 20 por Recorda. Não há rota para se desmarcar.
+- *Divergência com o contrato anterior — em revisão (S1):* D20 previa follow **mútuo**, D22 previa máx. ~10 e D23 previa que o marcado pudesse se desmarcar apagando a própria linha.
 
-**Deleção.** `CASCADE` a partir de `recorda`. A partir de `app_user`, o contrato previa `CASCADE`; a FK física não tem (*aguardando aval — S1*), sem efeito prático enquanto contas forem soft-deleted.
+**Deleção.** `CASCADE` a partir de `recorda`. A FK `user_id → app_user` não tem `ondelete`; o contrato anterior previa `CASCADE` (*em revisão — S1*), sem efeito prático enquanto contas forem soft-deleted.
 
 ---
 
@@ -442,7 +447,7 @@ Os dois índices únicos impedem que o mesmo denunciante denuncie o mesmo alvo d
 - `description` aceita no máximo **500 caracteres**, validado na aplicação (D-04); sem restrição de tamanho no banco.
 - O admin resolve removendo o Recorda ou setando `status = 'SUSPENDED'` no `app_user`; a remoção marca as denúncias abertas do Recorda como `RESOLVED`. A ação é registrada em `moderation_action` **na mesma transação** (D55 supersedida — ADR 0002).
 - Alvo apagado: o detalhe administrativo devolve `{"recorda_id": "...", "removed": true}` e a listagem mostra "Conteúdo removido".
-- *Aguardando aval (S2):* quando o **autor** apaga um Recorda denunciado, as denúncias permanecem `OPEN` até o admin mudar o status manualmente.
+- **Recorda apagado pelo autor:** as denúncias permanecem `OPEN` até o admin mudar o status manualmente. *Manter esse fluxo ou encerrar automaticamente: em revisão (S2).*
 - `comment_id` é coluna reservada: não há rota de denúncia de comentário no MVP.
 
 **Deleção.** Uma denúncia nunca é apagada. `reporter_id` e `reported_user_id` são FKs sem `ondelete`; `recorda_id` e `comment_id` não têm FK (A4) e mantêm o UUID do conteúdo apagado.
@@ -655,7 +660,7 @@ Enxutos — nas FKs e nos campos de ordenação/busca:
 - `recorda (user_id, created_at DESC)` — linha do tempo do perfil, feed, streak de publicações, calendário, métricas e retrospectiva
 - `recorda (deezer_track_id)` — filtro "meus Recordas com essa música"
 - `recorda` — índice **GIN `pg_trgm`** em `song_artist_name` e em `song_title` — filtro por artista (`ILIKE`) e busca de conteúdo (D3, D75) *(definidos nas migrações Alembic)*
-- `follow (follower_id, status)` e `follow (following_id, status)` — feed e listas de seguidores *(aguardando aval — S3: implementados como `ix_follow_follower_id` e `ix_follow_following_id`, de coluna única)*
+- `follow` — `ix_follow_follower_id` (`0003`) e `ix_follow_following_id` (`0004`), de coluna única: feed e listas de seguidores. O contrato anterior previa `(follower_id, status)` e `(following_id, status)` *(em revisão — S3)*
 - `recorda_like (recorda_id)` e `recorda_comment (recorda_id)` — contagens e listagens
 - `recorda_mention (user_id)` — `ix_recorda_mention_user_id`, Recordas em que a pessoa foi marcada (a PK cobre `(recorda_id, user_id)`, não essa direção)
 - `notification (recipient_id, is_read, created_at DESC)` — central de notificações
@@ -726,7 +731,7 @@ E (uma transação): `recorda` (snapshot; `song_genre_name` do payload ou buscad
 
 **J · Excluir conta.** E: `app_user.deleted_at` (soft delete — único caso no modelo). Recordas, comentários e marcações da conta permanecem no banco mas somem das telas alheias pelo filtro de autor ativo (D34). Sem anonimização no MVP (D58).
 
-**K · Excluir Recorda (autor).** E (uma transação): `DELETE` das notificações do Recorda e de seus comentários, das curtidas, dos comentários e do Recorda; as marcações saem por `CASCADE` (A2/A3). Se era o único Recorda do dia, o dia deixa de contar no streak (A1). Denúncias e auditoria mantêm o UUID; o arquivo em `media` não é apagado (N1). Denúncias abertas permanecem `OPEN` (*aguardando aval — S2*).
+**K · Excluir Recorda (autor).** E (uma transação): `DELETE` das notificações do Recorda e de seus comentários, das curtidas, dos comentários e do Recorda; as marcações saem por `CASCADE` (A2/A3). Se era o único Recorda do dia, o dia deixa de contar no streak (A1). Denúncias e auditoria mantêm o UUID; o arquivo em `media` não é apagado (N1). Denúncias abertas permanecem `OPEN` até o admin mudar o status (*em revisão — S2*).
 
 **L · Excluir comentário.** E: `DELETE` do comentário e das notificações com o seu `comment_id`.
 
@@ -734,4 +739,4 @@ E (uma transação): `recorda` (snapshot; `song_genre_name` do payload ou buscad
 
 ---
 
-*Fim — v3.0, com as regras do AGES IV (nov/2026). Referência canônica do modelo de dados do Recorda, verificada em `dev` @ `86eb6bb` (head `0012_lowercase_usernames`). Pendências S1–S3 e N1–N2 descritas na Parte 0; detalhes e casos de teste na wiki interna (`wiki/modelo-de-dados.md`, seção 11).*
+*Fim — v3.0, com as regras do AGES IV (nov/2026). Referência canônica do modelo de dados do Recorda, verificada em `dev` @ `86eb6bb` (head `0012_lowercase_usernames`), reconferida em 14/nov/2026. Decisões pendentes S1–S3 e achados N1–N2 descritos na Parte 0; detalhes e casos de teste na wiki interna (`wiki/modelo-de-dados.md`, seção 11).*
