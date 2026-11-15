@@ -26,3 +26,10 @@ htmlcov/
 
 # Segredos de produção
 deploy/.env.prod
+
+# AI
+.agents/
+.claude/
+.codex/
+.cursor/
+.windsurf/
