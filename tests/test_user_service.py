@@ -1,65 +1,117 @@
 """Unit tests for the User service orchestration layer."""
 
-from app.models import User
-from app.schemas.user import UserCreate, UserUpdate
+import uuid
+
+import pytest
+from fastapi import HTTPException
+
+from app.core import security
+from app.core.config import settings
+from app.schemas.user import UserChangeRole, UserCreate, UserUpdate
 from app.services import user_service
+from tests.factories import add_user
 
 
 def test_get_all_returns_all_users(db):
-    db._users = {1: user(id=1, name="Alice"), 2: user(id=2, name="Bob")}
-    users = user_service.get_all(db)
-    assert len(users) == 2
+    add_user(db, "alice")
+    add_user(db, "bob")
+    assert len(user_service.get_all(db)) == 2
 
 
 def test_get_by_id_returns_user_when_exists(db):
-    db._users = {1: user(id=1, name="Alice")}
-    found = user_service.get_by_id(db, 1)
-    assert found is not None
-    assert found.id == 1
-    assert found.name == "Alice"
+    alice = add_user(db, "alice")
+    found = user_service.get_by_id(db, alice.user_id)
+    assert found is alice
 
 
 def test_get_by_id_returns_none_when_missing(db):
-    assert user_service.get_by_id(db, 999) is None
+    assert user_service.get_by_id(db, uuid.uuid4()) is None
 
 
-def test_create_persists_user(db):
-    created = user_service.create(db, UserCreate(name="Carol", email="c@example.com"))
-    assert created.id == 1
+def test_create_persists_user_and_hashes_password(db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    created = user_service.create(
+        db,
+        UserCreate(
+            name="Carol",
+            email="c@example.com",
+            username="carol",
+            password="secret",
+        ),
+    )
+    assert isinstance(created.user_id, uuid.UUID)
     assert created.name == "Carol"
     assert created.email == "c@example.com"
-    assert 1 in db._users
+    assert created.username == "carol"
+    assert created.role == "USER"
+    assert created.onboarding_completed is False
+    assert created.password_hash != "secret"
+    assert security.verify_password("secret", created.password_hash) is True
+    assert security.verify_password("wrong", created.password_hash) is False
+
+
+def test_create_rejects_username_of_soft_deleted_user(db, monkeypatch):
+    monkeypatch.setattr(settings, "password_hash_iterations", 1)
+    alice = add_user(db, "alice")
+    user_service.delete(db, alice.user_id)
+
+    with pytest.raises(user_service.UserAlreadyExistsError) as exc:
+        user_service.create(
+            db,
+            UserCreate(
+                name="A", email="alice@example.com", username="alice", password="x"
+            ),
+        )
+
+    assert {f["field"] for f in exc.value.fields} == {"username", "email"}
 
 
 def test_update_applies_fields_when_user_exists(db):
-    db._users = {1: user(id=1, name="Alice", email="a@example.com")}
-    updated = user_service.update(db, 1, UserUpdate(name="Alicia"))
-    assert updated is not None
+    alice = add_user(db, "alice", email="a@example.com")
+    updated = user_service.update(db, alice.user_id, UserUpdate(name="Alicia"))
     assert updated.name == "Alicia"
     assert updated.email == "a@example.com"
 
 
 def test_update_partial_only_changes_given_fields(db):
-    db._users = {1: user(id=1, name="Alice", email="a@example.com")}
-    updated = user_service.update(db, 1, UserUpdate(email="new@example.com"))
+    alice = add_user(db, "alice")
+    updated = user_service.update(
+        db, alice.user_id, UserUpdate(email="new@example.com")
+    )
     assert updated.email == "new@example.com"
     assert updated.name == "Alice"
 
 
 def test_update_returns_none_when_user_missing(db):
-    result = user_service.update(db, 999, UserUpdate(name="X"))
-    assert result is None
+    assert user_service.update(db, uuid.uuid4(), UserUpdate(name="X")) is None
 
 
-def test_delete_returns_true_when_user_exists(db):
-    db._users = {1: user(id=1, name="Alice")}
-    assert user_service.delete(db, 1) is True
-    assert 1 not in db._users
+def test_delete_soft_deletes_when_user_exists(db):
+    alice = add_user(db, "alice")
+    assert user_service.delete(db, alice.user_id) is True
+    assert alice.deleted_at is not None
+    assert user_service.get_by_id(db, alice.user_id) is None
 
 
-def test_delete_returns_false_when_user_missing(db):
-    assert user_service.delete(db, 999) is False
+def test_delete_raises_not_found_when_user_missing(db):
+    with pytest.raises(HTTPException) as exc:
+        user_service.delete(db, uuid.uuid4())
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "User not found"
 
 
-def user(id: int, name: str, email: str = "x@example.com") -> User:
-    return User(id=id, name=name, email=email)
+def test_delete_rejects_self_deletion(db):
+    admin = add_user(db, "admin", role="ADMIN")
+
+    with pytest.raises(HTTPException) as exc:
+        user_service.delete(db, admin.user_id, current_admin=admin)
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "You cannot delete yourself."
+
+
+def test_change_role_returns_none_when_user_missing(db):
+    assert (
+        user_service.change_role(db, uuid.uuid4(), UserChangeRole(role="ADMIN")) is None
+    )

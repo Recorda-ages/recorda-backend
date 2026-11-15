@@ -1,0 +1,53 @@
+Recorda backend #111 — API real / SQLite descartável / dados de exemplo
+
+POST /api/v1/users/{demo_owner}/follow
+HTTP 200
+{"follow_status":"solicitado"}
+POST /api/v1/users/{demo_owner}/follow
+HTTP 200
+{"follow_status":"solicitado"}
+GET /api/v1/users/me/settings (demo_owner)
+HTTP 200
+{"is_private":true,"language":"pt-BR"}
+GET /users/me/settings
+HTTP 200
+{"is_private":false,"language":"pt-BR"}
+GET /notifications
+HTTP 200
+{"items":[{"notification_id":"4b4b11fa-18a9-40e9-8477-391ccaf2c7f7","type":"FOLLOW_ACCEPTED","is_read":false,"created_at":"2026-10-22T01:21:48.474188","sender":{"user_id":"d336e46a-6ff7-463f-a829-572d8b552ba7","username":"demo_owner","profile_picture_url":null},"recorda_id":null,"comment_id":null,"follow_id":"0fba8d9c-9694-44a9-b28a-7174a609a8b2","removal_reason":null,"recorda_song_title":null}],"unread_count":1}
+GET /notifications
+HTTP 200
+{"items":[{"notification_id":"6e9fba9c-8fa0-4be3-b789-73b04cd13a81","type":"FOLLOW_ACCEPTED","is_read":false,"created_at":"2026-10-22T01:21:48.475511","sender":{"user_id":"d336e46a-6ff7-463f-a829-572d8b552ba7","username":"demo_owner","profile_picture_url":null},"recorda_id":null,"comment_id":null,"follow_id":"357439b3-581f-4856-91b1-3dda17ba34b0","removal_reason":null,"recorda_song_title":null}],"unread_count":1}
+GET /notifications
+HTTP 200
+{"items":[{"notification_id":"56d45ffd-b49d-4151-b724-b55bf377a88e","type":"NEW_FOLLOWER","is_read":false,"created_at":"2026-10-22T01:20:52.446312","sender":{"user_id":"e5af60db-5feb-4811-9d97-4ae959028061","username":"demo_sender2","profile_picture_url":null},"recorda_id":null,"comment_id":null,"follow_id":"357439b3-581f-4856-91b1-3dda17ba34b0","removal_reason":null,"recorda_song_title":null},{"notification_id":"3519b3b4-4d18-480c-b357-7078317bb494","type":"NEW_FOLLOWER","is_read":false,"created_at":"2026-10-22T01:20:52.374906","sender":{"user_id":"320ce60d-30a3-4b79-bb9a-5db73a8e60ab","username":"demo_sender1","profile_picture_url":null},"recorda_id":null,"comment_id":null,"follow_id":"0fba8d9c-9694-44a9-b28a-7174a609a8b2","removal_reason":null,"recorda_song_title":null}],"unread_count":2}
+PATCH /users/me/settings
+HTTP 200
+{"is_private":false,"language":"pt-BR","accepted_requests":0}
+PATCH /users/me/settings
+HTTP 200
+{"is_private":true,"language":"pt-BR","accepted_requests":0}
+GET /recordas/3e4fed2a-5260-425c-98f1-725fe6260ba0
+HTTP 200
+{"recorda_id":"3e4fed2a-5260-425c-98f1-725fe6260ba0","author":{"user_id":"d336e46a-6ff7-463f-a829-572d8b552ba7","username":"demo_owner","avatar_url":null},"media_url":"/api/v1/recordas/media/abc.jpg","media_type":"PHOTO","description":"By Disturbed","deezer_track_id":"3135556","song_title":"Song of Silence","song_artist_name":"Disturbed","song_cover_url":"https://e.deezer.com/cover.jpg","song_preview_url":null,"created_at":"2026-10-22T01:20:28.253167","is_liked":false,"likes_count":0}
+GET /users/d336e46a-6ff7-463f-a829-572d8b552ba7/followers
+HTTP 200
+[{"user_id":"320ce60d-30a3-4b79-bb9a-5db73a8e60ab","username":"demo_sender1","name":"Demo_Sender1","profile_picture_url":null},{"user_id":"e5af60db-5feb-4811-9d97-4ae959028061","username":"demo_sender2","name":"Demo_Sender2","profile_picture_url":null}]
+
+PATCH /api/v1/users/me/settings via Swagger (captura swagger-public-acceptance.jpg)
+Code	Details
+200
+Response body
+Download
+{
+  "is_private": false,
+  "language": "pt-BR",
+  "accepted_requests": 2
+}
+Response headers
+ access-control-allow-credentials: true
+ content-length: 61
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:21:47 GMT
+ server: uvicorn
+ vary: Origin

@@ -1,31 +1,133 @@
-"""Persistence and query access for the User entity."""
+"""Persistence and query access for the AppUser entity."""
 
+from collections.abc import Collection
+from uuid import UUID
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import User
+from app.core.time import now_utc
+from app.models import AppUser, Follow
+from app.models.app_user import ROLE_ADMIN
+from app.repositories._query import only_active_users, only_live
 
 
-def get_all(db: Session) -> list[User]:
-    return db.query(User).all()
+def get_all(db: Session) -> list[AppUser]:
+    return list(db.scalars(only_live(select(AppUser), AppUser)))
 
 
-def get_by_id(db: Session, user_id: int) -> User | None:
-    return db.get(User, user_id)
+def list_admins(db: Session) -> list[AppUser]:
+    """Todas as contas ADMIN, inclusive excluídas: o log de auditoria ainda as cita."""
+    stmt = select(AppUser).where(AppUser.role == ROLE_ADMIN).order_by(AppUser.username)
+    return list(db.scalars(stmt))
 
 
-def create(db: Session, user: User) -> User:
+def get_by_id(
+    db: Session, user_id: UUID, *, for_update: bool = False
+) -> AppUser | None:
+    stmt = select(AppUser).where(AppUser.user_id == user_id)
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    return db.scalars(only_live(stmt, AppUser)).first()
+
+
+def get_for_update(db: Session, user_id: UUID) -> AppUser:
+    stmt = (
+        select(AppUser)
+        .where(AppUser.user_id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return db.scalars(stmt).one()
+
+
+def get_by_id_including_deleted(db: Session, user_id: UUID) -> AppUser | None:
+    """Administrative lookup, including suspended and deleted accounts."""
+    return db.scalar(select(AppUser).where(AppUser.user_id == user_id))
+
+
+def get_by_username(
+    db: Session, username: str, *, include_deleted: bool = False
+) -> AppUser | None:
+    stmt = select(AppUser).where(
+        func.lower(AppUser.username) == username.strip().lower()
+    )
+    if not include_deleted:
+        stmt = only_live(stmt, AppUser)
+    return db.scalars(stmt).first()
+
+
+def get_by_email(
+    db: Session, email: str, *, include_deleted: bool = False
+) -> AppUser | None:
+    stmt = select(AppUser).where(AppUser.email == email)
+    if not include_deleted:
+        stmt = only_live(stmt, AppUser)
+    return db.scalars(stmt).first()
+
+
+def create(db: Session, user: AppUser) -> AppUser:
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
 
 
-def save(db: Session, user: User) -> User:
+def save(db: Session, user: AppUser) -> AppUser:
     db.commit()
     db.refresh(user)
     return user
 
 
-def delete(db: Session, user: User) -> None:
-    db.delete(user)
+def soft_delete(db: Session, user: AppUser) -> None:
+    user.deleted_at = now_utc()
     db.commit()
+
+
+def search_by_username(
+    db: Session, query: str, current_user_id: UUID, limit: int = 20
+) -> list[tuple[AppUser, str | None]]:
+
+    pattern = f"%{query}%"
+    stmt = (
+        select(AppUser, Follow.status)
+        .outerjoin(
+            Follow,
+            (Follow.follower_id == current_user_id)
+            & (Follow.following_id == AppUser.user_id),
+        )
+        .where(AppUser.username.ilike(pattern))
+        .where(AppUser.user_id != current_user_id)
+        .order_by(AppUser.username)
+        .limit(limit)
+    )
+    stmt = only_active_users(stmt)
+    return list(db.execute(stmt).all())
+
+
+def list_suggestion_candidates(db: Session, current_user_id: UUID) -> list[AppUser]:
+    """Usuários elegíveis a virar sugestão para `current_user_id`.
+
+    Aplica os três critérios de exclusão da US27 de uma vez: fora o próprio
+    usuário e fora quem já tem qualquer vínculo de follow partindo dele —
+    uma linha ACCEPTED cobre "já seguido" e uma PENDING cobre "solicitação
+    pendente". Apagados também ficam de fora, como manda o D34 do modelo de
+    dados, que cita sugestões explicitamente, e suspensos (issue #90).
+
+    Não aplica limite: o corte acontece depois do ranqueamento por afinidade,
+    que é feito em memória.
+    """
+    already_linked = select(Follow.following_id).where(
+        Follow.follower_id == current_user_id
+    )
+    stmt = (
+        select(AppUser)
+        .where(AppUser.user_id != current_user_id)
+        .where(AppUser.user_id.not_in(already_linked))
+    )
+    return list(db.scalars(only_active_users(stmt)))
+
+
+def list_by_ids(db: Session, user_ids: Collection[UUID]) -> list[AppUser]:
+    """Inclui contas excluídas: a moderação precisa ver o que foi denunciado."""
+    return list(db.scalars(select(AppUser).where(AppUser.user_id.in_(user_ids))))

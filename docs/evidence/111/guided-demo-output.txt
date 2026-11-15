@@ -1,0 +1,630 @@
+Demonstração via Swagger — 21/10/2026 (America/Sao_Paulo)
+Execução pelo Codex a pedido do usuário, com o usuário acompanhando a demonstração e autorizando o registro no PR.
+API real / SQLite descartável / contas de exemplo.
+
+Teste 1: PATCH pública
+Code	Details
+200
+Response body
+Download
+{
+  "is_private": false,
+  "language": "pt-BR",
+  "accepted_requests": 0
+}
+Response headers
+ access-control-allow-credentials: true
+ content-length: 61
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:54:18 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 1: GET confirma pública e idioma preservado
+Code	Details
+200
+Response body
+Download
+{
+  "is_private": false,
+  "language": "pt-BR"
+}
+Response headers
+ content-length: 39
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:54:30 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 1: PATCH privada
+Code	Details
+200
+Response body
+Download
+{
+  "is_private": true,
+  "language": "pt-BR",
+  "accepted_requests": 0
+}
+Response headers
+ access-control-allow-credentials: true
+ content-length: 60
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:54:38 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 1: GET confirma privada
+Code	Details
+200
+Response body
+Download
+{
+  "is_private": true,
+  "language": "pt-BR"
+}
+Response headers
+ content-length: 38
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:54:44 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 2: POST pedido demo_sender1
+Code	Details
+200
+Response body
+Download
+{
+  "follow_status": "solicitado"
+}
+Response headers
+ access-control-allow-credentials: true
+ content-length: 30
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:55:36 GMT
+ server: uvicorn
+ vary: Origin
+
+Preparação teste 2: DELETE vínculo demo_sender2
+Code	Details
+200
+Response body
+Download
+{
+  "follow_status": "nenhuma"
+}
+Response headers
+ access-control-allow-credentials: true
+ content-length: 27
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:56:17 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 2: POST pedido demo_sender2
+Code	Details
+200
+Response body
+Download
+{
+  "follow_status": "solicitado"
+}
+Response headers
+ access-control-allow-credentials: true
+ content-length: 30
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:56:25 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 2: dono recebe duas FOLLOW_REQUEST
+Code	Details
+200
+Response body
+Download
+{
+  "items": [
+    {
+      "notification_id": "a70cba29-3341-4b9c-a438-9cf6ab8364ea",
+      "type": "FOLLOW_REQUEST",
+      "is_read": false,
+      "created_at": "2026-10-22T01:56:26.144421",
+      "sender": {
+        "user_id": "e5af60db-5feb-4811-9d97-4ae959028061",
+        "username": "demo_sender2",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "b2cd53a9-9809-4901-b18b-c3237988b839",
+      "removal_reason": null,
+      "recorda_song_title": null
+    },
+    {
+      "notification_id": "8c2d5a29-2531-4d2e-a1d6-c4224b6365d0",
+      "type": "FOLLOW_REQUEST",
+      "is_read": false,
+      "created_at": "2026-10-22T01:55:37.704581",
+      "sender": {
+        "user_id": "320ce60d-30a3-4b79-bb9a-5db73a8e60ab",
+        "username": "demo_sender1",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "ebf725c1-2079-4c06-b259-6de1e12abf68",
+      "removal_reason": null,
+      "recorda_song_title": null
+    },
+    {
+      "notification_id": "56d45ffd-b49d-4151-b724-b55bf377a88e",
+      "type": "NEW_FOLLOWER",
+      "is_read": false,
+      "created_at": "2026-10-22T01:20:52.446312",
+      "sender": {
+        "user_id": "e5af60db-5feb-4811-9d97-4ae959028061",
+        "username": "demo_sender2",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "357439b3-581f-4856-91b1-3dda17ba34b0",
+      "removal_reason": null,
+      "recorda_song_title": null
+    },
+    {
+      "notification_id": "3519b3b4-4d18-480c-b357-7078317bb494",
+      "type": "NEW_FOLLOWER",
+      "is_read": false,
+      "created_at": "2026-10-22T01:20:52.374906",
+      "sender": {
+        "user_id": "320ce60d-30a3-4b79-bb9a-5db73a8e60ab",
+        "username": "demo_sender1",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "0fba8d9c-9694-44a9-b28a-7174a609a8b2",
+      "removal_reason": null,
+      "recorda_song_title": null
+    }
+  ],
+  "unread_count": 4
+}
+Response headers
+ content-length: 1580
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:56:35 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 2: PATCH pública aceita dois pedidos
+Code	Details
+200
+Response body
+Download
+{
+  "is_private": false,
+  "language": "pt-BR",
+  "accepted_requests": 2
+}
+Response headers
+ access-control-allow-credentials: true
+ content-length: 61
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:56:47 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 2: notificações convertidas preservam follow_id
+Code	Details
+200
+Response body
+Download
+{
+  "items": [
+    {
+      "notification_id": "a70cba29-3341-4b9c-a438-9cf6ab8364ea",
+      "type": "NEW_FOLLOWER",
+      "is_read": false,
+      "created_at": "2026-10-22T01:56:26.144421",
+      "sender": {
+        "user_id": "e5af60db-5feb-4811-9d97-4ae959028061",
+        "username": "demo_sender2",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "b2cd53a9-9809-4901-b18b-c3237988b839",
+      "removal_reason": null,
+      "recorda_song_title": null
+    },
+    {
+      "notification_id": "8c2d5a29-2531-4d2e-a1d6-c4224b6365d0",
+      "type": "NEW_FOLLOWER",
+      "is_read": false,
+      "created_at": "2026-10-22T01:55:37.704581",
+      "sender": {
+        "user_id": "320ce60d-30a3-4b79-bb9a-5db73a8e60ab",
+        "username": "demo_sender1",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "ebf725c1-2079-4c06-b259-6de1e12abf68",
+      "removal_reason": null,
+      "recorda_song_title": null
+    },
+    {
+      "notification_id": "56d45ffd-b49d-4151-b724-b55bf377a88e",
+      "type": "NEW_FOLLOWER",
+      "is_read": false,
+      "created_at": "2026-10-22T01:20:52.446312",
+      "sender": {
+        "user_id": "e5af60db-5feb-4811-9d97-4ae959028061",
+        "username": "demo_sender2",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "357439b3-581f-4856-91b1-3dda17ba34b0",
+      "removal_reason": null,
+      "recorda_song_title": null
+    },
+    {
+      "notification_id": "3519b3b4-4d18-480c-b357-7078317bb494",
+      "type": "NEW_FOLLOWER",
+      "is_read": false,
+      "created_at": "2026-10-22T01:20:52.374906",
+      "sender": {
+        "user_id": "320ce60d-30a3-4b79-bb9a-5db73a8e60ab",
+        "username": "demo_sender1",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "0fba8d9c-9694-44a9-b28a-7174a609a8b2",
+      "removal_reason": null,
+      "recorda_song_title": null
+    }
+  ],
+  "unread_count": 4
+}
+Response headers
+ content-length: 1576
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:56:56 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 2: repetição PATCH não aceita novamente
+Code	Details
+200
+Response body
+Download
+{
+  "is_private": false,
+  "language": "pt-BR",
+  "accepted_requests": 0
+}
+Response headers
+ access-control-allow-credentials: true
+ content-length: 61
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:57:18 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 2: FOLLOW_ACCEPTED para demo_sender1
+Code	Details
+200
+Response body
+Download
+{
+  "items": [
+    {
+      "notification_id": "ecbdeb91-8fc8-4705-a3a6-eb82460c668c",
+      "type": "FOLLOW_ACCEPTED",
+      "is_read": false,
+      "created_at": "2026-10-22T01:56:47.697202",
+      "sender": {
+        "user_id": "d336e46a-6ff7-463f-a829-572d8b552ba7",
+        "username": "demo_owner",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "ebf725c1-2079-4c06-b259-6de1e12abf68",
+      "removal_reason": null,
+      "recorda_song_title": null
+    },
+    {
+      "notification_id": "4b4b11fa-18a9-40e9-8477-391ccaf2c7f7",
+      "type": "FOLLOW_ACCEPTED",
+      "is_read": false,
+      "created_at": "2026-10-22T01:21:48.474188",
+      "sender": {
+        "user_id": "d336e46a-6ff7-463f-a829-572d8b552ba7",
+        "username": "demo_owner",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "0fba8d9c-9694-44a9-b28a-7174a609a8b2",
+      "removal_reason": null,
+      "recorda_song_title": null
+    }
+  ],
+  "unread_count": 2
+}
+Response headers
+ content-length: 804
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:57:29 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 2: FOLLOW_ACCEPTED para demo_sender2
+Code	Details
+200
+Response body
+Download
+{
+  "items": [
+    {
+      "notification_id": "8e3512c7-eb2b-4fd4-85b3-1a0368195fbc",
+      "type": "FOLLOW_ACCEPTED",
+      "is_read": false,
+      "created_at": "2026-10-22T01:56:47.696192",
+      "sender": {
+        "user_id": "d336e46a-6ff7-463f-a829-572d8b552ba7",
+        "username": "demo_owner",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "b2cd53a9-9809-4901-b18b-c3237988b839",
+      "removal_reason": null,
+      "recorda_song_title": null
+    },
+    {
+      "notification_id": "6e9fba9c-8fa0-4be3-b789-73b04cd13a81",
+      "type": "FOLLOW_ACCEPTED",
+      "is_read": false,
+      "created_at": "2026-10-22T01:21:48.475511",
+      "sender": {
+        "user_id": "d336e46a-6ff7-463f-a829-572d8b552ba7",
+        "username": "demo_owner",
+        "profile_picture_url": null
+      },
+      "recorda_id": null,
+      "comment_id": null,
+      "follow_id": "357439b3-581f-4856-91b1-3dda17ba34b0",
+      "removal_reason": null,
+      "recorda_song_title": null
+    }
+  ],
+  "unread_count": 2
+}
+Response headers
+ content-length: 804
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:57:39 GMT
+ server: uvicorn
+ vary: Origin
+
+Preparação teste 3: demo_sender2 deixa de seguir
+Code	Details
+200
+Response body
+Download
+{
+  "follow_status": "nenhuma"
+}
+Response headers
+ access-control-allow-credentials: true
+ content-length: 27
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:57:39 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 3: visitante vê detalhe antigo com conta pública
+Code	Details
+200
+Response body
+Download
+{
+  "recorda_id": "3e4fed2a-5260-425c-98f1-725fe6260ba0",
+  "author": {
+    "user_id": "d336e46a-6ff7-463f-a829-572d8b552ba7",
+    "username": "demo_owner",
+    "avatar_url": null
+  },
+  "media_url": "/api/v1/recordas/media/abc.jpg",
+  "media_type": "PHOTO",
+  "description": "By Disturbed",
+  "deezer_track_id": "3135556",
+  "song_title": "Song of Silence",
+  "song_artist_name": "Disturbed",
+  "song_cover_url": "https://e.deezer.com/cover.jpg",
+  "song_preview_url": null,
+  "created_at": "2026-10-22T01:20:28.253167",
+  "is_liked": false,
+  "likes_count": 0
+}
+Response headers
+ content-length: 489
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:58:04 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 3: visitante vê grid público com Recorda antiga
+Code	Details
+200
+Response body
+Download
+[
+  {
+    "recorda_id": "3e4fed2a-5260-425c-98f1-725fe6260ba0",
+    "user_id": "d336e46a-6ff7-463f-a829-572d8b552ba7",
+    "media_url": "/api/v1/recordas/media/abc.jpg",
+    "media_type": "PHOTO",
+    "description": "By Disturbed",
+    "deezer_track_id": "3135556",
+    "song_title": "Song of Silence",
+    "song_artist_name": "Disturbed",
+    "song_cover_url": "https://e.deezer.com/cover.jpg",
+    "song_preview_url": null,
+    "created_at": "2026-10-22T01:20:28.253167"
+  }
+]
+Response headers
+ content-length: 405
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:58:06 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 3: visitante vê lista pública de seguidores
+Code	Details
+200
+Response body
+Download
+[
+  {
+    "user_id": "320ce60d-30a3-4b79-bb9a-5db73a8e60ab",
+    "username": "demo_sender1",
+    "name": "Demo_Sender1",
+    "profile_picture_url": null
+  }
+]
+Response headers
+ content-length: 127
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:58:18 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 3: dono torna privada
+Code	Details
+200
+Response body
+Download
+{
+  "is_private": true,
+  "language": "pt-BR",
+  "accepted_requests": 0
+}
+Response headers
+ access-control-allow-credentials: true
+ content-length: 60
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:58:20 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 3: visitante sem vínculo recebe 403 no detalhe
+Code	Details
+403
+Undocumented
+
+
+Error: Forbidden
+
+Response body
+Download
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Você não tem permissão para ver esta Recorda",
+    "details": {}
+  }
+}
+Response headers
+ content-length: 103
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:58:32 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 3: visitante recebe 403 no grid privado
+Code	Details
+403
+Undocumented
+
+
+Error: Forbidden
+
+Response body
+Download
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Esta conta é privada.",
+    "details": {}
+  }
+}
+Response headers
+ content-length: 78
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:58:40 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 3: visitante recebe 403 na lista privada
+Code	Details
+403
+Undocumented
+
+
+Error: Forbidden
+
+Response body
+Download
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Esta conta é privada.",
+    "details": {}
+  }
+}
+Response headers
+ content-length: 78
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:58:41 GMT
+ server: uvicorn
+ vary: Origin
+
+Teste 3: seguidor aceito mantém detalhe privado 200
+Code	Details
+200
+Response body
+Download
+{
+  "recorda_id": "3e4fed2a-5260-425c-98f1-725fe6260ba0",
+  "author": {
+    "user_id": "d336e46a-6ff7-463f-a829-572d8b552ba7",
+    "username": "demo_owner",
+    "avatar_url": null
+  },
+  "media_url": "/api/v1/recordas/media/abc.jpg",
+  "media_type": "PHOTO",
+  "description": "By Disturbed",
+  "deezer_track_id": "3135556",
+  "song_title": "Song of Silence",
+  "song_artist_name": "Disturbed",
+  "song_cover_url": "https://e.deezer.com/cover.jpg",
+  "song_preview_url": null,
+  "created_at": "2026-10-22T01:20:28.253167",
+  "is_liked": false,
+  "likes_count": 0
+}
+Response headers
+ content-length: 489
+ content-type: application/json
+ date: Thu,22 Oct 2026 01:58:42 GMT
+ server: uvicorn
+ vary: Origin

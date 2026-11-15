@@ -89,6 +89,8 @@ postgresql+psycopg://USUARIO:SENHA@db:5432/BANCO
 
 O arquivo `.env` contém configurações locais e credenciais e não deve ser versionado.
 
+> **Sessões:** defina `ACCESS_TOKEN_SECRET_KEY` com um valor fixo. Sem ele, a API gera um segredo aleatório a cada inicialização e todos os tokens emitidos antes deixam de ser válidos (o app volta para o Login a cada restart). Em produção a variável é obrigatória.
+
 ### 3. Construa e inicie os containers
 
 Na raiz do projeto, execute:
@@ -192,6 +194,97 @@ docker compose down -v
 
 Use `down -v` somente quando realmente quiser recriar o banco do zero.
 
+## Seed do banco de dados
+
+O projeto inclui um script de seed que popula o banco com dados iniciais para desenvolvimento:
+
+- 18 gêneros musicais canônicos;
+- 10 perfis completos, com fotos, música preferida e preferências musicais;
+- 20 Recordas com fotos/vídeos públicos e snapshots reais do Deezer;
+- 29 relações de follow, incluindo relações aceitas e pendentes;
+- 40 likes e 20 comentários;
+- uma conta administrativa separada (`role=ADMIN`).
+
+O seed é idempotente: executar o comando novamente não duplica os fixtures. Ele
+restaura usuários, Recordas e comentários determinísticos que sofreram exclusão
+lógica, reconcilia status, roles, senhas e timestamps dos fixtures com o estado
+esperado para usuários e interações sociais, e preenche campos ausentes dos perfis
+de demonstração sem substituir valores já preenchidos. Dados que não pertencem ao
+seed são preservados. A atualização também aplica exclusão lógica somente aos dois
+Recordas com `exemplo.com` gerados pela versão anterior. O comando recusa execução
+quando `ENVIRONMENT=production`.
+
+### Executar com Docker (recomendado)
+
+Com os containers em execução, rode o seed dentro do container da API:
+
+```bash
+docker compose exec api python scripts/seed.py
+```
+
+Se os containers ainda não estiverem rodando, suba o ambiente primeiro:
+
+```bash
+docker compose up -d --build
+docker compose exec api python scripts/seed.py
+```
+
+O entrypoint do container aplica `alembic upgrade head` ao iniciar. Caso a API não
+esteja em execução, aplique as migrations antes de chamar o script.
+
+### Executar sem Docker
+
+Com o ambiente virtual ativado e o PostgreSQL acessível:
+
+```bash
+alembic upgrade head
+python scripts/seed.py
+```
+
+O mesmo script pode apontar para um projeto Supabase de desenvolvimento por meio de
+`DATABASE_URL`:
+
+```bash
+DATABASE_URL='postgresql+psycopg://USUARIO:SENHA@HOST:5432/postgres?sslmode=require' \
+python scripts/seed.py
+```
+
+Nunca configure uma URL de produção para executar o seed.
+
+### Contas criadas pelo seed
+
+| Conta | Username | Senha padrão | Role |
+| ----- | -------- | ------------ | ---- |
+| Administrador | `admin` | `Admin@1234` | `ADMIN` |
+| Demonstração principal | `gabriel` | `User@1234` | `USER` |
+| Perfis adicionais | `ana`, `lucas`, `marina`, `pedro`, `julia`, `rafael`, `camila`, `bruno`, `beatriz` | `User@1234` | `USER` |
+
+O login da API utiliza `username`, não e-mail. As senhas podem ser alteradas no
+`.env` antes de subir os containers:
+
+```ini
+SEED_USER_PASSWORD=uma-senha-local
+SEED_ADMIN_PASSWORD=outra-senha-local
+```
+
+As senhas configuradas são reconciliadas em todas as execuções do seed. Portanto,
+alterar uma dessas variáveis e executar o comando novamente atualiza a senha das
+respectivas contas de demonstração e administrativa.
+
+Depois do login, o frontend pode consumir os fixtures diretamente pelos endpoints:
+
+- `GET /api/v1/feed/following` para o feed;
+- `GET /api/v1/users/me/profile` para o cabeçalho do perfil autenticado (foto,
+música favorita, privacidade e contadores).
+
+Para recriar o banco do zero e rodar o seed novamente:
+
+```bash
+docker compose down -v
+docker compose up -d --build
+docker compose exec api python scripts/seed.py
+```
+
 ## Desenvolvimento sem Docker
 
 O ambiente Docker é o procedimento recomendado para o projeto. Ainda assim, o backend pode ser executado diretamente com Python caso seja necessário.
@@ -258,7 +351,38 @@ O backend utiliza:
 - SQLAlchemy como ORM;
 - `psycopg` como driver PostgreSQL.
 
-A tabela `users` é criada automaticamente pela aplicação ao iniciar, portanto o projeto atualmente não depende de um processo separado de migrations para criar essa tabela.
+O schema segue o diagrama oficial do banco (wiki AGES → *Banco de Dados*) e é versionado com **Alembic** (`alembic/versions/`). A aplicação não cria tabelas ao iniciar: no Docker, o `docker-entrypoint.sh` roda `alembic upgrade head` antes de subir o uvicorn.
+
+Sem Docker, aplique as migrations manualmente:
+
+```bash
+alembic upgrade head
+```
+
+Para alterar o schema, edite os models em `app/models/` e gere uma nova migration:
+
+```bash
+alembic revision --autogenerate -m "descricao da mudanca"
+# revise o arquivo gerado em alembic/versions/ antes de commitar
+alembic upgrade head
+alembic check   # deve responder "No new upgrade operations detected."
+```
+
+Nunca edite uma migration que já foi mergeada na `dev` — crie outra.
+
+Os índices GIN `pg_trgm` só existem nas migrations (não são portáveis para o SQLite dos testes) e são ignorados pelo `--autogenerate`.
+
+### Banco criado antes do Alembic
+
+Se o seu volume `pgdata` foi criado pela versão antiga (que usava `create_all`), marque-o como estando no baseline antes do primeiro upgrade:
+
+```bash
+docker compose up -d db
+docker compose run --rm api alembic stamp 0001_baseline
+docker compose run --rm api alembic upgrade head
+```
+
+A migration `0002_diagram_schema` **recria** `users`, `recordas` e `music_preferences` como `app_user`, `recorda`, `genre`, `user_favorite_genre` e `user_favorite_artist`: os dados dessas tabelas não são preservados. Todos os tokens emitidos antes dela deixam de valer, então é preciso cadastrar a conta de novo. Se preferir, `docker compose down -v` recria o banco do zero.
 
 ## CORS
 
@@ -289,20 +413,64 @@ Se a porta do frontend mudar, atualize `CORS_ORIGINS` no `.env` antes de iniciar
 
 | Método | Caminho | Descrição |
 | ------ | ------- | --------- |
-| GET | `/api/v1/users` | Lista todos os usuários |
-| POST | `/api/v1/users` | Cria um usuário (`name`, `email`) |
-| GET | `/api/v1/users/{id}` | Retorna um usuário (404 se não existir) |
-| PUT | `/api/v1/users/{id}` | Atualiza um usuário |
-| DELETE | `/api/v1/users/{id}` | Remove um usuário |
+| GET | `/api/v1/users` | Lista os usuários ativos (admin) |
+| POST | `/api/v1/users` | Cria um usuário (`name`, `email`, `username`, `password`) |
+| GET | `/api/v1/users/{user_id}` | Retorna um usuário (UUID; 404 se não existir) |
+| PUT | `/api/v1/users/{user_id}` | Atualiza um usuário (admin) |
+| DELETE | `/api/v1/users/{user_id}` | Soft delete: preenche `deleted_at` (admin) |
+| PATCH | `/api/v1/users/{user_id}/role` | Altera o papel (`USER` / `ADMIN`) (admin) |
+| POST | `/api/v1/users/me/music-preferences` | Salva gêneros, artistas e música favorita do onboarding |
+| GET | `/api/v1/users/me/settings` | Retorna privacidade e idioma da conta autenticada |
+| PATCH | `/api/v1/users/me/settings` | Altera privacidade e/ou idioma; ao tornar pública, aceita pedidos pendentes atomicamente e retorna `accepted_requests` |
+| GET | `/api/v1/users/{user_id}/recordas` | Grid do perfil, respeitando privacidade e exclusão lógica |
+| GET | `/api/v1/users/{user_id}/music-preferences` | Artistas e gêneros favoritos de outro usuário (chips do perfil). 404 se não existir ou estiver suspenso; 403 em conta privada sem seguidor aceito |
+| GET | `/api/v1/users/{user_id}/metrics?bundle=profile&period=...` | Métricas do perfil de outro usuário, com o mesmo contrato e a mesma privacidade de `/users/me/metrics` |
+| GET | `/api/v1/users/me/calendar?year=YYYY&month=MM` | Calendário mensal de memórias: dias com Recordas vivas agrupados pelo dia local em `America/Sao_Paulo`, com `count` e a miniatura (`thumbnail_url`, `media_type`, `first_recorda_id`) da primeira Recorda do dia. `year` 1970..2100 e `month` 1..12; fora disso: 422 |
+| GET | `/api/v1/users/me/calendar/day?date=YYYY-MM-DD` | Memórias do dia local em `America/Sao_Paulo`, ordenadas por publicação, com mídia, música, prévia pelo proxy, horário local, curtidas e contagem de comentários visíveis. Retorna `date`, `total_count`, `memories`, `previous_date_with_memories` e `next_date_with_memories` (datas locais ou `null`, inclusive em dia vazio). Exige Bearer; data ausente/inválida, timestamp e número de época: 422. O último dia representável (`9999-12-31`) não é aceito porque não possui dia seguinte para calcular o intervalo. |
 
-Exemplo de criação de um usuário (`POST /users`):
+Detalhes do contrato, validações e evidências: [configurações e privacidade (#111)](docs/issue-111.md).
 
-```json
-{
-  "name": "Maria Silva",
-  "email": "maria@example.com"
-}
+Os identificadores são UUID (`user_id`, `recorda_id`). Nenhuma rota apaga linhas fisicamente: exclusões preenchem `deleted_at`, e as consultas ignoram registros excluídos.
+
+### Administração
+
+Toda rota de moderação vive em `/api/v1/admin` (`app/api/routes/admin.py`). A guarda de administrador fica no router, então qualquer rota nova ali já exige `role=ADMIN`: sem token responde 401 e com usuário comum responde 403. O `tests/test_admin_protection.py` percorre todas as rotas do prefixo e falha se alguma ficar aberta.
+
+| Método | Caminho | Descrição |
+| ------ | ------- | --------- |
+| GET | `/api/v1/admin/reports` | Fila de moderação: denúncias agrupadas por alvo, com contagem. Filtros `target_type` (`RECORDA`/`USER`), `status` (padrão `OPEN`), `order` (`desc`/`asc` por `last_reported_at`), `limit` (1..50) e `offset` |
+| GET | `/api/v1/admin/reports/{target_type}/{target_id}` | Detalhe de alvo denunciado (`RECORDA`/`USER`, UUID): `target`, todas as `reports` e `actions`, da mais recente à mais antiga. Inclui conteúdo privado, removido e contas suspensas/excluídas, com `deleted_at` visível. Sem denúncias: 404; parâmetros inválidos: 422. |
+
+> **Dívida técnica:** as rotas administrativas legadas de `/api/v1/users` (`GET`/`PUT`/`DELETE /users/{user_id}` e `PATCH /users/{user_id}/role`) continuam em `app/api/routes/user.py`, com a guarda aplicada rota a rota. Elas não são usadas pelo painel mobile e devem migrar para `/api/v1/admin` ou ser removidas.
+
+## Testes
+
+O projeto utiliza **pytest** com cobertura mínima de 80% configurada no `pyproject.toml`.
+
+### Instalação das dependências de teste
+
+Ative o ambiente virtual e instale o grupo `test`:
+
+```bash
+pip install -e ".[test]"
 ```
+
+### Executar todos os testes
+
+```bash
+pytest
+```
+
+Esse comando já inclui o relatório de cobertura no terminal e gera o arquivo `coverage-unit.xml`, conforme configurado em `pyproject.toml`.
+
+### Executar com relatório de cobertura detalhado
+
+```bash
+pytest --cov=app --cov-report=term-missing
+```
+
+Exibe quais linhas de cada módulo não foram cobertas pelos testes.
+
 
 ## Estrutura do projeto
 
@@ -366,3 +534,37 @@ recorda-backend/
 | `docker compose logs -f` | Acompanha os logs |
 | `docker compose logs -f api` | Acompanha somente os logs da API |
 | `docker compose build --no-cache` | Reconstrói as imagens sem utilizar cache |
+
+### Testes automatizados de banco de dados
+
+Instale as dependências com `pip install -e ".[dev,test]"` e mantenha o
+Docker em execução. Para rodar a suíte completa, incluindo PostgreSQL:
+
+```bash
+ENVIRONMENT=test DEBUG=false pytest
+```
+
+Os testes marcados com `postgres` iniciam automaticamente um container
+`postgres:16-alpine` por execução. A fixture `pg_db` recria o schema `public`
+e aplica `alembic upgrade head` antes de cada teste, limpando o schema ao
+final. Isso isola inclusive testes com `commit` e alterações de migrations.
+O container é encerrado ao terminar a sessão. A primeira execução precisa
+baixar as imagens do PostgreSQL e do auxiliar de limpeza do Testcontainers.
+Falhas no Docker ou nas migrations são erros de teste, sem skip automático.
+
+```bash
+# Apenas integração com PostgreSQL (sem cobrar cobertura global nesta seleção)
+pytest -m postgres --no-cov
+
+# Apenas a suíte que não depende do Docker
+pytest -m 'not postgres'
+```
+
+Para usar um PostgreSQL externo, configure `TEST_DATABASE_URL` com o driver
+`postgresql+psycopg` e `TEST_DATABASE_ALLOW_DESTRUCTIVE=1`. **O schema public
+será apagado antes e depois de cada teste.** Use exclusivamente um banco
+descartável cujo nome comece com `test_` ou termine em `_test`, diferente do
+banco da aplicação; a guarda recusa destinos fora dessas condições.
+
+O CI executa a suíte completa com Docker e exige pelo menos 80% de cobertura
+sobre `app`, publicando o relatório `coverage-unit.xml` como artefato.

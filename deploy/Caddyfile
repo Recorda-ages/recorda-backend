@@ -1,0 +1,6 @@
+# O Caddy obtém e renova o certificado HTTPS (Let's Encrypt) sozinho.
+# API_DOMAIN vem do deploy/.env.prod e precisa apontar para o Elastic IP da EC2.
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy api:8000
+}

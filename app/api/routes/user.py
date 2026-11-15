@@ -1,34 +1,266 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+"""Business logic and orchestration for the AppUser entity."""
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_admin_user, get_current_user
+from app.api.routes.auth import user_already_exists_error
 from app.db.session import get_db
-from app.schemas.user import UserCreate, UserRead, UserUpdate
-from app.services import user_service
+from app.models import AppUser
+from app.schemas.follow_mutation import FollowMutationResult
+from app.schemas.music_preference import (
+    MusicPreferencesCreate,
+    MusicPreferencesRead,
+)
+from app.schemas.profile import ProfileMusicTastes, ProfileRead
+from app.schemas.recorda import RecordaGridPage
+from app.schemas.settings import UserSettings, UserSettingsResult, UserSettingsUpdate
+from app.schemas.user import (
+    AccountRead,
+    AccountUpdate,
+    AccountUpdateResponse,
+    AvatarRead,
+    SuggestedUser,
+    UserChangeRole,
+    UserCreate,
+    UserRead,
+    UserSearchResult,
+    UserUpdate,
+)
+from app.services import (
+    auth_service,
+    follow_service,
+    media_service,
+    music_preference_service,
+    profile_grid_service,
+    profile_service,
+    settings_service,
+    user_service,
+)
+from app.services.feed_service import InvalidCursorError
+from app.services.profile_service import PrivateAccountError, UserNotFoundError
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+_current_admin = Depends(get_current_admin_user)
 
-@router.get("", response_model=list[UserRead])
+
+@router.get("/me/settings", response_model=UserSettings)
+def get_own_settings(
+    current_user: AppUser = Depends(get_current_user),
+) -> UserSettings:
+    """Retorna a privacidade e o idioma salvo da conta autenticada."""
+    return UserSettings.model_validate(current_user)
+
+
+@router.patch("/me/settings", response_model=UserSettingsResult)
+def update_own_settings(
+    payload: UserSettingsUpdate,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserSettingsResult:
+    """Altera a privacidade; tornar pública aceita os pedidos pendentes."""
+    return settings_service.update(db, current_user, payload)
+
+
+@router.get("/search", response_model=list[UserSearchResult])
+def search_users(
+    q: str = Query(default=""),
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[UserSearchResult]:
+    return user_service.search_by_username(db, q, current_user.user_id)
+
+
+@router.get("/suggestions", response_model=list[SuggestedUser])
+def suggest_users(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[SuggestedUser]:
+    return user_service.suggest_by_affinity(db, current_user.user_id)
+
+
+@router.get("/me/profile", response_model=ProfileRead)
+def get_own_profile(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProfileRead:
+    try:
+        return profile_service.build_profile(db, current_user, current_user)
+    except profile_service.IncompleteProfileError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Complete o onboarding musical para acessar o perfil.",
+        ) from exc
+
+
+@router.get("/me/account", response_model=AccountRead)
+def get_own_account(
+    current_user: AppUser = Depends(get_current_user),
+) -> AppUser:
+    return current_user
+
+
+@router.patch("/me/account", response_model=AccountUpdateResponse)
+def update_own_account(
+    payload: AccountUpdate,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AccountUpdateResponse:
+    try:
+        user = user_service.update_own_account(db, current_user, payload)
+    except user_service.UserAlreadyExistsError as exc:
+        raise user_already_exists_error(exc) from exc
+    return AccountUpdateResponse(
+        access_token=auth_service.issue_access_token(user),
+        account=AccountRead.model_validate(user),
+    )
+
+
+@router.put("/me/avatar", response_model=AvatarRead)
+async def update_own_avatar(
+    file: UploadFile,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AppUser:
+    content = await file.read()
+
+    try:
+        return user_service.update_avatar(db, current_user, content)
+    except media_service.UnsupportedMediaTypeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Envie uma imagem JPG, PNG ou WEBP.",
+        ) from exc
+    except media_service.MediaTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="Arquivo excede o tamanho máximo permitido",
+        ) from exc
+    except media_service.MediaStorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Falha ao armazenar a mídia. Tente novamente.",
+        ) from exc
+
+
+@router.delete("/me/avatar", status_code=status.HTTP_204_NO_CONTENT)
+def remove_own_avatar(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    user_service.remove_avatar(db, current_user)
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_own_account(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    user_service.delete_own_account(db, current_user)
+
+
+@router.get("", response_model=list[UserRead], dependencies=[_current_admin])
 def list_users(db: Session = Depends(get_db)) -> list[UserRead]:
     return user_service.get_all(db)
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserRead:
-    return user_service.create(db, payload)
+    try:
+        return user_service.create(db, payload)
+    except user_service.UserAlreadyExistsError as exc:
+        raise user_already_exists_error(exc) from exc
 
 
-@router.get("/{user_id}", response_model=UserRead)
-def get_user(user_id: int, db: Session = Depends(get_db)) -> UserRead:
+@router.get("/{user_id}/recordas", response_model=RecordaGridPage)
+def get_profile_grid(
+    user_id: UUID,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=24, ge=1, le=60),
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RecordaGridPage:
+    """Grade paginada de Recordas do perfil, respeitando privacidade."""
+    try:
+        return profile_grid_service.get_profile_grid(
+            db=db,
+            owner_id=user_id,
+            viewer=current_user,
+            cursor=cursor,
+            limit=limit,
+        )
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    except PrivateAccountError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta conta é privada.",
+        ) from exc
+    except InvalidCursorError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cursor inválido.",
+        ) from exc
+
+
+@router.get("/{user_id}/profile", response_model=ProfileRead)
+def get_user_profile(
+    user_id: UUID,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProfileRead:
+    """Cabeçalho do perfil de outro usuário, respeitando a privacidade (D-06)."""
+    try:
+        owner = profile_service.get_active_owner(db, user_id)
+        return profile_service.build_profile(db, owner, current_user)
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    except profile_service.IncompleteProfileError as exc:
+        if user_id == current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Complete o onboarding musical para acessar o perfil.",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+
+
+@router.get("/me/music-preferences", response_model=MusicPreferencesRead)
+def list_music_preferences(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MusicPreferencesRead:
+    try:
+        return music_preference_service.read_music_preference(db, current_user)
+    except music_preference_service.IncompleteMusicPreferencesError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Complete o onboarding musical para acessar o perfil.",
+        ) from exc
+
+
+@router.get("/{user_id}", response_model=UserRead, dependencies=[_current_admin])
+def get_user(user_id: UUID, db: Session = Depends(get_db)) -> UserRead:
     user = user_service.get_by_id(db, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
 
-@router.put("/{user_id}", response_model=UserRead)
+@router.put("/{user_id}", response_model=UserRead, dependencies=[_current_admin])
 def update_user(
-    user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
+    user_id: UUID, payload: UserUpdate, db: Session = Depends(get_db)
 ) -> UserRead:
     user = user_service.update(db, user_id, payload)
     if user is None:
@@ -36,7 +268,96 @@ def update_user(
     return user
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(user_id: int, db: Session = Depends(get_db)) -> None:
-    if not user_service.delete(db, user_id):
+@router.delete(
+    "/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[_current_admin]
+)
+def delete_user(
+    user_id: UUID,
+    current_admin: AppUser = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+) -> None:
+    user_service.delete(db, user_id, current_admin)
+
+
+@router.patch(
+    "/{user_id}/role",
+    response_model=UserRead,
+    dependencies=[_current_admin],
+)
+def change_role(
+    user_id: UUID,
+    payload: UserChangeRole,
+    db: Session = Depends(get_db),
+) -> UserRead:
+    user = user_service.change_role(db, user_id, payload)
+    if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@router.get("/{user_id}/music-preferences", response_model=ProfileMusicTastes)
+def get_user_music_tastes(
+    user_id: UUID,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProfileMusicTastes:
+    """Artistas e gêneros favoritos de outro usuário, respeitando a privacidade (D-06)."""
+    try:
+        return profile_service.get_music_tastes(db, user_id, current_user)
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    except PrivateAccountError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta conta é privada.",
+        ) from exc
+
+
+@router.post("/me/music-preferences", response_model=MusicPreferencesRead)
+def save_music_preferences(
+    payload: MusicPreferencesCreate,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MusicPreferencesRead:
+    """Persist the onboarding selection of the authenticated user."""
+    return music_preference_service.replace_for_user(db, current_user, payload)
+
+
+@router.post("/{user_id}/follow", response_model=FollowMutationResult)
+def create_follow(
+    user_id: UUID,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FollowMutationResult:
+    try:
+        follow_status = follow_service.create_follow(db, user_id, current_user)
+    except follow_service.SelfFollowError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Você não pode seguir a si mesmo.",
+        ) from exc
+    except follow_service.DuplicateFollowError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Você já segue ou solicitou seguir este usuário.",
+        ) from exc
+    except follow_service.FollowTargetNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        ) from exc
+    return FollowMutationResult(follow_status=follow_status)
+
+
+@router.delete("/{user_id}/follow", response_model=FollowMutationResult)
+def delete_follow(
+    user_id: UUID,
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FollowMutationResult:
+    if not follow_service.delete_follow(db, user_id, current_user):
+        raise HTTPException(status_code=404, detail="Você não segue este usuário.")
+    return FollowMutationResult(follow_status="nenhuma")

@@ -1,0 +1,129 @@
+> python -m pytest tests/test_settings_routes.py --no-cov -q
+........................                                                 [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\Usuario\Documents\GitHub\Recorda\recorda-backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+24 passed, 1 warning in 0.86s
+Process exit code: 0
+> python -m coverage report --include=app/schemas/settings.py,app/services/settings_service.py,app/services/follow_request_service.py
+Name                                     Stmts   Miss  Cover   Missing
+----------------------------------------------------------------------
+app\schemas\settings.py                      9      0   100%
+app\services\follow_request_service.py      46      0   100%
+app\services\settings_service.py            21      0   100%
+----------------------------------------------------------------------
+TOTAL                                       76      0   100%
+Process exit code: 0
+> python -m coverage report --include=app/*
+Name                                               Stmts   Miss  Cover   Missing
+--------------------------------------------------------------------------------
+app\__init__.py                                        0      0   100%
+app\api\__init__.py                                    0      0   100%
+app\api\deps.py                                       23      0   100%
+app\api\routes\__init__.py                             0      0   100%
+app\api\routes\admin.py                               54      0   100%
+app\api\routes\auth.py                                37      0   100%
+app\api\routes\comment.py                             18      0   100%
+app\api\routes\feed.py                                14      0   100%
+app\api\routes\follow.py                              32      0   100%
+app\api\routes\follow_request.py                      33      0   100%
+app\api\routes\general_feed.py                        14      0   100%
+app\api\routes\health.py                               6      0   100%
+app\api\routes\media.py                               63      0   100%
+app\api\routes\music.py                               34      0   100%
+app\api\routes\notification.py                        14      0   100%
+app\api\routes\recorda.py                             81      0   100%
+app\api\routes\report.py                              35      0   100%
+app\api\routes\user.py                                93      1    99%   93
+app\core\__init__.py                                   0      0   100%
+app\core\config.py                                    17      0   100%
+app\core\errors.py                                    55      4    93%   97, 107-108, 139
+app\core\http.py                                       8      4    50%   11-18
+app\core\media_validation.py                          13      0   100%
+app\core\mp4_faststart.py                             57      5    91%   29-32, 34
+app\core\music_preview.py                              6      0   100%
+app\core\security.py                                  83      9    89%   40, 89, 94-95, 98, 102, 118-120
+app\core\time.py                                      11      0   100%
+app\db\__init__.py                                     2      0   100%
+app\db\development_seed.py                           202      5    98%   107-109, 399, 430
+app\db\development_seed_data.py                       47      0   100%
+app\db\seed_data.py                                    4      0   100%
+app\db\session.py                                     12      0   100%
+app\main.py                                           32      0   100%
+app\models\__init__.py                                13      0   100%
+app\models\app_user.py                                35      0   100%
+app\models\follow.py                                  17      0   100%
+app\models\genre.py                                   10      0   100%
+app\models\media.py                                    9      0   100%
+app\models\moderation_action.py                       25      0   100%
+app\models\notification.py                            27      0   100%
+app\models\recorda.py                                 23      0   100%
+app\models\recorda_comment.py                         15      0   100%
+app\models\recorda_like.py                            12      0   100%
+app\models\report.py                                  26      0   100%
+app\models\user_favorite_artist.py                    14      0   100%
+app\models\user_favorite_genre.py                     12      0   100%
+app\repositories\__init__.py                           0      0   100%
+app\repositories\_query.py                             8      0   100%
+app\repositories\admin_user_status_repository.py      10      0   100%
+app\repositories\comment_repository.py                17      0   100%
+app\repositories\feed_repository.py                   20      0   100%
+app\repositories\follow_repository.py                 46      2    96%   52-53
+app\repositories\follow_request_repository.py         12      0   100%
+app\repositories\general_feed_repository.py           25      0   100%
+app\repositories\genre_repository.py                   8      0   100%
+app\repositories\media_storage_repository.py          17      0   100%
+app\repositories\moderation_action_repository.py      36      0   100%
+app\repositories\notification_repository.py           47      0   100%
+app\repositories\recorda_like_repository.py           24      2    92%   16, 20
+app\repositories\recorda_repository.py                39      0   100%
+app\repositories\report_repository.py                 55      1    98%   120
+app\repositories\user_favorite_repository.py          31      0   100%
+app\repositories\user_repository.py                   56      0   100%
+app\schemas\__init__.py                                0      0   100%
+app\schemas\admin_user_moderation.py                  20      0   100%
+app\schemas\auth.py                                   62      1    98%   44
+app\schemas\comment.py                                19      0   100%
+app\schemas\feed.py                                   25      0   100%
+app\schemas\follow.py                                  8      0   100%
+app\schemas\follow_mutation.py                         4      0   100%
+app\schemas\follow_request.py                          4      0   100%
+app\schemas\media.py                                   6      0   100%
+app\schemas\moderation.py                             22      0   100%
+app\schemas\music.py                                  19      0   100%
+app\schemas\music_preference.py                       33      0   100%
+app\schemas\notification.py                           24      0   100%
+app\schemas\recorda.py                                56      0   100%
+app\schemas\report.py                                 75      1    99%   67
+app\schemas\settings.py                                9      0   100%
+app\schemas\user.py                                   56      0   100%
+app\services\__init__.py                               0      0   100%
+app\services\admin_report_service.py                  58      0   100%
+app\services\admin_user_moderation_service.py         44      1    98%   53
+app\services\affinity_service.py                      15      0   100%
+app\services\auth_service.py                          53      0   100%
+app\services\comment_service.py                       37      0   100%
+app\services\feed_service.py                          39      0   100%
+app\services\follow_request_service.py                46      0   100%
+app\services\follow_service.py                        64      5    92%   50-57
+app\services\general_feed_service.py                  33      1    97%   72
+app\services\media_service.py                         45      0   100%
+app\services\moderation_service.py                    33      0   100%
+app\services\music_preference_service.py              31      0   100%
+app\services\music_service.py                         99      3    97%   129, 181, 189
+app\services\notification_service.py                  37      0   100%
+app\services\recorda_like_service.py                  23      0   100%
+app\services\recorda_service.py                       59      0   100%
+app\services\report_service.py                        56      0   100%
+app\services\settings_service.py                      21      0   100%
+app\services\user_service.py                          98      3    97%   137, 151, 169
+--------------------------------------------------------------------------------
+TOTAL                                               3122     48    98%
+Process exit code: 0
+
+Full suite: pytest --cov=app --cov-report=term-missing
+Required test coverage of 80% reached. Total coverage: 98.46%
+================= 748 passed, 7 skipped, 1 warning in 48.90s ==================

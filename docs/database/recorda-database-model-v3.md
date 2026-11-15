@@ -1,0 +1,676 @@
+# Recorda — Modelo de Dados v3.0 (MVP)
+
+**Status:** Decisões fechadas pelo sênior com adaptações técnicas consolidadas no backend (alinhado ao [ADR 0001](../adr/0001-alinhamento-ao-diagrama-do-banco.md) e ao [ADR 0002](../adr/0002-trilha-de-auditoria-de-moderacao.md)). Este documento substitui a v2.0 e serve de referência canônica para os models SQLAlchemy, schemas Pydantic e migrations Alembic.
+
+**Escopo.** Isto é um **MVP / POC**. O modelo cobre exatamente o que foi decidido — nada além. Tudo que não foi decidido está **fora do escopo** (ver Parte 7) e pode ser adicionado numa iteração futura sem quebrar o que existe: quase tudo seria coluna ou tabela nova, não migração destrutiva.
+
+**Plataforma & Autenticação.** PostgreSQL (gerenciado via Docker/produção) com SQLAlchemy e Alembic, mantendo compatibilidade com SQLite para a suíte de testes unitários. A autenticação utiliza **JWT próprio + hash de senha via PBKDF2** (com desvio consciente em relação a provedores externos de auth, conforme documentado no ADR 0001).
+
+> **Convenções (decisões técnicas fechadas)**
+> - Nomes de tabela/coluna em `snake_case`. Os que colidiam com palavras reservadas viraram `app_user`, `recorda_like`, `recorda_comment` (D66).
+> - Toda PK e FK é `UUID`. No backend, são geradas na aplicação (`uuid.uuid4()`) para compatibilidade com SQLite nos testes, e com `DEFAULT gen_random_uuid()` nas migrations PostgreSQL (D65).
+> - Toda coluna temporal é `TIMESTAMPTZ` (D68). O "dia" do streak deverá ser calculado no backend com fuso **fixo `America/Sao_Paulo`** (D41).
+> - Enums são `VARCHAR` + `CHECK` (D67).
+> - **Soft delete** com `deleted_at`. Nunca há `DELETE` físico de conteúdo principal. Toda leitura (feed, perfil, busca, contagens) filtra `deleted_at IS NULL` — filtro simples no backend, sem views (D71). A trilha de auditoria `moderation_action` é exceção: append-only, sem `deleted_at`. A futura apuração do streak de publicações será outra exceção de leitura: deverá considerar Recordas com `deleted_at` preenchido (Parte 1, princípio 6), sem alterar o filtro das demais consultas.
+> - Provedor de música único: **Deezer**. O app **nunca** consulta a API do Deezer para renderizar — os dados da música ficam gravados (snapshot) no banco (D1, D9, D11).
+> - Migrações versionadas via **Alembic** (`alembic/`) (D69).
+
+---
+
+## Parte 0 — O que mudou da v2.0 para a v3.0
+
+**Tabelas removidas (5) — de 18 para 13**
+
+| Tabela | Motivo |
+|---|---|
+| `ARTIST`, `SONG`, `SONG_ARTIST` | Substituídas por **snapshot** da música direto no `recorda` (D1). Sem catálogo local, sem importação/deduplicação. |
+| `ARTIST_GENRE` | Explorar cruza gênero e artista como **sinais independentes**; não há vínculo artista→gênero (D2, D6). |
+| `USER_FAVORITE_SONG` | Vira colunas `fav_song_*` em `app_user` (relação 1:1) (D15). |
+
+**Renomeações físicas** (D66): `USER` → `app_user` · `LIKE` → `recorda_like` · `COMMENT` → `recorda_comment`.
+
+**Colunas novas & Ajustes de Aplicação**
+
+| Tabela | Coluna | Decisão / Motivo |
+|---|---|---|
+| `app_user` | `name` | Obrigatório no cadastro conforme requisito de produto (ADR 0001). |
+| `app_user` | `password_hash` | Hash de senha PBKDF2 para autenticação via JWT próprio (ADR 0001). |
+| `app_user` | `status` (`ACTIVE` / `SUSPENDED`) | D57 |
+| `app_user` | `fav_song_deezer_track_id`, `fav_song_title`, `fav_song_artist_name`, `fav_song_cover_url`, `fav_song_preview_url` | D15 (anuláveis na criação, preenchidos no onboarding — ADR 0001). |
+| `recorda` | `deezer_track_id`, `song_title`, `song_artist_name`, `song_cover_url`, `song_preview_url` | D1, D5 (`song_cover_url` aceita `''` se a faixa não tiver capa — ADR 0001). |
+| `recorda` | `song_genre_name` (anulável) | Snapshot do gênero para o cálculo de preferências sem chamada síncrona ao Deezer. Migration `0010_recorda_song_genre_name` (#146). |
+| `recorda_comment` | `deleted_at` | D52 |
+| `notification` | `comment_id`, `follow_id` (FK opcionais) | D47 |
+| `user_favorite_artist` | `deezer_artist_id`, `artist_name`, `artist_image_url` | D19 (snapshot; sem FK para tabela de artista). |
+
+**Incremento da Sprint 3 — Épicos 09 e 10 (03 out 2026)**
+
+Implementado nas issues **#79** (`report`) e **#83** (`moderation_action`), com as decisões registradas no [ADR 0002](../adr/0002-trilha-de-auditoria-de-moderacao.md).
+
+- `report` é **materializada no schema físico**: a tabela já constava deste contrato, mas não tinha model nem migration. Migration `0007_report`. A constraint de alvo único passou a usar uma expressão portável, e a tabela ganhou dois índices únicos parciais e três índices de consulta.
+- `moderation_action` é **nova**: o estado corrente da Parte 2 passa de 13 para **14 tabelas**. Migration `0008_moderation_action`. Append-only, imutável por trigger no PostgreSQL.
+- **D55 supersedida.** **D71** e **D56** qualificadas. **D51 preservada.**
+
+**Incremento do Épico 06 — Perfil e Configurações (18 out 2026)**
+
+Contrato previsto para as tasks do Épico 6 no backend e frontend; o estado de implementação consta em cada item:
+- **`genre` formalizada:** As colunas `deezer_genre_id` e `picture_url` (ADR 0001 e migration `0002_diagram_schema`) passam a constar explicitamente na tabela do modelo e no diagrama ER, e serão consumidas por `GET /users/me/music-preferences`, previsto na issue **#110** / `T-E6.US31.BE.01`.
+- **Simplificação arquitetural do Streak (US35):** Prevista para a sprint atual nas issues **#113** (`T-E6.US35.BE.01`) e **#123** (`US35`); a implementação ainda não está presente no backend do branch base deste PR. O contrato prevê um streak exclusivo de publicações de Recordas (*"Streak de publicações"*), calculado sob demanda no serviço de perfil a partir de `recorda.created_at` em `America/Sao_Paulo`, incluindo registros com `deleted_at` preenchido para preservar dias já conquistados, **sem ledger separado ou tabela de cache**. A resposta deverá preencher o `ProfileStreak` conforme o contrato compartilhado **C-2**; a definição e os nomes de seus campos ainda aguardam confirmação pela equipe.
+- **Decisões D42 e D43 supersedidas:** Curtidas e comentários **não** contam mais para o streak. Apenas a criação de Recorda conta.
+- **Tabelas do contrato ativo:** As tabelas `user_streak` e `streak_activity`, que nunca chegaram a ser materializadas (sem model nem migration), saem do contrato ativo, que passa de 14 para **12 tabelas**. Essa contagem cobre o contrato de domínio v3; a tabela técnica `media`, criada em `0001_baseline` e mantida para armazenar uploads, fica fora dele.
+
+**Simplificações**
+
+- `report.status` passa de 4 para **3** valores (`OPEN`, `RESOLVED`, `DISMISSED`) — sem `UNDER_REVIEW`.
+- `report` **não** tem coluna de motivo estruturado; só `description` livre e opcional (D51).
+- Sem papel `MODERATOR`, sem tabela `BLOCK` (D54, D37). A decisão D55 (sem `MODERATION_ACTION`) foi **supersedida** no incremento da Sprint 3 — ver a subseção acima e o [ADR 0002](../adr/0002-trilha-de-auditoria-de-moderacao.md).
+- `recorda_mention` **não** tem status de aprovação (D24).
+- `user_streak` e `streak_activity` descontinuadas do contrato ativo do MVP; a US35 prevê o cálculo do streak sob demanda sobre `recorda`, ainda pendente de implementação.
+
+---
+
+## Parte 1 — Princípios do MVP
+
+1. **Snapshot-first.** A busca de música/artista acontece no cliente, contra o Deezer, no momento da escolha. O que interessa (`deezer_track_id`, título, artista principal, capa, preview) é **copiado** para o banco. Não há refresh: o dado é estático (D9). Se a busca ao Deezer falhar na criação de um Recorda, a criação é **bloqueada** — todo Recorda nasce com música resolvida (D10).
+2. **Privacidade vive no perfil, nunca no post.** `app_user.is_private` decide tudo. Não existe visibilidade por Recorda.
+3. **Soft delete universal para conteúdo.** Excluir conta, Recorda ou comentário = preencher `deleted_at`. A moderação usa o mesmo mecanismo (D56), agora acompanhado do registro em `moderation_action`. Integridade referencial preservada; leituras de conteúdo filtram registros excluídos. **Exceções:** `moderation_action` é append-only — não tem `deleted_at` e é imutável por trigger; a futura apuração do streak inclui Recordas com `deleted_at` preenchido para preservar dias conquistados (princípio 6).
+4. **Recorda é imutável.** Criado, não se edita (sem `updated_at`). Só se exclui (D27). Comentário idem.
+5. **Regras "quantitativas" são da aplicação, não do banco.** Mínimos do onboarding (1 música, ≥3 gêneros, ≥3 artistas), máximos visuais (~5 gêneros, ~10 artistas), limite de marcações (~10) — tudo validado no app (D16, D17, D22).
+6. **Contrato do streak de publicações sem ledger separado (US35).** Quando implementado, deverá contar dias consecutivos com pelo menos uma Recorda publicada (D42/D43 supersedidas), usando `recorda.created_at` no fuso fixo `America/Sao_Paulo` (D41). A consulta deverá incluir registros com `deleted_at` preenchido, preservando o dia já conquistado sem tabela de ledger (`streak_activity`) ou cache (`user_streak`). Conta-se o dia da publicação, não a data da memória; várias Recordas no mesmo dia contam como um dia. A sequência permanece válida se a última publicação foi hoje ou ontem; um dia inteiro sem publicação a interrompe, e a próxima publicação inicia uma nova sequência de 1 dia (T-E6.US35.BE.01). O tratamento de Recordas removidas pela moderação (D56) é uma decisão provisória a confirmar; as issues #113 e #123 não especificam esse caso.
+7. **O que não está neste documento está fora do escopo do MVP** (Parte 7).
+
+---
+
+## Parte 2 — As 12 Tabelas do Contrato Ativo (e Modelagem de Domínio)
+
+### 1. `app_user`
+
+Conta + perfil + preferências 1:1 do onboarding. A tabela mais referenciada do modelo.
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| user_id | UUID | PK | Não | gerado via `uuid.uuid4()` (compatível com SQLite e PostgreSQL) |
+| username | VARCHAR | UNIQUE | Não | `@` público |
+| email | VARCHAR | UNIQUE | Não | e-mail para autenticação JWT e contato |
+| name | VARCHAR | — | Não | nome de exibição do usuário (ADR 0001) |
+| password_hash | VARCHAR | — | Sim | hash da senha com PBKDF2 (autenticação JWT própria — ADR 0001) |
+| profile_picture_url | VARCHAR | — | Sim | foto de perfil |
+| language | VARCHAR | — | Não | ex.: `pt-BR` (default `pt-BR`) |
+| is_private | BOOLEAN | — | Não | default `false`; `true` = follow precisa de aprovação |
+| role | VARCHAR | — | Não | `CHECK IN ('USER','ADMIN')`, default `USER` |
+| status | VARCHAR | — | Não | `CHECK IN ('ACTIVE','SUSPENDED')`, default `ACTIVE` |
+| fav_song_deezer_track_id | VARCHAR | — | Sim | música preferida — snapshot (preenchido no onboarding) |
+| fav_song_title | VARCHAR | — | Sim | " |
+| fav_song_artist_name | VARCHAR | — | Sim | artista principal |
+| fav_song_cover_url | VARCHAR | — | Sim | capa (aceita `''` quando ausente — ADR 0001) |
+| fav_song_preview_url | VARCHAR | — | Sim | prévia de áudio, quando o Deezer fornece |
+| created_at | TIMESTAMPTZ | — | Não | criação da conta |
+| updated_at | TIMESTAMPTZ | — | Não | última alteração do perfil |
+| deleted_at | TIMESTAMPTZ | — | Sim | soft delete: nulo = conta ativa |
+
+**Chaves & constraints.** PK `user_id`. `UNIQUE (username)`, `UNIQUE (email)`.
+
+**Regras (MVP)**
+- O usuário é registrado com `username`, `email`, `name` e senha (`password_hash`). Os campos `fav_song_*` são anuláveis na criação e preenchidos no onboarding obrigatório (D13, D16). O indicador `onboarding_completed` é derivado na aplicação (`fav_song_deezer_track_id IS NOT NULL`). Trocar a música preferida é `UPDATE` direto nessas colunas, sem histórico (D14).
+- `role = 'ADMIN'` é atribuído via banco ou script de seed de administração (D53).
+- `status = 'SUSPENDED'` bloqueia o login e geração de tokens JWT. A moderação seta esse valor (D56, D57).
+- Sem `bio`. Sem colunas de anonimização/LGPD (D58, D59).
+- Autenticação gerenciada internamente com tokens JWT e validação de permissões nas rotas da API.
+
+**Deleção.** Soft delete. O backend filtra `deleted_at IS NULL` em login, busca, feed, listas de seguidores e sugestões (D34).
+
+---
+
+### 2. `follow`
+
+Uma linha por relação direcionada "A segue B".
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| follow_id | UUID | PK | Não | |
+| follower_id | UUID | FK → app_user | Não | quem segue |
+| following_id | UUID | FK → app_user | Não | quem é seguido |
+| status | VARCHAR | — | Não | `CHECK IN ('PENDING','ACCEPTED')` |
+| requested_at | TIMESTAMPTZ | — | Não | quando foi solicitado |
+| accepted_at | TIMESTAMPTZ | — | Sim | quando foi aceito (nulo enquanto pendente) |
+
+**Chaves & constraints.** PK `follow_id`. `UNIQUE (follower_id, following_id)`. `CHECK (follower_id <> following_id)`.
+
+**Regras (MVP)**
+- Perfil público → a linha nasce `ACCEPTED`. Privado → nasce `PENDING`; só `ACCEPTED` dá acesso aos Recordas.
+- Privado → público: `UPDATE` em lote `PENDING → ACCEPTED` (preenchendo `accepted_at`), em uma transação (D35).
+- Público → privado: quem já seguia permanece `ACCEPTED`; só novos pedidos entram como `PENDING` (D36).
+
+**Deleção.** `ON DELETE CASCADE` a partir de `app_user`. Como contas são soft-deleted, na prática as linhas ficam e o backend as filtra pelas contas ativas.
+
+---
+
+### 3. `genre`
+
+Vocabulário controlado de gêneros, definido pelo próprio sistema.
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| genre_id | UUID | PK | Não | |
+| name | VARCHAR | UNIQUE | Não | ex.: `Rock`, `MPB` |
+| deezer_genre_id | VARCHAR | UNIQUE | Sim | id do gênero no Deezer (ADR 0001, US31) |
+| picture_url | VARCHAR | — | Sim | imagem ilustrativa da categoria do Deezer |
+
+> *Nota técnica do backend (ADR 0001):* Materializadas na migration `0002_diagram_schema`, as colunas `deezer_genre_id` e `picture_url` permitem sincronizar os dados visuais com o Deezer no onboarding e serão consumidas diretamente em `GET /users/me/music-preferences` (US31 / issue #110, previsto para a sprint atual).
+
+**Regras (MVP)**
+- Seed inicial de ~18 gêneros (Parte 6). Adicionar gênero depois é só um `INSERT`.
+- Sem vínculo com artista (`ARTIST_GENRE` não existe). Gênero só se conecta ao usuário via `user_favorite_genre` (D2, D6).
+
+**Deleção.** Não se apaga gênero — é referenciado por preferências de muitos usuários.
+
+---
+
+### 4. `user_favorite_genre`
+
+Gêneros favoritos escolhidos no onboarding (editáveis depois).
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| user_id | UUID | PK, FK → app_user | Não | |
+| genre_id | UUID | PK, FK → genre | Não | |
+| selected_at | TIMESTAMPTZ | — | Não | |
+
+**Chaves & constraints.** PK composta `(user_id, genre_id)` — impede duplicado.
+
+**Regras (MVP).** Mínimo 3 no onboarding; máximo visual ~5 (D16, D17). A D16 previa mínimo 1; os requisitos funcionais (US3, US31) e a validação do backend (`MINIMUM_SELECTION = 3`) adotam 3. Edição por `INSERT`/`DELETE` (D18). `CASCADE` a partir de `app_user`.
+
+---
+
+### 5. `user_favorite_artist`
+
+Artistas favoritos do onboarding, guardados como **snapshot do Deezer** — sem tabela global de artista (D19).
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| user_id | UUID | PK, FK → app_user | Não | |
+| deezer_artist_id | VARCHAR | PK | Não | id do artista no Deezer |
+| artist_name | VARCHAR | — | Não | snapshot |
+| artist_image_url | VARCHAR | — | Sim | snapshot |
+| selected_at | TIMESTAMPTZ | — | Não | |
+
+**Chaves & constraints.** PK composta `(user_id, deezer_artist_id)`.
+
+**Regras (MVP)**
+- "Artistas em comum" no Explorar = mesmo `deezer_artist_id` entre usuários (D74).
+- Mínimo 3 no onboarding; máximo visual ~10 (D16, D17). Edição por `INSERT`/`DELETE` (D18). `CASCADE` a partir de `app_user`.
+
+---
+
+### 6. `recorda`
+
+A entidade central: uma memória musical. Amarra um usuário, uma mídia e o **snapshot** de uma música do Deezer.
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| recorda_id | UUID | PK | Não | |
+| user_id | UUID | FK → app_user | Não | autor |
+| media_url | VARCHAR | — | Não | caminho/URL do arquivo de mídia (armazenamento local / bucket) (D31) |
+| media_type | VARCHAR | — | Não | `CHECK IN ('PHOTO','VIDEO')` |
+| description | TEXT | — | Sim | legenda opcional |
+| deezer_track_id | VARCHAR | — | Não | id da faixa no Deezer |
+| song_title | VARCHAR | — | Não | snapshot |
+| song_artist_name | VARCHAR | — | Não | artista principal (D8) |
+| song_cover_url | VARCHAR | — | Não | capa (D5; aceita `''` se não houver — ADR 0001) |
+| song_preview_url | VARCHAR | — | Sim | prévia de áudio, quando o Deezer fornece |
+| song_genre_name | VARCHAR | — | Sim | gênero principal do álbum da faixa no Deezer, capturado na criação; `NULL` em Recordas anteriores à migration `0010` ou se o Deezer não informar (#146) |
+| created_at | TIMESTAMPTZ | — | Não | também usado na ordenação do feed e no filtro por data |
+| deleted_at | TIMESTAMPTZ | — | Sim | soft delete |
+
+**Chaves & constraints.** PK `recorda_id`. FK `user_id → app_user(user_id)`.
+
+**Regras (MVP)**
+- **Imutável:** sem `updated_at`, alteração restrita a `description` pelo autor quando implementado; deleção lógica via `deleted_at` (D27, ADR 0001).
+- Exatamente 1 mídia (`media_url` + `media_type` obrigatórios) (D28).
+- Todos os `song_*` são `NOT NULL`: se a busca no Deezer falhar, a criação é bloqueada (D10). Snapshot estático (D9).
+- Visibilidade derivada de `app_user.is_private`, nunca armazenada aqui.
+- Filtro de perfil por artista = `song_artist_name ILIKE '%texto%'` (D3). Por música = `deezer_track_id`. Por data = `created_at`.
+
+**Deleção.** Soft delete: excluir = setar `deleted_at`; `recorda_like`, `recorda_comment`, `recorda_mention` e `notification` permanecem. A moderação também seta `deleted_at` para remover conteúdo (D56), registrando a ação em `moderation_action` na mesma transação. Leituras de conteúdo filtram `deleted_at IS NULL` e checam a conta do autor ativa (D34, D71), exceto a futura apuração do streak (Parte 1, princípio 6).
+
+---
+
+### 7. `recorda_mention`
+
+> **Status:** prevista no contrato ativo, mas ainda sem model nem migration neste backend (issue **#17**).
+
+Marcação de amigos em um Recorda.
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| recorda_id | UUID | PK, FK → recorda | Não | |
+| user_id | UUID | PK, FK → app_user | Não | amigo marcado |
+
+**Chaves & constraints.** PK composta `(recorda_id, user_id)` — o mesmo amigo não é marcado duas vezes.
+
+**Regras (MVP)**
+- **Sem aprovação** (sem status `PENDING`/`ACCEPTED`): a marcação é direta na criação do Recorda e gera uma `notification` do tipo `MENTION` (D24, D25).
+- O marcado pode se desmarcar apagando a própria linha (D23).
+- Regra de negócio (aplicação): só se marca quem **segue mutuamente** o autor; máx. ~10 por Recorda (D20, D22). Perfil privado pode ser marcado sem restrição no banco (D21).
+- Marcação de conta excluída some via filtro `deleted_at IS NULL` no join com `app_user` (D26).
+
+**Deleção.** `CASCADE` a partir de `recorda` e de `app_user`.
+
+---
+
+### 8. `recorda_like`
+
+Uma linha por "usuário curtiu Recorda".
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| user_id | UUID | PK, FK → app_user | Não | quem curtiu |
+| recorda_id | UUID | PK, FK → recorda | Não | |
+| created_at | TIMESTAMPTZ | — | Não | momento da curtida |
+
+**Chaves & constraints.** PK composta `(user_id, recorda_id)` — curtida duplicada é estruturalmente impossível.
+
+**Regras (MVP)**
+- Contagem por `COUNT(*)`, sem coluna desnormalizada (D33).
+- **Streak (Épico 06 / US35):** As decisões D42 e D43 foram supersedidas no Épico 06. O streak passou a ser exclusivo de publicações de Recordas; curtir ou descurtir **não** pontua nem altera o streak.
+
+**Deleção.** `CASCADE` a partir dos dois pais.
+
+---
+
+### 9. `recorda_comment`
+
+Comentário de texto em um Recorda.
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| comment_id | UUID | PK | Não | |
+| user_id | UUID | FK → app_user | Não | autor |
+| recorda_id | UUID | FK → recorda | Não | |
+| content | TEXT | — | Não | texto do comentário |
+| created_at | TIMESTAMPTZ | — | Não | |
+| deleted_at | TIMESTAMPTZ | — | Sim | soft delete (D52) |
+
+**Chaves & constraints.** PK `comment_id`. FKs para `app_user` e `recorda`.
+
+**Regras (MVP)**
+- Não editável (sem `updated_at`). Comentar não pontua streak (D42 supersedida no Épico 06 / US35).
+- Soft delete: o autor apaga → `deleted_at`; a moderação também (D56), registrando a ação em `moderation_action` na mesma transação. Preserva o vínculo com `report`.
+- Contagem por `COUNT(*)` (D33).
+
+**Deleção.** `CASCADE` a partir de `recorda`. A partir de `app_user`, como contas são soft-deleted, o comentário sobrevive atribuído à conta inativa.
+
+---
+
+### 10. `user_streak` *(Descontinuada no Épico 06 — ver US35 e issue #113)*
+
+> **Status:** Descontinuada no contrato do MVP; a US35 prevê cálculo dinâmico sobre a tabela `recorda` (T-E6.US35.BE.01), ainda pendente de implementação. Mantida nesta seção apenas como registro histórico do modelo v3.0 conceitual inicial.
+
+Placar de streak — cache derivado 1:1 com `app_user`. No modelo v3 original, previa:
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| user_id | UUID | PK, FK → app_user | Não | |
+| current_streak | INT | — | Não | default 0 |
+| longest_streak | INT | — | Não | default 0 |
+| last_active_date | DATE | — | Sim | dia ativo mais recente (nulo = nunca ativo) |
+
+**Regras (Supersedidas no Épico 06).** Quando a US35 (#113) for implementada, o streak deverá ser calculado sob demanda no serviço de perfil a partir de `recorda.created_at`, sem ledger separado nem tabela de cache no MVP.
+
+---
+
+### 11. `streak_activity` *(Descontinuada no Épico 06 — ver US35 e issue #113)*
+
+> **Status:** Supersedida pela eliminação de ledger separado (T-E6.US35.BE.01). Mantida nesta seção apenas como registro histórico do modelo v3.0 conceitual inicial.
+
+No modelo original, previa um ledger diário de atividades:
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| user_id | UUID | PK, FK → app_user | Não | |
+| activity_date | DATE | PK | Não | dia de calendário em **`America/Sao_Paulo`** (D41) |
+
+**Regras (Supersedidas no Épico 06).**
+- As decisões **D42** (curtir/comentar alimentam streak) e **D43** foram supersedidas: apenas a publicação de Recordas é contabilizada.
+- A exclusão lógica de `recorda` (`deleted_at`) já retém o registro original e sua data de criação (`created_at`), garantindo que um dia conquistado permaneça mesmo se a Recorda for excluída depois, **sem ledger separado**.
+- Por isso, a tabela `streak_activity` foi descontinuada do contrato ativo do MVP; como nunca foi materializada, a retirada não exige migrations.
+
+---
+
+### 12. `notification`
+
+Aviso dentro do app para um evento social.
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| notification_id | UUID | PK | Não | |
+| recipient_id | UUID | FK → app_user | Não | quem recebe |
+| sender_id | UUID | FK → app_user | Sim | quem causou (nulo p/ avisos do sistema) |
+| recorda_id | UUID | FK → recorda | Sim | Recorda relacionado, quando aplicável |
+| comment_id | UUID | FK → recorda_comment | Sim | deep-link para o comentário (D47) |
+| follow_id | UUID | FK → follow | Sim | deep-link para o pedido de follow (D47) |
+| type | VARCHAR | — | Não | `CHECK IN ('FOLLOW_REQUEST','FOLLOW_ACCEPTED','NEW_FOLLOWER','LIKE','COMMENT','MENTION','CONTENT_REMOVED')` |
+| is_read | BOOLEAN | — | Não | default `false` |
+| created_at | TIMESTAMPTZ | — | Não | |
+
+**Chaves & constraints.** PK `notification_id`. `ck_notification_no_self_notification` — `CHECK (recipient_id <> sender_id)`. `CONTENT_REMOVED` entrou no `CHECK` de `type` na migration `0009_notification_content_removed`.
+
+**Regras (MVP)**
+- **1 linha por evento**, sem agrupamento estrutural — o agrupamento ("5 pessoas curtiram") é só apresentação (D49).
+- Sem tipo "novo Recorda de quem sigo" (D40).
+- `type` comanda a renderização; os campos de deep-link levam ao alvo certo. O backend suprime notificações cujo Recorda ou `sender` esteja com `deleted_at`. Exceção: `CONTENT_REMOVED` (aviso do sistema, sem `sender`) continua visível com a Recorda excluída, pois avisa justamente sua remoção pela moderação.
+
+**Deleção.** `CASCADE` a partir de `recipient_id`. `SET NULL` nos `*_id` opcionais quando o alvo for removido fisicamente (raro).
+
+---
+
+### 13. `report`
+
+Caso de moderação aberto por um usuário contra **exatamente um** alvo: outro usuário, um Recorda ou um comentário.
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| report_id | UUID | PK | Não | |
+| reporter_id | UUID | FK → app_user | Não | quem denunciou |
+| reported_user_id | UUID | FK → app_user | Sim | alvo usuário |
+| recorda_id | UUID | FK → recorda | Sim | alvo Recorda |
+| comment_id | UUID | FK → recorda_comment | Sim | alvo comentário |
+| description | TEXT | — | Sim | texto livre **opcional** (D51) |
+| status | VARCHAR | — | Não | `CHECK IN ('OPEN','RESOLVED','DISMISSED')`, default `OPEN` |
+| created_at | TIMESTAMPTZ | — | Não | |
+| resolved_at | TIMESTAMPTZ | — | Sim | quando foi encerrada |
+
+**Chaves & constraints.** PK `report_id`.
+
+- `ck_report_single_target` — exatamente um alvo. Escrita como soma de `CASE WHEN <alvo> IS NOT NULL THEN 1 ELSE 0 END = 1` sobre as três colunas de alvo, e não com `num_nonnulls()`: essa função é exclusiva do PostgreSQL e não existe no SQLite usado pela suíte de testes.
+- `uq_report_reporter_recorda` — índice **único parcial** em `(reporter_id, recorda_id)` com `WHERE recorda_id IS NOT NULL`.
+- `uq_report_reporter_user` — índice **único parcial** em `(reporter_id, reported_user_id)` com `WHERE reported_user_id IS NOT NULL`.
+
+Os dois índices únicos impedem que o mesmo denunciante denuncie o mesmo alvo duas vezes, sem impedir denúncias de alvos diferentes — a cláusula `WHERE` evita a colisão entre as linhas cujo alvo é nulo.
+
+**Regras (MVP)**
+- **Sem motivo estruturado** (sem coluna `reason`, sem ENUM). Só `description` opcional (D51). O `reason` de `moderation_action` é outro conceito: é o motivo da **decisão do moderador**, não o motivo alegado pelo denunciante — D51 segue valendo aqui.
+- `description` aceita no máximo **500 caracteres**, validado na aplicação (D-04); sem restrição de tamanho no banco.
+- O admin resolve setando `deleted_at` no `recorda`/`recorda_comment` ou `status = 'SUSPENDED'` no `app_user`, e então `status`/`resolved_at` aqui (D56). A ação é registrada em `moderation_action` **na mesma transação** (D55 supersedida — ADR 0002).
+
+**Deleção.** Uma denúncia nunca é apagada em cascata: as quatro FKs ficam **sem `ondelete`**, isto é `NO ACTION`, o que **bloqueia** o hard delete do registro referenciado. Com soft delete em `app_user`/`recorda`/`recorda_comment`, o alvo continua existindo para o moderador ver.
+
+---
+
+### 14. `moderation_action`
+
+Trilha de auditoria das ações administrativas de moderação: quem agiu, qual ação, sobre qual alvo, quando e por qual motivo. **Append-only e imutável** (ADR 0002).
+
+| Coluna | Tipo | Chave | Nulo | Descrição |
+|---|---|---|---|---|
+| action_id | UUID | PK | Não | |
+| admin_id | UUID | FK → app_user | Não | quem executou a ação |
+| action_type | VARCHAR | — | Não | `CHECK IN ('REMOVE_RECORDA','CHANGE_REPORT_STATUS','SUSPEND_USER','REACTIVATE_USER')` |
+| target_user_id | UUID | FK → app_user | Sim | alvo usuário |
+| target_recorda_id | UUID | FK → recorda | Sim | alvo Recorda |
+| reason | TEXT | — | Não | motivo **obrigatório** da decisão (D-02) |
+| details | JSON | — | Sim | contexto livre, ex.: `{"from":"OPEN","to":"DISMISSED","report_count":3,"target_type":"RECORDA"}` |
+| created_at | TIMESTAMPTZ | — | Não | quando a ação ocorreu |
+
+**Chaves & constraints.** PK `action_id`. FKs `admin_id` e `target_user_id` → `app_user(user_id)`, `target_recorda_id` → `recorda(recorda_id)`, todas **sem `ondelete`**.
+
+- `ck_moderation_action_type` — vocabulário fechado dos quatro `action_type` (D67).
+- `ck_moderation_action_has_target` — `target_user_id IS NOT NULL OR target_recorda_id IS NOT NULL`: **pelo menos um** alvo, diferente de `ck_report_single_target`, que exige exatamente um.
+
+**Regras (MVP)**
+- **Append-only.** Nunca sofre `UPDATE` nem `DELETE`. Sem `updated_at`, sem `deleted_at` — exceção explícita ao soft delete universal (D71).
+- **Imutabilidade imposta no banco.** A migration `0008_moderation_action` cria a função `moderation_action_immutable()` e o trigger `trg_moderation_action_immutable` (`BEFORE UPDATE OR DELETE ... FOR EACH ROW`), que levanta a exceção `moderation_action é imutável`. O trigger é **específico do PostgreSQL**; o SQLite da suíte de testes não tem equivalente.
+- `reason` é obrigatório e aceita no máximo **500 caracteres**, validado na aplicação (D-04); sem restrição de tamanho no banco. O backend normaliza com `strip()` antes de validar e de persistir.
+- `details` é JSON livre, sem schema por `action_type` e sem validação de estrutura.
+- `REMOVE_RECORDA` preenche **os dois** alvos: `target_recorda_id` com a Recorda e `target_user_id` com o autor dela, para que o histórico administrativo da conta saia de uma consulta direta a `target_user_id`.
+- Não há alvo de comentário: `report.comment_id` existe como coluna reservada, mas não há rota de denúncia de comentário no MVP.
+- **Atomicidade.** A mudança de estado administrativa e o registro da auditoria são persistidos no mesmo commit: não há estado alterado sem auditoria, nem auditoria de algo que não aconteceu.
+
+**Deleção.** Nunca. As FKs em `NO ACTION` bloqueiam o hard delete do admin, do usuário-alvo e da Recorda-alvo, e o trigger recusa `DELETE` de linhas da própria trilha.
+
+---
+
+## Parte 3 — Relacionamentos
+
+| A | Relacionamento | B | Cardinalidade | Junção |
+|---|---|---|---|---|
+| app_user | segue | app_user | N : M | `follow` |
+| app_user | cria | recorda | 1 : N | — |
+| app_user | música preferida (colunas `fav_song_*`) | — | 1 : 1 | — |
+| app_user | gêneros favoritos | genre | N : M | `user_favorite_genre` |
+| app_user | artistas favoritos (snapshot) | — | 1 : N | `user_favorite_artist` |
+| app_user | curte | recorda | N : M | `recorda_like` |
+| app_user | comenta | recorda | 1 : N | `recorda_comment` |
+| app_user | marcado em | recorda | N : M | `recorda_mention` |
+| app_user | streak de publicações | recorda | 1 : N | apuração dinâmica sobre `created_at` prevista na US35 |
+| app_user | recebe / dispara | notification | 1 : N | — |
+| app_user | abre / é alvo | report | 1 : N | — |
+| recorda | é alvo de | report | 1 : N | — |
+| recorda_comment | é alvo de | report | 1 : N | — |
+| recorda / recorda_comment / follow | deep-link de | notification | 1 : N | — |
+| app_user | executa | moderation_action | 1 : N | — (via `admin_id`) |
+| app_user | é alvo de | moderation_action | 1 : N | — (via `target_user_id`) |
+| recorda | é alvo de | moderation_action | 1 : N | — (via `target_recorda_id`) |
+
+---
+
+## Parte 4 — Diagrama ER
+
+```mermaid
+erDiagram
+    app_user ||--o{ follow : "follower / following"
+    app_user ||--o{ user_favorite_genre : ""
+    genre ||--o{ user_favorite_genre : ""
+    app_user ||--o{ user_favorite_artist : ""
+    app_user ||--o{ recorda : "cria"
+    app_user ||--o{ recorda_like : ""
+    recorda ||--o{ recorda_like : ""
+    app_user ||--o{ recorda_comment : ""
+    recorda ||--o{ recorda_comment : ""
+    app_user ||--o{ recorda_mention : "marcado em"
+    recorda ||--o{ recorda_mention : ""
+    app_user ||--o{ notification : "recipient / sender"
+    recorda ||--o{ notification : ""
+    recorda_comment ||--o{ notification : ""
+    follow ||--o{ notification : ""
+    app_user ||--o{ report : "reporter / reported"
+    recorda ||--o{ report : ""
+    recorda_comment ||--o{ report : ""
+    app_user ||--o{ moderation_action : "executa / é alvo"
+    recorda ||--o{ moderation_action : ""
+
+    app_user {
+        uuid user_id PK
+        varchar username UK
+        varchar email UK
+        varchar name
+        varchar password_hash
+        varchar profile_picture_url
+        varchar language
+        boolean is_private
+        varchar role
+        varchar status
+        varchar fav_song_deezer_track_id
+        varchar fav_song_title
+        varchar fav_song_artist_name
+        varchar fav_song_cover_url
+        varchar fav_song_preview_url
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+    }
+    follow {
+        uuid follow_id PK
+        uuid follower_id FK
+        uuid following_id FK
+        varchar status
+        timestamptz requested_at
+        timestamptz accepted_at
+    }
+    genre {
+        uuid genre_id PK
+        varchar name UK
+        varchar deezer_genre_id UK
+        varchar picture_url
+    }
+    user_favorite_genre {
+        uuid user_id PK,FK
+        uuid genre_id PK,FK
+        timestamptz selected_at
+    }
+    user_favorite_artist {
+        uuid user_id PK,FK
+        varchar deezer_artist_id PK
+        varchar artist_name
+        varchar artist_image_url
+        timestamptz selected_at
+    }
+    recorda {
+        uuid recorda_id PK
+        uuid user_id FK
+        varchar media_url
+        varchar media_type
+        text description
+        varchar deezer_track_id
+        varchar song_title
+        varchar song_artist_name
+        varchar song_cover_url
+        varchar song_preview_url
+        varchar song_genre_name
+        timestamptz created_at
+        timestamptz deleted_at
+    }
+    recorda_mention {
+        uuid recorda_id PK,FK
+        uuid user_id PK,FK
+    }
+    recorda_like {
+        uuid user_id PK,FK
+        uuid recorda_id PK,FK
+        timestamptz created_at
+    }
+    recorda_comment {
+        uuid comment_id PK
+        uuid user_id FK
+        uuid recorda_id FK
+        text content
+        timestamptz created_at
+        timestamptz deleted_at
+    }
+    notification {
+        uuid notification_id PK
+        uuid recipient_id FK
+        uuid sender_id FK
+        uuid recorda_id FK
+        uuid comment_id FK
+        uuid follow_id FK
+        varchar type
+        boolean is_read
+        timestamptz created_at
+    }
+    moderation_action {
+        uuid action_id PK
+        uuid admin_id FK
+        varchar action_type
+        uuid target_user_id FK
+        uuid target_recorda_id FK
+        text reason
+        json details
+        timestamptz created_at
+    }
+    report {
+        uuid report_id PK
+        uuid reporter_id FK
+        uuid reported_user_id FK
+        uuid recorda_id FK
+        uuid comment_id FK
+        text description
+        varchar status
+        timestamptz created_at
+        timestamptz resolved_at
+    }
+```
+
+---
+
+## Parte 5 — Índices (D70)
+
+Enxutos — nas FKs e nos campos de ordenação/busca:
+
+- `recorda (user_id, created_at DESC)` — linha do tempo do perfil, feed e futura apuração do streak (US35; quando implementada, a consulta deverá incluir Recordas com soft-delete para preservar dias conquistados)
+- `recorda (deezer_track_id)` — filtro "meus Recordas com essa música"
+- `recorda` — índice **GIN `pg_trgm`** em `song_artist_name` e em `song_title` — filtro por artista (`ILIKE`) e busca de conteúdo (D3, D75) *(definidos nas migrações Alembic)*
+- `follow (follower_id, status)` e `follow (following_id, status)` — feed e listas de seguidores
+- `recorda_like (recorda_id)` e `recorda_comment (recorda_id)` — contagens e listagens
+- `recorda_mention (user_id)` — tela "Recordas em que fui marcado" (a PK cobre `(recorda_id, user_id)`, não essa direção)
+- `notification (recipient_id, is_read, created_at DESC)` — central de notificações
+- `user_favorite_genre (genre_id)` e `user_favorite_artist (deezer_artist_id)` — afinidade do Explorar
+- `app_user` — índice **GIN `pg_trgm`** em `username` para a busca de usuários (D75) *(definido nas migrações Alembic)*
+- `report (status, created_at DESC)` — `ix_report_status_created_at`, fila de moderação (E10)
+- `report (recorda_id)` — `ix_report_recorda_id`
+- `report (reported_user_id)` — `ix_report_reported_user_id`
+- `report` — índices **únicos parciais** `uq_report_reporter_recorda` e `uq_report_reporter_user` (ver Parte 2, tabela 13)
+- `moderation_action (created_at DESC)` — `ix_moderation_action_created_at`, leitura cronológica da trilha (US47)
+- `moderation_action (admin_id, created_at DESC)` — `ix_moderation_action_admin_id_created_at`, ações por administrador (US47)
+- `moderation_action (target_user_id)` — `ix_moderation_action_target_user_id`, histórico administrativo da conta (US46)
+- `moderation_action (target_recorda_id)` — `ix_moderation_action_target_recorda_id`, histórico da Recorda (US45)
+
+---
+
+## Parte 6 — Seed de gêneros (D7, D72)
+
+Script de seed via migration Alembic com ~18 gêneros populares no Brasil:
+
+`Pop` · `Rock` · `Hip Hop / Rap` · `R&B / Soul` · `Funk` · `Eletrônica / Dance` · `MPB` · `Samba / Pagode` · `Sertanejo` · `Forró` · `Axé` · `Gospel / Religioso` · `Reggae` · `Jazz` · `Blues` · `Clássica / Instrumental` · `Trilha Sonora` · `K-Pop`
+
+O primeiro `ADMIN` é configurado no seed de banco de dados / script de inicialização (D53).
+
+---
+
+## Parte 7 — Fora do escopo do MVP
+
+Itens avaliados e **conscientemente adiados**. Nenhum bloqueia o lançamento; quase todos entram depois como coluna/tabela nova, sem migração destrutiva.
+
+| Área | Fora do MVP |
+|---|---|
+| Catálogo musical | Tabelas locais `ARTIST` / `SONG` / `SONG_ARTIST` / `ARTIST_GENRE`; multi-provedor (ISRC, mapa de provedores); rotina de refresh do snapshot |
+| Álbuns | Qualquer coluna ou tela de álbum |
+| Social | Bloquear usuário (`BLOCK`); notificação de "novo Recorda de quem sigo"; agrupamento estrutural de notificações; push / e-mail; retenção/expurgo de notificações |
+| Marcações | Aprovação de marcação (status `PENDING`/`ACCEPTED`) |
+| Conteúdo | Edição irrestrita de Recorda e de comentário; contadores desnormalizados de like/comentário; localização/geotag; limites de legenda/vídeo no banco |
+| Streak | Fuso por usuário; recompensas / badges |
+| Moderação | Papel `MODERATOR`; status `UNDER_REVIEW`; motivos estruturados de denúncia (`reason` ENUM) |
+| Conta / LGPD | Login social; anonimização / processo formal de eliminação; reativação de conta; histórico de música preferida; `duration_ms` da faixa |
+| Descoberta | Salvar Recorda de terceiros; feed materializado (fan-out-on-write) |
+
+---
+
+## Parte 8 — Fluxos essenciais (verificação do modelo)
+
+> Notação: **L** = leitura, **E** = escrita. Como regra geral, leituras de conteúdo filtram `deleted_at IS NULL` e respeitam o acesso (perfil público **ou** `follow` `ACCEPTED`); a futura apuração do streak é a exceção descrita na Parte 1, princípio 6.
+
+**A · Onboarding.** Cliente busca música/artistas no Deezer.
+E: `app_user` (insert com `username`, `email`, `name`, `password_hash` e posterior update com `fav_song_*`), `user_favorite_genre` (≥3), `user_favorite_artist` (≥3, snapshot).
+
+**B · Criar Recorda com amigos marcados (fluxo previsto; marcações dependem da issue #17).** Cliente resolve a música no Deezer (se falhar, **bloqueia** — D10).
+E: `recorda` (snapshot completo); quando o modelo previsto na issue #17 estiver implementado, `recorda_mention` (1 por amigo) e `notification` (`MENTION` por amigo). *(A apuração do streak também está prevista nas issues #113/#123 e será feita na leitura do perfil a partir de `recorda.created_at`, em `America/Sao_Paulo`, sem ledger separado.)*
+
+**C · Seguir.** Público → E: `follow` (`ACCEPTED`), `notification` (`NEW_FOLLOWER`). Privado → E: `follow` (`PENDING`), `notification` (`FOLLOW_REQUEST`); na aprovação → E: `follow` (`ACCEPTED` + `accepted_at`), `notification` (`FOLLOW_ACCEPTED`).
+
+**D · Curtir / Comentar.** L: `recorda` + acesso. E: `recorda_like` / `recorda_comment`, `notification` (`LIKE` / `COMMENT`). *(Curtir/comentar não altera nem pontua streak — US35)*.
+
+**E · Feed cronológico.** L: `follow` (`ACCEPTED` do viewer) → `recorda` dos seguidos (`deleted_at IS NULL`, autor ativo) ordenado por `created_at` → contagens via `COUNT(*)` em `recorda_like`/`recorda_comment` → nomes dos marcados via `recorda_mention` + `app_user`. Título/artista/capa já vêm do snapshot — sem joins de catálogo.
+
+**F · Explorar.** L: `user_favorite_genre` e `user_favorite_artist` do viewer × dos outros usuários — afinidade por `genre_id` e `deezer_artist_id` em comum (D74). Sem tabelas extras.
+
+**G · Busca.** L: `app_user.username` (`ILIKE` / `pg_trgm`) e `recorda.song_title` / `recorda.song_artist_name` nos Recordas existentes (D75).
+
+**H · Exportar card para o Instagram.** L: `recorda` (snapshot). E: **nenhuma** — renderização 100% no cliente (D73).
+
+**I · Moderação.** L: `report` (`OPEN`) + alvo. E: `deleted_at` no `recorda`/`recorda_comment` **ou** `app_user.status = 'SUSPENDED'`; depois `report.status` = `RESOLVED`/`DISMISSED` + `resolved_at`; e `moderation_action` (admin, tipo, alvo, `reason` obrigatório). A mudança de estado e o registro da auditoria vão no **mesmo commit** — nenhuma das duas escritas sobrevive sem a outra.
+
+**J · Excluir conta.** E: `app_user.deleted_at`. Recordas e comentários permanecem no banco mas somem das telas alheias pelo filtro (D34). Sem anonimização no MVP (D58).
+
+---
+
+*Fim — v3.0. Referência canônica do modelo de dados do Recorda.*

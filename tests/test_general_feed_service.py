@@ -1,0 +1,335 @@
+"""Testes do app/services/general_feed_service.py."""
+
+import uuid
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from app.db.seed_data import GENRE_SEED
+from app.models import UserFavoriteArtist, UserFavoriteGenre
+from app.models.follow import STATUS_PENDING
+from app.repositories import general_feed_repository
+from app.services import general_feed_service
+from app.services.general_feed_service import InvalidCursorError, get_general_feed
+from tests.factories import (
+    MUSIC_PREFERENCES_INITIAL_GENRES,
+    MUSIC_PREFERENCES_UPDATED_GENRES,
+    add_favorite_genres,
+    add_follow,
+    add_recorda,
+    add_user,
+    auth_headers,
+    music_preferences_body,
+)
+
+ROCK_GENRE_ID = GENRE_SEED[0][0]
+JAZZ_GENRE_ID = GENRE_SEED[1][0]
+
+
+def _make_row(day: int = 1):
+    recorda = SimpleNamespace(
+        recorda_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        media_url="https://example.com/media.jpg",
+        media_type="PHOTO",
+        description=None,
+        deezer_track_id="3135556",
+        song_title="Song",
+        song_artist_name="Artist",
+        song_cover_url="https://example.com/cover.jpg",
+        song_preview_url=None,
+        created_at=datetime(2026, 1, day, tzinfo=UTC),
+    )
+    return SimpleNamespace(
+        Recorda=recorda,
+        username="autor",
+        profile_picture_url=None,
+        likes_count=0,
+        is_liked=False,
+    )
+
+
+def test_general_feed_uses_preferences_updated_in_previous_request(client, db):
+    viewer = add_user(db, "viewer")
+    jazz_author = add_user(db, "jazz_author")
+    add_favorite_genres(db, jazz_author, "Jazz")
+    recorda = add_recorda(db, jazz_author)
+    headers = auth_headers(viewer)
+
+    initial_post = client.post(
+        "/api/v1/users/me/music-preferences",
+        json=music_preferences_body(MUSIC_PREFERENCES_INITIAL_GENRES),
+        headers=headers,
+    )
+    assert initial_post.status_code == 200
+
+    initial_feed = client.get("/api/v1/feed/general", headers=headers)
+    assert initial_feed.status_code == 200
+    assert str(recorda.recorda_id) not in {
+        item["recorda_id"] for item in initial_feed.json()["items"]
+    }
+
+    update_post = client.post(
+        "/api/v1/users/me/music-preferences",
+        json=music_preferences_body(MUSIC_PREFERENCES_UPDATED_GENRES),
+        headers=headers,
+    )
+    assert update_post.status_code == 200
+
+    updated_feed = client.get("/api/v1/feed/general", headers=headers)
+
+    assert updated_feed.status_code == 200
+    assert str(recorda.recorda_id) in {
+        item["recorda_id"] for item in updated_feed.json()["items"]
+    }
+
+
+class TestGetGeneralFeedFlow:
+    def test_invalid_cursor_raises_before_any_query(self):
+        mock_db = MagicMock()
+
+        with (
+            patch.object(
+                general_feed_repository, "get_followed_author_ids"
+            ) as followed,
+            patch.object(
+                general_feed_repository, "get_discovery_candidate_author_ids"
+            ) as discovery,
+            pytest.raises(InvalidCursorError),
+        ):
+            get_general_feed(mock_db, uuid.uuid4(), cursor="invalido!!!", limit=20)
+
+        followed.assert_not_called()
+        discovery.assert_not_called()
+        mock_db.execute.assert_not_called()
+
+    def test_queries_own_recordas_when_no_external_author_is_eligible(self):
+        mock_db = MagicMock()
+        current_user_id = uuid.uuid4()
+        mock_db.execute.return_value.all.return_value = []
+
+        with (
+            patch.object(
+                general_feed_repository, "get_followed_author_ids", return_value=[]
+            ),
+            patch.object(
+                general_feed_repository,
+                "get_discovery_candidate_author_ids",
+                return_value=[uuid.uuid4(), uuid.uuid4()],
+            ),
+            patch.object(general_feed_service, "calculate_affinity", return_value=0.0),
+            patch.object(
+                general_feed_repository, "get_general_feed_query"
+            ) as feed_query,
+        ):
+            page = get_general_feed(mock_db, current_user_id, cursor=None, limit=20)
+
+        assert page.items == []
+        assert page.next_cursor is None
+        feed_query.assert_called_once_with(current_user_id, [current_user_id])
+        mock_db.execute.assert_called_once()
+
+    def test_followed_authors_reach_the_feed_query_without_calculating_affinity(self):
+        current_user_id = uuid.uuid4()
+        followed_author = uuid.uuid4()
+        mock_db = MagicMock()
+        mock_db.execute.return_value.all.return_value = []
+
+        with (
+            patch.object(
+                general_feed_repository,
+                "get_followed_author_ids",
+                return_value=[followed_author],
+            ),
+            patch.object(
+                general_feed_repository,
+                "get_discovery_candidate_author_ids",
+                return_value=[],
+            ),
+            patch.object(general_feed_service, "calculate_affinity") as mock_affinity,
+            patch.object(
+                general_feed_repository, "get_general_feed_query"
+            ) as feed_query,
+        ):
+            get_general_feed(mock_db, current_user_id, cursor=None, limit=20)
+
+        mock_affinity.assert_not_called()
+        assert set(feed_query.call_args.args[1]) == {followed_author, current_user_id}
+
+    def test_only_discovery_authors_with_affinity_reach_the_feed_query(self):
+        current_user_id = uuid.uuid4()
+        with_affinity, without_affinity = uuid.uuid4(), uuid.uuid4()
+        affinity_by_author = {with_affinity: 50.0, without_affinity: 0.0}
+        mock_db = MagicMock()
+        mock_db.execute.return_value.all.return_value = []
+
+        with (
+            patch.object(
+                general_feed_repository,
+                "get_followed_author_ids",
+                return_value=[],
+            ),
+            patch.object(
+                general_feed_repository,
+                "get_discovery_candidate_author_ids",
+                return_value=[with_affinity, without_affinity],
+            ),
+            patch.object(
+                general_feed_service,
+                "calculate_affinity",
+                side_effect=lambda _db, _viewer, author: affinity_by_author[author],
+            ),
+            patch.object(
+                general_feed_repository, "get_general_feed_query"
+            ) as feed_query,
+        ):
+            get_general_feed(mock_db, current_user_id, cursor=None, limit=20)
+
+        assert set(feed_query.call_args.args[1]) == {with_affinity, current_user_id}
+
+    def test_requests_one_extra_row_for_pagination_lookahead(self):
+        mock_db = MagicMock()
+        mock_db.execute.return_value.all.return_value = []
+
+        with (
+            patch.object(
+                general_feed_repository,
+                "get_followed_author_ids",
+                return_value=[uuid.uuid4()],
+            ),
+            patch.object(
+                general_feed_repository,
+                "get_discovery_candidate_author_ids",
+                return_value=[],
+            ),
+            patch.object(
+                general_feed_repository, "get_general_feed_query"
+            ) as feed_query,
+        ):
+            get_general_feed(mock_db, uuid.uuid4(), cursor=None, limit=20)
+
+        feed_query.return_value.limit.assert_called_once_with(21)
+
+    def test_discards_extra_row_and_points_cursor_to_last_kept_row(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.services.general_feed_service.attach_mentions",
+            lambda _db, items: items,
+        )
+        rows = [_make_row(day) for day in (3, 2, 1)]
+        mock_db = MagicMock()
+        mock_db.execute.return_value.all.return_value = rows
+
+        with (
+            patch.object(
+                general_feed_repository,
+                "get_followed_author_ids",
+                return_value=[uuid.uuid4()],
+            ),
+            patch.object(
+                general_feed_repository,
+                "get_discovery_candidate_author_ids",
+                return_value=[],
+            ),
+            patch.object(general_feed_repository, "get_general_feed_query"),
+        ):
+            page = get_general_feed(mock_db, uuid.uuid4(), cursor=None, limit=2)
+
+        assert len(page.items) == 2
+        assert page.next_cursor is not None
+        assert page.items[-1].recorda_id == rows[1].Recorda.recorda_id
+
+
+def _add_favorite_genre(db, user, genre_id):
+    db.add(UserFavoriteGenre(user_id=user.user_id, genre_id=genre_id))
+    db.commit()
+
+
+def _add_favorite_artist(db, user, deezer_artist_id):
+    db.add(
+        UserFavoriteArtist(
+            user_id=user.user_id,
+            deezer_artist_id=deezer_artist_id,
+            artist_name=f"Artista {deezer_artist_id}",
+        )
+    )
+    db.commit()
+
+
+def _feed_author_ids(db, current_user):
+    page = get_general_feed(db, current_user.user_id, cursor=None, limit=50)
+    return {item.author.user_id for item in page.items}
+
+
+class TestGetGeneralFeedIntegration:
+    def test_author_sees_own_recorda_without_follows_or_music_profile(self, db):
+        viewer = add_user(db, "viewer")
+        recorda = add_recorda(db, viewer)
+
+        page = get_general_feed(db, viewer.user_id, cursor=None, limit=20)
+
+        assert [item.recorda_id for item in page.items] == [recorda.recorda_id]
+
+    def test_applies_access_and_affinity_rules_together(self, db):
+        viewer = add_user(db, "viewer")
+        _add_favorite_genre(db, viewer, ROCK_GENRE_ID)
+        _add_favorite_artist(db, viewer, "27")
+
+        def author(username, genre_id, **fields):
+            user = add_user(db, username, **fields)
+            _add_favorite_genre(db, user, genre_id)
+            add_recorda(db, user)
+            return user
+
+        public_with_affinity = author("publico_afim", ROCK_GENRE_ID)
+        public_without_affinity = author("publico_sem_afim", JAZZ_GENRE_ID)
+        private_followed = author("privado_seguido", ROCK_GENRE_ID, is_private=True)
+        private_not_followed = author(
+            "privado_nao_seguido", ROCK_GENRE_ID, is_private=True
+        )
+        private_pending = author("privado_pendente", ROCK_GENRE_ID, is_private=True)
+        followed_without_affinity = author("seguido_sem_afim", JAZZ_GENRE_ID)
+        artist_only_affinity = author("afim_por_artista", JAZZ_GENRE_ID)
+        _add_favorite_artist(db, artist_only_affinity, "27")
+
+        add_follow(db, viewer, private_followed)
+        add_follow(db, viewer, private_pending, status=STATUS_PENDING)
+        add_follow(db, viewer, followed_without_affinity)
+        add_recorda(db, viewer)
+
+        assert _feed_author_ids(db, viewer) == {
+            public_with_affinity.user_id,
+            private_followed.user_id,
+            followed_without_affinity.user_id,
+            artist_only_affinity.user_id,
+            viewer.user_id,
+        }
+        # Referências explícitas aos excluídos, para deixar claro o que a regra barra.
+        excluded = {
+            public_without_affinity.user_id,
+            private_not_followed.user_id,
+            private_pending.user_id,
+        }
+        assert excluded.isdisjoint(_feed_author_ids(db, viewer))
+
+    def test_user_without_musical_profile_and_no_follows_gets_empty_feed(self, db):
+        viewer = add_user(db, "viewer")
+        other = add_user(db, "outro")
+        _add_favorite_genre(db, other, ROCK_GENRE_ID)
+        add_recorda(db, other)
+
+        page = get_general_feed(db, viewer.user_id, cursor=None, limit=20)
+        assert page.items == []
+        assert page.next_cursor is None
+
+    def test_user_without_musical_profile_still_sees_followed_users(self, db):
+        viewer = add_user(db, "viewer")
+        followed = add_user(db, "seguido")
+        _add_favorite_genre(db, followed, ROCK_GENRE_ID)
+        add_follow(db, viewer, followed)
+        add_recorda(db, followed)
+
+        page = get_general_feed(db, viewer.user_id, cursor=None, limit=20)
+        assert len(page.items) == 1
+        assert page.items[0].author.user_id == followed.user_id

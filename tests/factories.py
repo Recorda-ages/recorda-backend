@@ -1,0 +1,283 @@
+import uuid
+from datetime import datetime, timedelta
+from typing import Any
+
+import httpx
+from sqlalchemy.orm import Session
+
+from app.core import security
+from app.core.time import now_utc
+from app.db.seed_data import GENRE_NAMESPACE
+from app.models import (
+    AppUser,
+    Follow,
+    ModerationAction,
+    Notification,
+    Recorda,
+    RecordaComment,
+    RecordaLike,
+    Report,
+    UserFavoriteArtist,
+    UserFavoriteGenre,
+)
+from app.models.app_user import ROLE_USER
+from app.models.follow import STATUS_ACCEPTED
+from app.models.moderation_action import ACTION_SUSPEND_USER
+from app.models.report import STATUS_OPEN
+
+
+def add_user(
+    db: Session,
+    username: str,
+    *,
+    password: str | None = None,
+    role: str = ROLE_USER,
+    **fields,
+) -> AppUser:
+    user = AppUser(
+        name=fields.pop("name", username.title()),
+        email=fields.pop("email", f"{username}@example.com"),
+        username=username,
+        password_hash=security.hash_password(password) if password else None,
+        role=role,
+        **fields,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def add_recorda(db: Session, author: AppUser, **fields) -> Recorda:
+    values = {
+        "media_url": "/api/v1/recordas/media/abc.jpg",
+        "media_type": "PHOTO",
+        "deezer_track_id": "3135556",
+        "song_title": "Song of Silence",
+        "song_artist_name": "Disturbed",
+        "song_cover_url": "https://e.deezer.com/cover.jpg",
+        "description": "By Disturbed",
+    }
+    values.update(fields)
+    recorda = Recorda(user_id=author.user_id, **values)
+    db.add(recorda)
+    db.commit()
+    db.refresh(recorda)
+    return recorda
+
+
+def add_comment(
+    db: Session, author: AppUser, recorda: Recorda, **fields
+) -> RecordaComment:
+    comment = RecordaComment(
+        user_id=author.user_id,
+        recorda_id=recorda.recorda_id,
+        content=fields.pop("content", "Comentário de teste"),
+        **fields,
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment
+
+
+def add_like(db: Session, user: AppUser, recorda: Recorda) -> RecordaLike:
+    like = RecordaLike(user_id=user.user_id, recorda_id=recorda.recorda_id)
+    db.add(like)
+    db.commit()
+    db.refresh(like)
+    return like
+
+
+def add_report(
+    db: Session,
+    reporter: AppUser,
+    *,
+    recorda: Recorda | None = None,
+    reported_user: AppUser | None = None,
+    status: str = STATUS_OPEN,
+    description: str | None = None,
+    created_at: datetime | None = None,
+) -> Report:
+    """Denúncia direta no banco, sem passar pelas rotas do E9."""
+    fields = {}
+    if created_at is not None:
+        fields["created_at"] = created_at
+
+    report = Report(
+        reporter_id=reporter.user_id,
+        recorda_id=recorda.recorda_id if recorda else None,
+        reported_user_id=reported_user.user_id if reported_user else None,
+        status=status,
+        description=description,
+        **fields,
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return report
+
+
+def add_moderation_action(
+    db: Session,
+    admin: AppUser,
+    *,
+    action_type: str = ACTION_SUSPEND_USER,
+    target_user: AppUser | None = None,
+    target_recorda: Recorda | None = None,
+    reason: str = "Motivo de teste",
+    details: dict | None = None,
+    created_at: datetime | None = None,
+) -> ModerationAction:
+    """Ação administrativa direta no banco, sem passar pelos services do E10."""
+    fields = {}
+    if created_at is not None:
+        fields["created_at"] = created_at
+
+    action = ModerationAction(
+        admin_id=admin.user_id,
+        action_type=action_type,
+        target_user_id=target_user.user_id if target_user else None,
+        target_recorda_id=target_recorda.recorda_id if target_recorda else None,
+        reason=reason,
+        details=details,
+        **fields,
+    )
+    db.add(action)
+    db.commit()
+    db.refresh(action)
+    return action
+
+
+def add_follow(
+    db: Session,
+    follower: AppUser,
+    following: AppUser,
+    *,
+    status: str = STATUS_ACCEPTED,
+) -> Follow:
+    follow = Follow(
+        follower_id=follower.user_id,
+        following_id=following.user_id,
+        status=status,
+        accepted_at=now_utc() if status == STATUS_ACCEPTED else None,
+    )
+    db.add(follow)
+    db.commit()
+    db.refresh(follow)
+    return follow
+
+
+def add_notification(
+    db: Session, recipient: AppUser, type_: str, **fields
+) -> Notification:
+    sender = fields.pop("sender", None)
+    notification = Notification(
+        recipient_id=recipient.user_id,
+        sender_id=sender.user_id if sender else None,
+        type=type_,
+        **fields,
+    )
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    return notification
+
+
+def add_favorite_genres(db: Session, user: AppUser, *genre_names: str) -> None:
+    """Marca gêneros do seed como favoritos do usuário, pelo nome."""
+    db.add_all(
+        UserFavoriteGenre(
+            user_id=user.user_id,
+            genre_id=uuid.uuid5(GENRE_NAMESPACE, name),
+        )
+        for name in genre_names
+    )
+    db.commit()
+
+
+def add_favorite_artists(db: Session, user: AppUser, *artist_names: str) -> None:
+    """Marca artistas como favoritos, usando o nome também como id do Deezer."""
+    db.add_all(
+        UserFavoriteArtist(
+            user_id=user.user_id,
+            deezer_artist_id=name,
+            artist_name=name,
+        )
+        for name in artist_names
+    )
+    db.commit()
+
+
+def token_for(user: AppUser, expires_delta: timedelta | None = None) -> str:
+    return security.create_access_token(
+        subject=str(user.user_id),
+        additional_claims={"username": user.username, "role": user.role},
+        expires_delta=expires_delta,
+    )
+
+
+def auth_headers(user: AppUser) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token_for(user)}"}
+
+
+MUSIC_PREFERENCES_INITIAL_GENRES = [
+    {"deezer_id": 132, "name": "Pop"},
+    {"deezer_id": 152, "name": "Rock"},
+    {"deezer_id": 116, "name": "Rap/Hip Hop"},
+]
+
+MUSIC_PREFERENCES_UPDATED_GENRES = [
+    {"deezer_id": 129, "name": "Jazz"},
+    {"deezer_id": 132, "name": "Pop"},
+    {"deezer_id": 152, "name": "Rock"},
+]
+
+
+def music_preferences_body(genres: list[dict]) -> dict:
+    return {
+        "genres": genres,
+        "artists": [
+            {"deezer_id": 27, "name": "Daft Punk"},
+            {"deezer_id": 13, "name": "Eminem"},
+            {"deezer_id": 145, "name": "Coldplay"},
+        ],
+        "favorite_track": {
+            "deezer_id": 3135556,
+            "title": "Harder, Better, Faster, Stronger",
+            "artist_name": "Daft Punk",
+        },
+    }
+
+
+# Formato real do Deezer: a faixa não traz gênero, só o id do álbum; o álbum
+# traz `genre_id` (gênero principal, -1 se não houver) e a lista `genres`.
+DEEZER_TRACK = {"id": 3135556, "album": {"id": 302127}}
+DEEZER_ALBUM = {
+    "id": 302127,
+    "genre_id": 106,
+    "genres": {"data": [{"id": 113, "name": "Dance"}, {"id": 106, "name": "Electro"}]},
+}
+DEEZER_ROUTES = {"/track/3135556": DEEZER_TRACK, "/album/302127": DEEZER_ALBUM}
+DEEZER_NOT_FOUND = {
+    "error": {"type": "DataException", "message": "no data", "code": 800}
+}
+
+
+def deezer_stub(
+    routes: dict[str, Any] | None = None,
+    *,
+    status_code: int = 200,
+    error: Exception | None = None,
+) -> httpx.Client:
+    """httpx.Client que responde como o Deezer, sem acessar a rede."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if error is not None:
+            raise error
+        body = (routes or {}).get(request.url.path, DEEZER_NOT_FOUND)
+        return httpx.Response(status_code, json=body)
+
+    return httpx.Client(
+        base_url="https://api.deezer.com", transport=httpx.MockTransport(handler)
+    )

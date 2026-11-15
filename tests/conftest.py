@@ -1,76 +1,138 @@
+import os
+from datetime import timedelta
+
 import pytest
+from alembic.config import Config
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool, StaticPool
 
-from app.db.session import get_db
+from alembic import command
+from app.core.config import settings
+from app.core.http import get_deezer_client
+from app.db.seed_data import GENRE_SEED
+from app.db.session import Base, get_db
 from app.main import app
-from app.models.user import User
-
-
-class FakeSession:
-    """In-memory stand-in for a SQLAlchemy Session used by the repositories."""
-
-    def __init__(self) -> None:
-        self._users: dict[int, User] = {}
-        self._next_id = 1
-        self._pending_add: User | None = None
-        self._pending_delete: User | None = None
-
-    def add(self, user: User) -> None:
-        self._pending_add = user
-
-    def commit(self) -> None:
-        if self._pending_add is not None:
-            user = self._pending_add
-            user.id = self._next_id
-            self._next_id += 1
-            self._users[user.id] = user
-            self._pending_add = None
-        if self._pending_delete is not None:
-            self._users.pop(self._pending_delete.id, None)
-            self._pending_delete = None
-
-    def refresh(self, user: User) -> None:
-        # Identity is shared with the store; nothing to copy back.
-        return None
-
-    def get(self, model, user_id: int) -> User | None:
-        if model is not User:
-            return None
-        return self._users.get(user_id)
-
-    def query(self, model):
-        if model is not User:
-            raise AssertionError("FakeSession only supports User")
-        return _Query(self._users)
-
-    def delete(self, user: User) -> None:
-        self._pending_delete = user
-
-
-class _Query:
-    def __init__(self, users: dict[int, User]) -> None:
-        self._users = users
-
-    def all(self) -> list[User]:
-        return list(self._users.values())
+from app.models import AppUser, Genre
+from app.models.app_user import ROLE_ADMIN, ROLE_USER
+from tests.factories import add_user, deezer_stub, token_for
+from tests.pg_guard import (
+    ALLOW_DESTRUCTIVE_ENV,
+    assert_disposable_database,
+)
 
 
 @pytest.fixture
-def db() -> FakeSession:
-    return FakeSession()
+def db():
+    """Real SQLAlchemy session on in-memory SQLite, seeded like migration 0002."""
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(engine, "connect")
+    def _enable_foreign_keys(connection, _record):
+        connection.execute("PRAGMA foreign_keys=ON")
+
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, autocommit=False, autoflush=False)()
+    session.add_all(Genre(genre_id=gid, name=name) for gid, name in GENRE_SEED)
+    session.commit()
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def pg_database_url():
+    """Um container por execução; URLs externas continuam protegidas pela guarda."""
+    external_url = os.getenv("TEST_DATABASE_URL")
+    if external_url:
+        assert_disposable_database(
+            external_url,
+            app_url=settings.database_url,
+            allow_destructive=os.getenv(ALLOW_DESTRUCTIVE_ENV),
+        )
+        yield external_url
+        return
+
+    from testcontainers.postgres import PostgresContainer
+
+    with PostgresContainer(
+        "postgres:16-alpine", dbname="test_recorda", driver="psycopg"
+    ) as postgres:
+        url = postgres.get_connection_url()
+        assert_disposable_database(
+            url, app_url=settings.database_url, allow_destructive="1"
+        )
+        yield url
 
 
 @pytest.fixture
-def user() -> User:
-    return User(id=1, name="Alice", email="alice@example.com")
+def pg_db(pg_database_url):
+    """Schema migrado e recriado por teste, isolando commits e alterações de DDL."""
+    engine = create_engine(pg_database_url, poolclass=NullPool)
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("DROP SCHEMA IF EXISTS public CASCADE")
+            connection.exec_driver_sql("CREATE SCHEMA public")
+
+        config = Config("alembic.ini")
+        previous_url = settings.database_url
+        settings.database_url = pg_database_url
+        try:
+            command.upgrade(config, "head")
+        finally:
+            settings.database_url = previous_url
+
+        with Session(engine, autoflush=False) as session:
+            yield session
+    finally:
+        try:
+            with engine.begin() as connection:
+                connection.exec_driver_sql("DROP SCHEMA IF EXISTS public CASCADE")
+                connection.exec_driver_sql("CREATE SCHEMA public")
+        finally:
+            engine.dispose()
 
 
 @pytest.fixture
-def client(db: FakeSession):
+def client(db: Session):
     def _override_get_db():
         yield db
 
     app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_deezer_client] = lambda: deezer_stub()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_deezer_client, None)
+
+
+@pytest.fixture
+def common_user(db: Session) -> AppUser:
+    return add_user(db, "usuario_comum", name="Usuário Comum", role=ROLE_USER)
+
+
+@pytest.fixture
+def admin_user(db: Session) -> AppUser:
+    return add_user(db, "usuario_admin", name="Usuário Admin", role=ROLE_ADMIN)
+
+
+@pytest.fixture
+def common_user_token(common_user: AppUser) -> str:
+    return token_for(common_user)
+
+
+@pytest.fixture
+def admin_user_token(admin_user: AppUser) -> str:
+    return token_for(admin_user)
+
+
+@pytest.fixture
+def expired_token(common_user: AppUser) -> str:
+    return token_for(common_user, expires_delta=timedelta(minutes=-5))

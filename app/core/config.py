@@ -17,6 +17,13 @@ class Settings(BaseSettings):
         "postgresql+psycopg://postgres:postgres@localhost:5432/postgres?sslmode=require"
     )
     cors_origins: str = "http://localhost:8081,http://127.0.0.1:8081"
+    access_token_secret_key: str | None = None
+    access_token_expire_minutes: int = 60 * 24 * 30
+    password_hash_iterations: int = 210_000
+    seed_user_password: str = "User@1234"
+    seed_admin_password: str = "Admin@1234"
+    deezer_base_url: str = "https://api.deezer.com"
+    deezer_timeout_seconds: float = 5.0
 
 
 settings = Settings()

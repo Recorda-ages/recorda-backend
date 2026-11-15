@@ -3,27 +3,80 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, user
+from app.api.routes import (
+    admin,
+    auth,
+    calendar,
+    comment,
+    feed,
+    follow,
+    follow_request,
+    general_feed,
+    health,
+    media,
+    metrics,
+    music,
+    notification,
+    recorda,
+    report,
+    retrospectives,
+    user,
+)
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
-from app.db import init_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(f"ENVIRONMENT = {settings.environment}")
-
-    if settings.environment != "test":
-        init_db()
-
     yield
 
+
+tags_metadata = [
+    {"name": "auth", "description": "Autenticação e sessão do usuário."},
+    {
+        "name": "admin",
+        "description": (
+            "Moderação: denúncias, usuários e auditoria. Somente administradores."
+        ),
+    },
+    {
+        "name": "users",
+        "description": "Gerenciamento de usuários (acesso administrativo).",
+    },
+    {
+        "name": "calendar",
+        "description": "Calendário mensal de memórias do usuário autenticado.",
+    },
+    {
+        "name": "follows",
+        "description": (
+            "Listas de Seguidores/Seguindo, remoção de um seguidor e "
+            "solicitações para seguir."
+        ),
+    },
+    {"name": "comments", "description": "Comentários em Recordas."},
+    {"name": "health", "description": "Verificação de saúde da aplicação."},
+    {
+        "name": "notifications",
+        "description": "Central de Notificações do usuário autenticado.",
+    },
+    {
+        "name": "reports",
+        "description": "Denúncias de conteúdo enviadas pelos usuários.",
+    },
+    {
+        "name": "retrospectives",
+        "description": "Retrospectivas de Recordas.",
+    },
+]
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.version,
     debug=settings.debug,
     lifespan=lifespan,
+    openapi_tags=tags_metadata,
 )
 register_exception_handlers(app)
 # Allowed frontend origins, parsed from comma-separated CORS_ORIGINS setting.
@@ -39,10 +92,29 @@ app.add_middleware(
 
 # Registry for feature routers. Each new module under app/api/routes/
 # should be included here, e.g. from app.api.routes import user; app.include_router(user.router).
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(user.router, prefix="/api/v1")
+app.include_router(music.router, prefix="/api/v1")
+app.include_router(recorda.router, prefix="/api/v1")
+app.include_router(media.router, prefix="/api/v1")
+app.include_router(feed.router, prefix="/api/v1")
+app.include_router(notification.router, prefix="/api/v1")
+app.include_router(follow.router, prefix="/api/v1")
+app.include_router(general_feed.router, prefix="/api/v1")
+app.include_router(follow_request.router, prefix="/api/v1")
+app.include_router(comment.router, prefix="/api/v1")
+app.include_router(report.router, prefix="/api/v1")
+app.include_router(calendar.router, prefix="/api/v1")
+app.include_router(calendar.user_calendar_router, prefix="/api/v1")
+app.include_router(retrospectives.router, prefix="/api/v1")
 
 
 @app.get("/api/v1")
 def root() -> dict:
     return {"status": "ok"}
+
+
+app.include_router(metrics.router, prefix="/api/v1")
+app.include_router(metrics.user_metrics_router, prefix="/api/v1")

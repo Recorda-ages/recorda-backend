@@ -1,0 +1,131 @@
+{
+  "database": "SQLite in-memory; PostgreSQL behavior also covered by the full test suite",
+  "http": [
+    {
+      "method": "GET",
+      "path": "/api/v1/users/me/calendar/day",
+      "query": {
+        "date": "2026-11-07"
+      },
+      "authenticated": true,
+      "status": 200,
+      "body": {
+        "date": "2026-11-07",
+        "total_count": 2,
+        "memories": [
+          {
+            "recorda_id": "00000000-0000-0000-0000-000000000001",
+            "author": {
+              "user_id": "00000000-0000-0000-0000-000000000091",
+              "username": "calendar_demo",
+              "avatar_url": null
+            },
+            "media_url": "/api/v1/recordas/media/abc.jpg",
+            "media_type": "PHOTO",
+            "description": "By Disturbed",
+            "deezer_track_id": "3135556",
+            "song_title": "Song of Silence",
+            "song_artist_name": "Disturbed",
+            "song_cover_url": "https://e.deezer.com/cover.jpg",
+            "song_preview_url": "/api/v1/music/tracks/3135556/preview",
+            "song_genre_name": null,
+            "created_at": "2026-11-07T03:00:00Z",
+            "is_liked": false,
+            "likes_count": 1,
+            "comments_count": 1,
+            "formatted_time": "00:00"
+          },
+          {
+            "recorda_id": "00000000-0000-0000-0000-000000000002",
+            "author": {
+              "user_id": "00000000-0000-0000-0000-000000000091",
+              "username": "calendar_demo",
+              "avatar_url": null
+            },
+            "media_url": "/m/demo.mp4",
+            "media_type": "VIDEO",
+            "description": "By Disturbed",
+            "deezer_track_id": "3135556",
+            "song_title": "Song of Silence",
+            "song_artist_name": "Disturbed",
+            "song_cover_url": "https://e.deezer.com/cover.jpg",
+            "song_preview_url": null,
+            "song_genre_name": null,
+            "created_at": "2026-11-08T02:59:00Z",
+            "is_liked": false,
+            "likes_count": 0,
+            "comments_count": 0,
+            "formatted_time": "23:59"
+          }
+        ],
+        "previous_date_with_memories": "2026-10-31",
+        "next_date_with_memories": "2026-12-01"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/me/calendar/day",
+      "query": {
+        "date": "2026-11-20"
+      },
+      "authenticated": true,
+      "status": 200,
+      "body": {
+        "date": "2026-11-20",
+        "total_count": 0,
+        "memories": [],
+        "previous_date_with_memories": "2026-11-07",
+        "next_date_with_memories": "2026-12-01"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/me/calendar/day",
+      "query": {
+        "date": "2026-02-30"
+      },
+      "authenticated": true,
+      "status": 422,
+      "body": {
+        "error": {
+          "code": "VALIDATION_ERROR",
+          "message": "Dados inválidos",
+          "details": {
+            "fields": [
+              {
+                "field": "date",
+                "message": "Informe uma data válida"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/me/calendar/day",
+      "query": {
+        "date": "2026-11-07"
+      },
+      "authenticated": false,
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "UNAUTHORIZED",
+          "message": "Credenciais inválidas",
+          "details": {}
+        }
+      }
+    }
+  ],
+  "query_measurements": [
+    {
+      "memories": 1,
+      "domain_sql_queries": 5
+    },
+    {
+      "memories": 20,
+      "domain_sql_queries": 5
+    }
+  ]
+}
