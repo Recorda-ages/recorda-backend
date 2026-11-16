@@ -107,7 +107,7 @@ Sem domínio ainda? Use provisoriamente `<ip-com-hifens>.sslip.io` (ex.: Elastic
 sudo -i
 cd /opt/recorda-backend
 openssl rand -hex 32          # copie o valor para ACCESS_TOKEN_SECRET_KEY
-nano deploy/.env.prod         # preencha API_DOMAIN, DATABASE_URL, ACCESS_TOKEN_SECRET_KEY e as senhas do seed
+nano deploy/.env.prod         # preencha API_DOMAIN, DATABASE_URL, ACCESS_TOKEN_SECRET_KEY
 docker compose -f deploy/compose.prod.yaml pull
 docker compose -f deploy/compose.prod.yaml up -d
 docker compose -f deploy/compose.prod.yaml logs -f   # migrações + certificado; Ctrl+C para sair
@@ -115,17 +115,16 @@ docker compose -f deploy/compose.prod.yaml logs -f   # migrações + certificado
 
 3. Teste: `https://<API_DOMAIN>/api/v1/health` deve responder `{"status":"ok", ...}`. A documentação fica em `/docs`.
 
-### Dados de demonstração (opcional, uma vez)
+### Remover dados de demonstração
 
-O seed é bloqueado com `ENVIRONMENT=production`. Para carregar os usuários e Recordas de demo:
+Produção não deve ter os usuários e Recordas do seed de desenvolvimento (`scripts/seed.py`). Se eles foram carregados, liste e remova:
 
 ```bash
-sed -i 's/^ENVIRONMENT=production/ENVIRONMENT=staging/' deploy/.env.prod
-docker compose -f deploy/compose.prod.yaml up -d
-docker compose -f deploy/compose.prod.yaml exec api python scripts/seed.py
-sed -i 's/^ENVIRONMENT=staging/ENVIRONMENT=production/' deploy/.env.prod
-docker compose -f deploy/compose.prod.yaml up -d
+docker compose -f deploy/compose.prod.yaml exec api python scripts/remove_demo_data.py        # só lista
+docker compose -f deploy/compose.prod.yaml exec api python scripts/remove_demo_data.py --yes  # remove
 ```
+
+O script apaga as contas de demo (`admin@recorda.com` e os 10 perfis do seed) com suas Recordas, curtidas, comentários, follows, menções, denúncias e notificações. Contas citadas no log de auditoria (imutável) são desativadas em vez de apagadas. As contas de `scripts/seed_admins.py` não são afetadas.
 
 ## 9. CloudFront (quando o código usar o S3)
 
@@ -158,4 +157,4 @@ docker compose -f deploy/compose.prod.yaml up -d
 
 ## Migração das mídias para o S3 (código)
 
-A troca do armazenamento é no código: `app/repositories/media_storage_repository.py` passa a gravar e ler no bucket (via `boto3`), e a tabela `media` guarda só a chave do arquivo. Mídias enviadas antes dessa troca continuam no banco; para a demo, o mais simples é recarregar o seed depois da migração.
+A troca do armazenamento é no código: `app/repositories/media_storage_repository.py` passa a gravar e ler no bucket (via `boto3`), e a tabela `media` guarda só a chave do arquivo. Mídias enviadas antes dessa troca continuam no banco.
