@@ -72,6 +72,9 @@ class Notification(Base):
     follow_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("follow.follow_id", ondelete="SET NULL"), nullable=True
     )
+    moderation_action_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("moderation_action.action_id"), nullable=True
+    )
     type: Mapped[str] = mapped_column(String, nullable=False)
     is_read: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()

@@ -349,16 +349,17 @@ Aviso dentro do app para um evento social.
 | recorda_id | UUID | FK → recorda | Sim | Recorda relacionado, quando aplicável |
 | comment_id | UUID | FK → recorda_comment | Sim | deep-link para o comentário (D47) |
 | follow_id | UUID | FK → follow | Sim | deep-link para o pedido de follow (D47) |
+| moderation_action_id | UUID | FK → moderation_action | Sim | ação `REMOVE_RECORDA` que originou um aviso `CONTENT_REMOVED` (US 42) |
 | type | VARCHAR | — | Não | `CHECK IN ('FOLLOW_REQUEST','FOLLOW_ACCEPTED','NEW_FOLLOWER','LIKE','COMMENT','MENTION','CONTENT_REMOVED')` |
 | is_read | BOOLEAN | — | Não | default `false` |
 | created_at | TIMESTAMPTZ | — | Não | |
 
-**Chaves & constraints.** PK `notification_id`. `ck_notification_no_self_notification` — `CHECK (recipient_id <> sender_id)`. `CONTENT_REMOVED` entrou no `CHECK` de `type` na migration `0009_notification_content_removed`.
+**Chaves & constraints.** PK `notification_id`. `ck_notification_no_self_notification` — `CHECK (recipient_id <> sender_id)`. `CONTENT_REMOVED` entrou no `CHECK` de `type` na migration `0009_notification_content_removed`. `moderation_action_id` entrou na migration `0013_notification_moderation_action`.
 
 **Regras (MVP)**
 - **1 linha por evento**, sem agrupamento estrutural — o agrupamento ("5 pessoas curtiram") é só apresentação (D49).
 - Sem tipo "novo Recorda de quem sigo" (D40).
-- `type` comanda a renderização; os campos de deep-link levam ao alvo certo. O backend suprime notificações cujo Recorda ou `sender` esteja com `deleted_at`. Exceção: `CONTENT_REMOVED` (aviso do sistema, sem `sender`) continua visível com a Recorda excluída, pois avisa justamente sua remoção pela moderação.
+- `type` comanda a renderização; os campos de deep-link levam ao alvo certo. O backend suprime notificações cujo Recorda ou `sender` esteja com `deleted_at`. Exceção: `CONTENT_REMOVED` (aviso do sistema, sem `sender` e sem `recorda_id`, pois a Recorda é apagada fisicamente) aponta para a ação de moderação por `moderation_action_id`; o motivo vem de `moderation_action.reason` e o título da música de `moderation_action.details.song_title`. Autores suspensos ou excluídos não recebem o aviso.
 
 **Deleção.** `CASCADE` a partir de `recipient_id`. `SET NULL` nos `*_id` opcionais quando o alvo for removido fisicamente (raro).
 

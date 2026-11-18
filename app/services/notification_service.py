@@ -3,7 +3,9 @@ from uuid import UUID
 from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session
 
+from app.models.app_user import STATUS_ACTIVE, AppUser
 from app.models.follow import Follow
+from app.models.moderation_action import ModerationAction
 from app.models.notification import (
     TYPE_COMMENT,
     TYPE_CONTENT_REMOVED,
@@ -110,12 +112,20 @@ def notify_mention(
     )
 
 
-def notify_content_removed(db: Session, recorda: Recorda) -> Notification:
+def notify_content_removed(
+    db: Session, author: AppUser, action: ModerationAction
+) -> Notification | None:
     """Avisa o autor sem commit; a remoção administrativa controla a transação."""
-    return repository.create_content_removed(
+    if author.deleted_at is not None or author.status != STATUS_ACTIVE:
+        return None
+
+    return _create(
         db,
-        recipient_id=recorda.user_id,
-        recorda_id=recorda.recorda_id,
+        recipient_id=author.user_id,
+        sender_id=None,
+        type_=TYPE_CONTENT_REMOVED,
+        moderation_action_id=action.action_id,
+        commit=False,
     )
 
 
@@ -128,6 +138,7 @@ def _create(
     recorda_id: UUID | None = None,
     comment_id: UUID | None = None,
     follow_id: UUID | None = None,
+    moderation_action_id: UUID | None = None,
     commit: bool = True,
 ) -> Notification | None:
     if sender_id is not None and sender_id == recipient_id:
@@ -142,6 +153,7 @@ def _create(
             recorda_id=recorda_id,
             comment_id=comment_id,
             follow_id=follow_id,
+            moderation_action_id=moderation_action_id,
         ),
         commit=commit,
     )
@@ -158,10 +170,9 @@ def _to_item(row: Row) -> NotificationItem:
             profile_picture_url=row.profile_picture_url,
         )
 
-    shows_recorda = (
-        notification.type != TYPE_CONTENT_REMOVED
-        and notification.recorda_id is not None
-    )
+    is_content_removed = notification.type == TYPE_CONTENT_REMOVED
+    shows_recorda = not is_content_removed and notification.recorda_id is not None
+    removal_details = (row.removal_details or {}) if is_content_removed else {}
 
     return NotificationItem(
         notification_id=notification.notification_id,
@@ -172,12 +183,10 @@ def _to_item(row: Row) -> NotificationItem:
         recorda_id=notification.recorda_id,
         comment_id=notification.comment_id,
         follow_id=notification.follow_id,
-        removal_reason=(
-            row.removal_reason if notification.type == TYPE_CONTENT_REMOVED else None
-        ),
+        removal_reason=row.removal_reason if is_content_removed else None,
         recorda_song_title=(
-            row.recorda_song_title
-            if notification.type == TYPE_CONTENT_REMOVED
+            removal_details.get("song_title") or row.recorda_song_title
+            if is_content_removed
             else None
         ),
         recorda_media_url=row.recorda_media_url if shows_recorda else None,

@@ -2,7 +2,7 @@
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 
 from alembic import command
@@ -36,17 +36,26 @@ def test_upgrade_and_downgrade_preserve_social_notifications(pg_db, pg_database_
     )
     assert "CONTENT_REMOVED" in check["sqltext"]
     recorda_id = recorda.recorda_id  # capture before session is closed
+    author_id = author.user_id
     pg_db.close()  # release connection so Alembic DDL is not blocked by our lock
     config = Config("alembic.ini")
     previous_url = settings.database_url
     settings.database_url = pg_database_url
     try:
         command.downgrade(config, "0008_moderation_action")
-        notifications = list(pg_db.scalars(select(Notification)))
-        assert [notice.notification_id for notice in notifications] == [social_id]
+        notification_ids = list(pg_db.scalars(select(Notification.notification_id)))
+        assert notification_ids == [social_id]
         pg_db.rollback()
         with pytest.raises(IntegrityError):
-            add_notification(pg_db, author, "CONTENT_REMOVED", recorda_id=recorda_id)
+            pg_db.execute(
+                text(
+                    "INSERT INTO notification "
+                    "(notification_id, recipient_id, recorda_id, type) "
+                    "VALUES (gen_random_uuid(), :recipient, :recorda, "
+                    "'CONTENT_REMOVED')"
+                ),
+                {"recipient": author_id, "recorda": recorda_id},
+            )
         pg_db.rollback()
         command.upgrade(config, "head")
         notice = add_notification(
