@@ -16,7 +16,7 @@ from app.schemas.admin_recorda_moderation import (
     RemoveRecordaRequest,
     RemoveRecordaResponse,
 )
-from app.services import recorda_service
+from app.services import notification_service, recorda_service
 
 NOT_FOUND_MESSAGE = "Recorda não encontrada."
 ALREADY_REMOVED_MESSAGE = "Esta Recorda já foi removida."
@@ -67,6 +67,8 @@ def remove_recorda(
         if recorda.deleted_at is not None:
             raise HTTPException(status_code=409, detail=ALREADY_REMOVED_MESSAGE)
 
+        author = db.get(AppUser, recorda.user_id)
+        song_title = recorda.song_title
         recorda_service.delete_with_cleanup(db, recorda, commit=False)
         resolved_reports = resolve_reports(
             db,
@@ -74,16 +76,16 @@ def remove_recorda(
             target_id=recorda_id,
             new_status=STATUS_RESOLVED,
         )
-        record_action(
+        action = record_action(
             db,
             admin=current_admin,
             action_type=ACTION_REMOVE_RECORDA,
             target_recorda_id=recorda_id,
             target_user_id=recorda.user_id,
             reason=payload.reason,
-            details={"resolved_reports": resolved_reports},
+            details={"resolved_reports": resolved_reports, "song_title": song_title},
         )
-        # US 42 (Won't): notification_service.notify_content_removed(db, recorda)
+        notification_service.notify_content_removed(db, author, action)
         removed_at = now_utc()
         db.commit()
         return RemoveRecordaResponse(
