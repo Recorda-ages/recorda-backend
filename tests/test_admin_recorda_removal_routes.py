@@ -93,7 +93,7 @@ def test_remove_recorda_records_exactly_one_audit_action(client, db, admin_user)
     assert action.target_user_id == author.user_id
     assert action.target_recorda_id == recorda.recorda_id
     assert action.reason == REASON
-    assert action.details == {"resolved_reports": 1}
+    assert action.details == {"resolved_reports": 1, "song_title": recorda.song_title}
 
 
 def test_remove_recorda_cleans_likes_and_comments_like_author_delete(
